@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; background: #fff; color: #1d1d1f; height: 100vh; overflow: hidden; }
+  .scroll-wrap { height: 100vh; overflow-y: auto; }
+  .page { max-width: var(--page-width, 720px); margin: 0 auto; padding: 60px 80px 120px; }
+  .page.full-width { max-width: none; padding: 30px 40px 120px; }
+  .markdown { outline: none; min-height: 80vh; font-size: 16px; line-height: 1.8; color: #333; }
+  .markdown:empty::before { content: 'Start writing...'; color: #ccc; }
+  .markdown.hidden { display: none; }
+  .source { display: none; position: relative; min-height: 80vh; }
+  .source.visible { display: block; }
+  .highlight-layer, #textarea { margin: 0; padding: 0; font-family: "SF Mono", "Menlo", monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; tab-size: 4; border: none; }
+  .highlight-layer { position: relative; pointer-events: none; color: #333; z-index: 1; min-height: 80vh; }
+  #textarea { position: absolute; top: 0; left: 0; right: 0; height: 100%; background: transparent; color: transparent; caret-color: #1d1d1f; outline: none; resize: none; overflow: hidden; z-index: 2; }
+  .syn-heading { color: #007aff; font-weight: 600; }
+  .syn-bold { color: #c41e3a; }
+  .syn-italic { color: #8e44ad; }
+  .syn-code { color: #d6336c; }
+  .syn-codeblock { color: #6a737d; }
+  .syn-link { color: #007aff; }
+  .syn-list { color: #28a745; }
+  .syn-quote { color: #6a737d; }
+  .syn-hr { color: #d0d0d0; }
+  .markdown h1 { font-size: 30px; font-weight: 700; margin: 0 0 20px; letter-spacing: -0.5px; line-height: 1.3; }
+  .markdown h2 { font-size: 23px; font-weight: 600; margin: 32px 0 14px; letter-spacing: -0.3px; line-height: 1.3; }
+  .markdown h3 { font-size: 18px; font-weight: 600; margin: 26px 0 10px; line-height: 1.4; }
+  .markdown h4 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  .markdown h5 { font-size: 14px; font-weight: 600; margin: 18px 0 8px; color: #555; }
+  .markdown h6 { font-size: 13px; font-weight: 600; margin: 18px 0 8px; color: #888; }
+  .markdown p { margin: 0 0 16px; }
+  .markdown a { color: #007aff; text-decoration: none; }
+  .markdown a:hover { text-decoration: underline; }
+  .markdown ul, .markdown ol { margin: 0 0 16px; padding-left: 26px; }
+  .markdown li { margin-bottom: 4px; }
+  .markdown blockquote { margin: 0 0 16px; padding: 4px 20px; border-left: 3px solid #e0e0e0; color: #666; }
+  .markdown code { font-family: "SF Mono", "Menlo", monospace; font-size: 14px; background: #f5f5f7; padding: 2px 6px; border-radius: 4px; color: #a31515; }
+  .markdown pre { margin: 0 0 16px; padding: 14px 18px; background: #f5f5f7; border-radius: 8px; overflow-x: auto; }
+  .markdown pre code { background: none; color: #1d1d1f; padding: 0; font-size: 13px; line-height: 1.6; }
+  .markdown table { margin: 0 0 16px; border-collapse: collapse; width: 100%; font-size: 14px; }
+  .markdown th, .markdown td { border: 1px solid #e0e0e0; padding: 8px 14px; text-align: left; }
+  .markdown th { background: #f5f5f7; font-weight: 600; }
+  .markdown img { max-width: 100%; border-radius: 10px; margin: 8px 0; }
+  .markdown hr { border: none; border-top: 1px solid #e8e8e8; margin: 28px 0; }
+  .markdown strong { font-weight: 700; }
+  .markdown em { font-style: italic; }
+  .mermaid-diagram { margin: 16px 0; padding: 20px; background: #fafafa; border-radius: 10px; border: 1px solid #e8e8e8; overflow-x: auto; text-align: center; }
+  .mermaid-diagram svg { max-width: 100%; height: auto; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #b0b0b0; }
+  .status { position: fixed; bottom: 16px; right: 20px; font-size: 12px; color: #aaa; opacity: 0; transition: opacity 0.4s; pointer-events: none; user-select: none; }
+  .status.visible { opacity: 1; }
+  .source-hint { position: fixed; bottom: 0; left: 0; right: 0; height: 2px; background: #007aff; opacity: 0; transition: opacity 0.3s; }
+  .source-hint.visible { opacity: 0.4; }
+</style>
+</head>
+<body>
+
+<div class="scroll-wrap">
+  <div class="page" id="page">
+    <div class="markdown" id="content" contenteditable="true" spellcheck="false"></div>
+    <div class="source" id="source">
+      <pre class="highlight-layer" id="highlightLayer" aria-hidden="true"></pre>
+      <textarea id="textarea" spellcheck="false"></textarea>
+    </div>
+  </div>
+</div>
+
+<div class="source-hint" id="sourceHint"></div>
+<div class="status" id="status"></div>
+
+<script src="marked.min.js"></script>
+<script src="turndown.js"></script>
+<script src="mermaid.min.js"></script>
+<script>
+  let isSource = false;
+  let isDirty = false;
+  let filePath = '';
+  let turndownService = null;
+
+  if (typeof marked !== 'undefined') marked.setOptions({ breaks: true, gfm: true });
+  if (typeof TurndownService !== 'undefined') {
+    turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-', emDelimiter: '*', strongDelimiter: '**' });
+    // Preserve mermaid code blocks during HTML→Markdown conversion
+    turndownService.addRule('mermaid', {
+      filter: function (node) {
+        return node.classList && node.classList.contains('mermaid-diagram');
+      },
+      replacement: function (content, node) {
+        const svg = node.querySelector('svg');
+        const source = svg ? svg.getAttribute('data-source') : '';
+        return source ? '```mermaid\n' + source.trim() + '\n```' : '';
+      }
+    });
+  }
+
+  // ── Mermaid initialization ──
+  if (typeof mermaid !== 'undefined') {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'default',
+      securityLevel: 'loose',
+      flowchart: { useMaxWidth: true, htmlLabels: true },
+      sequence: { useMaxWidth: true },
+    });
+  }
+
+  // Render all mermaid code blocks to SVG diagrams
+  async function renderMermaidDiagrams(root) {
+    if (typeof mermaid === 'undefined') return;
+    const codeBlocks = root.querySelectorAll('code.language-mermaid');
+    for (const code of codeBlocks) {
+      const pre = code.parentElement;
+      if (!pre || pre.nodeName !== 'PRE') continue;
+      const source = code.textContent;
+      if (!source.trim()) continue;
+      try {
+        const id = 'mermaid-' + Math.random().toString(36).slice(2, 9);
+        const { svg } = await mermaid.render(id, source);
+        const wrapper = document.createElement('div');
+        wrapper.className = 'mermaid-diagram';
+        wrapper.innerHTML = svg;
+        // Store source for Turndown round-trip
+        wrapper.querySelector('svg').setAttribute('data-source', source);
+        pre.parentNode.replaceChild(wrapper, pre);
+      } catch (e) {
+        console.warn('Mermaid render error:', e.message);
+        // Keep original code block on render error
+      }
+    }
+  }
+
+  // Render a specific container's markdown and mermaid diagrams
+  async function renderMarkdown(content, container) {
+    container.innerHTML = marked.parse(content);
+    await renderMermaidDiagrams(container);
+  }
+
+  // ── Syntax highlighting ──
+  function highlightMarkdown(text) {
+    let h = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    h = h.replace(/(```)/g, '<span class="syn-codeblock">$1</span>');
+    h = h.replace(/^(#{1,6})(\s)/gm, '<span class="syn-heading">$1</span>$2');
+    h = h.replace(/(\*\*|__)(.+?)\1/g, '<span class="syn-bold">$1</span>$2<span class="syn-bold">$1</span>');
+    h = h.replace(/(^|[^\*])(\*)([^\s\*][^\*]*?)\*(?!\*)/gm, '$1<span class="syn-italic">$2</span>$3<span class="syn-italic">$2</span>');
+    h = h.replace(/`([^`]+)`/g, '<span class="syn-code">`</span>$1<span class="syn-code">`</span>');
+    h = h.replace(/\[([^\]]*)\]\(([^)]*)\)/g, '<span class="syn-link">[</span>$1<span class="syn-link">]</span><span class="syn-link">(</span>$2<span class="syn-link">)</span>');
+    h = h.replace(/^(\s*)([-*+])(\s)/gm, '$1<span class="syn-list">$2</span>$3');
+    h = h.replace(/^(&gt;)(\s?)/gm, '<span class="syn-quote">$1</span>$2');
+    h = h.replace(/^(-{3,}|\*{3,})$/gm, '<span class="syn-hr">$1</span>');
+    return h;
+  }
+
+  function syncHighlight() {
+    document.getElementById('highlightLayer').innerHTML = highlightMarkdown(document.getElementById('textarea').value) + '\n';
+  }
+
+  // ── Page width control ──
+  function setPageWidth(w) {
+    const page = document.getElementById('page');
+    page.style.setProperty('--page-width', w + 'px');
+  }
+  function adjustPageWidth(delta) {
+    const page = document.getElementById('page');
+    const current = parseInt(getComputedStyle(page).getPropertyValue('--page-width').trim()) || 720;
+    let next = current + delta;
+    if (next < 360) next = 360;
+    if (next > 2000) next = 2000;
+    setPageWidth(next);
+    // Notify Python to persist
+    if (window.pywebview && window.pywebview.api) window.pywebview.api.save_page_width(next);
+  }
+
+  // ── Content loading ──
+  async function loadContent(path, content, pageWidth) {
+    filePath = path;
+    if (pageWidth) setPageWidth(pageWidth);
+    await renderMarkdown(content, document.getElementById('content'));
+    document.getElementById('textarea').value = content;
+    syncHighlight();
+    isDirty = false;
+    if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(false);
+    isSource = false;
+    updateView();
+  }
+
+  function reloadContent() {
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.get_initial_content().then((data) => loadContent(data.path, data.content, data.pageWidth));
+    }
+  }
+
+  // ── Cursor sync: rendered → source ──
+  // Strategy: find the block element (p, h1, li, etc.) containing the cursor,
+  // get its text, search for it in markdown, then apply cursor offset within the block.
+  function syncToSource() {
+    const content = document.getElementById('content');
+    const textarea = document.getElementById('textarea');
+    const md = textarea.value;
+    const sel = window.getSelection();
+
+    if (!sel || sel.rangeCount === 0 || !content.contains(sel.anchorNode)) {
+      textarea.setSelectionRange(0, 0);
+      textarea.focus();
+      return;
+    }
+
+    const range = sel.getRangeAt(0);
+    const hasSelection = !range.collapsed;
+
+    if (hasSelection) {
+      // Selection: find start and end positions separately using block method
+      const startPos = findRenderedPosInMarkdown(content, md, range.startContainer, range.startOffset);
+      const endPos = findRenderedPosInMarkdown(content, md, range.endContainer, range.endOffset);
+      if (startPos >= 0 && endPos >= 0 && endPos >= startPos) {
+        textarea.setSelectionRange(startPos, endPos);
+      } else if (startPos >= 0) {
+        textarea.setSelectionRange(startPos, startPos);
+      } else {
+        textarea.setSelectionRange(0, 0);
+      }
+    } else {
+      // No selection: find block element containing cursor
+      const info = getBlockInfo(content, range);
+      if (!info || !info.text) {
+        textarea.setSelectionRange(0, 0);
+        textarea.focus();
+        return;
+      }
+
+      // Search for block text in markdown
+      const blockPos = findInMarkdown(md, info.text);
+
+      if (blockPos >= 0) {
+        // Position cursor at blockPos + offset within block
+        // Need to account for markdown syntax at the start of the block
+        const afterBlock = md.substring(blockPos);
+        const syntaxLen = countLeadingSyntax(afterBlock, info.text);
+        const cursorPos = blockPos + syntaxLen + info.offset;
+        textarea.setSelectionRange(cursorPos, cursorPos);
+      } else {
+        // Fallback: search for a snippet around cursor
+        const snipStart = Math.max(0, info.offset - 15);
+        const snipEnd = Math.min(info.text.length, info.offset + 15);
+        const snippet = info.text.substring(snipStart, snipEnd);
+        const snipPos = findInMarkdown(md, snippet);
+        if (snipPos >= 0) {
+          textarea.setSelectionRange(snipPos + (info.offset - snipStart), snipPos + (info.offset - snipStart));
+        } else {
+          textarea.setSelectionRange(0, 0);
+        }
+      }
+    }
+
+    textarea.focus();
+    scrollToTextareaCursor(textarea, md);
+  }
+
+  // Find a rendered position's corresponding markdown position
+  // Uses block element text + cursor offset within block
+  function findRenderedPosInMarkdown(root, md, node, offset) {
+    // Find block element containing this node
+    let el = node;
+    if (el.nodeType === Node.TEXT_NODE) el = el.parentElement;
+    const blockTags = 'P,H1,H2,H3,H4,H5,H6,LI,BLOCKQUOTE,PRE,TD,TH,DIV,DD,DT';
+    while (el && el !== root) {
+      if (el.matches && el.matches(blockTags)) break;
+      el = el.parentElement;
+    }
+    if (!el || el === root) return -1;
+
+    const blockText = el.textContent;
+    if (!blockText) return -1;
+
+    // Calculate offset within block's text content
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+    let cursorInBlock = 0;
+    let found = false;
+    let tn;
+    while (tn = walker.nextNode()) {
+      if (tn === node) {
+        cursorInBlock += offset;
+        found = true;
+        break;
+      }
+      cursorInBlock += tn.textContent.length;
+    }
+    if (!found) return -1;
+
+    // Search for block text in markdown
+    const blockPos = findInMarkdown(md, blockText);
+    if (blockPos < 0) return -1;
+
+    // Count leading markdown syntax before block text
+    const afterBlock = md.substring(blockPos);
+    const syntaxLen = countLeadingSyntax(afterBlock, blockText);
+
+    return blockPos + syntaxLen + cursorInBlock;
+  }
+
+  // Get the block element and cursor offset within it
+  function getBlockInfo(root, range) {
+    let el = range.startContainer;
+    if (el.nodeType === Node.TEXT_NODE) el = el.parentElement;
+
+    // Walk up to find block-level element
+    const blockTags = 'P,H1,H2,H3,H4,H5,H6,LI,BLOCKQUOTE,PRE,TD,TH,DIV,DD,DT';
+    while (el && el !== root) {
+      if (el.matches && el.matches(blockTags)) break;
+      el = el.parentElement;
+    }
+    if (!el || el === root) return null;
+
+    // Get text content of the block
+    const blockText = el.textContent;
+    if (!blockText) return null;
+
+    // Calculate cursor offset within the block's text content
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+    let offset = 0;
+    let found = false;
+    let tn;
+    while (tn = walker.nextNode()) {
+      if (tn === range.startContainer) {
+        offset += range.startOffset;
+        found = true;
+        break;
+      }
+      offset += tn.textContent.length;
+    }
+
+    return { text: blockText, offset: found ? offset : 0, element: el };
+  }
+
+  // Count leading markdown syntax characters before the actual text
+  function countLeadingSyntax(mdSnippet, targetText) {
+    // The md snippet starts with the block text, possibly prefixed by syntax
+    // e.g., "# Hello" → targetText is "Hello", syntax is "# " (2 chars)
+    // e.g., "- item" → targetText is "item", syntax is "- " (2 chars)
+    // e.g., "**bold**" → targetText is "bold", syntax is "**" (2 chars)
+    let i = 0;
+    while (i < mdSnippet.length && i < mdSnippet.length - targetText.length + 1) {
+      // Check if the rest of mdSnippet from position i matches targetText
+      const rest = mdSnippet.substring(i);
+      if (rest.startsWith(targetText) || textMatches(rest, targetText)) {
+        return i;
+      }
+      i++;
+    }
+    return 0;
+  }
+
+  // Check if two texts match (whitespace-normalized)
+  function textMatches(a, b) {
+    return a.replace(/\s+/g, ' ').trim().startsWith(b.replace(/\s+/g, ' ').trim());
+  }
+
+  // Search for text in markdown, trying exact then normalized match
+  function findInMarkdown(md, text) {
+    if (!text) return -1;
+    // Exact search
+    let pos = md.indexOf(text);
+    if (pos >= 0) return pos;
+    // Normalized: collapse whitespace
+    const normText = text.replace(/\s+/g, ' ').trim();
+    if (normText.length < 3) return -1;
+    // Build normalized md with position map
+    const { norm, map } = normalizeForSearch(md);
+    let npos = norm.indexOf(normText);
+    if (npos < 0) npos = norm.lastIndexOf(normText);
+    if (npos >= 0 && npos < map.length) {
+      return map[npos];
+    }
+    return -1;
+  }
+
+  function normalizeForSearch(text) {
+    let norm = '';
+    let map = [];
+    for (let i = 0; i < text.length; i++) {
+      if (/\s/.test(text[i])) {
+        if (norm.length === 0 || norm[norm.length - 1] !== ' ') {
+          norm += ' ';
+          map.push(i);
+        }
+      } else {
+        norm += text[i];
+        map.push(i);
+      }
+    }
+    return { norm, map };
+  }
+
+  // ── Cursor sync: source → rendered ──
+  // Strategy: get the line text at cursor in textarea, search for it in rendered content
+  function syncToRendered() {
+    const content = document.getElementById('content');
+    const textarea = document.getElementById('textarea');
+    const md = textarea.value;
+    const cursorPos = textarea.selectionStart;
+    const selLen = textarea.selectionEnd - textarea.selectionStart;
+
+    if (cursorPos === 0 && selLen === 0) {
+      content.focus();
+      return;
+    }
+
+    // Get the line text at cursor position in markdown
+    const lineStart = md.lastIndexOf('\n', cursorPos - 1) + 1;
+    const lineEnd = md.indexOf('\n', cursorPos);
+    const lineText = md.substring(lineStart, lineEnd >= 0 ? lineEnd : md.length);
+    const cursorInLine = cursorPos - lineStart;
+
+    // Strip markdown syntax from line text to get plain text
+    const plainLine = stripMarkdownSyntax(lineText);
+    if (!plainLine) {
+      content.focus();
+      return;
+    }
+
+    // Search for plainLine in rendered text content
+    const fullText = content.textContent;
+    const { norm, map } = normalizeForSearch(fullText);
+    const plainNorm = plainLine.replace(/\s+/g, ' ').trim();
+
+    let npos = norm.indexOf(plainNorm);
+    if (npos < 0) {
+      // Try last occurrence
+      npos = norm.lastIndexOf(plainNorm);
+    }
+    if (npos < 0 && plainNorm.length > 5) {
+      // Try shorter
+      npos = norm.indexOf(plainNorm.slice(0, Math.floor(plainNorm.length / 2)));
+    }
+
+    if (npos < 0) {
+      content.focus();
+      return;
+    }
+
+    // Calculate the rendered text offset
+    const renderedOffset = map[npos] + cursorInLine;
+
+    // Find DOM range at this offset
+    let range;
+    if (selLen > 0) {
+      // Selection: find both start and end
+      const selEndInLine = cursorInLine + selLen;
+      const renderedEnd = map[npos] + selEndInLine;
+      range = findRangeBetween(content, renderedOffset, renderedEnd);
+    } else {
+      range = findRangeAtOffset(content, renderedOffset);
+    }
+
+    if (!range) {
+      // Fallback: try just the block start
+      range = findRangeAtOffset(content, map[npos]);
+    }
+
+    if (!range) { content.focus(); return; }
+
+    const newSel = window.getSelection();
+    newSel.removeAllRanges();
+    newSel.addRange(range);
+    content.focus();
+
+    // Scroll into view
+    const rect = range.getBoundingClientRect();
+    if (rect) {
+      const wrap = document.querySelector('.scroll-wrap');
+      const wrapRect = wrap.getBoundingClientRect();
+      if (rect.top < wrapRect.top + 60 || rect.bottom > wrapRect.bottom) {
+        wrap.scrollTo({ top: wrap.scrollTop + rect.top - wrapRect.top - 80, behavior: 'auto' });
+      }
+    }
+  }
+
+  function stripMarkdownSyntax(text) {
+    return text
+      .replace(/^#{1,6}\s*/, '')
+      .replace(/^[-*+]\s+/, '')
+      .replace(/^>\s*/, '')
+      .replace(/^\d+\.\s+/, '')
+      .replace(/^\|/, '')
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/\*(.+?)\*/g, '$1')
+      .replace(/__(.+?)__/g, '$1')
+      .replace(/_(.+?)_/g, '$1')
+      .replace(/~~(.+?)~~/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\|/g, ' ')
+      .trim();
+  }
+
+  function scrollToTextareaCursor(textarea, md) {
+    const lines = md.substring(0, textarea.selectionStart).split('\n').length;
+    document.querySelector('.scroll-wrap').scrollTo({ top: Math.max(0, (lines - 1) * 25 - 100), behavior: 'auto' });
+  }
+
+  // Find DOM range at a character offset in contenteditable
+  function findRangeAtOffset(root, offset) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+    let current = 0;
+    let node;
+    while (node = walker.nextNode()) {
+      const len = node.textContent.length;
+      if (current + len >= offset) {
+        const range = document.createRange();
+        range.setStart(node, Math.min(offset - current, len));
+        range.collapse(true);
+        return range;
+      }
+      current += len;
+    }
+    return null;
+  }
+
+  function findRangeBetween(root, startOff, endOff) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
+    let current = 0;
+    let sn = null, so = 0, en = null, eo = 0;
+    let node;
+    while (node = walker.nextNode()) {
+      const len = node.textContent.length;
+      if (!sn && current + len >= startOff) { sn = node; so = Math.min(startOff - current, len); }
+      if (current + len >= endOff) { en = node; eo = Math.min(endOff - current, len); break; }
+      current += len;
+    }
+    if (!sn) return null;
+    const range = document.createRange();
+    range.setStart(sn, so);
+    range.setEnd(en || sn, en ? eo : so);
+    return range;
+  }
+
+  // ── View toggle ──
+  async function toggleView() {
+    if (!isSource) {
+      // rendered → source: capture cursor, convert, position
+      const content = document.getElementById('content');
+      const html = content.innerHTML;
+      const md = turndownService ? turndownService.turndown(html) : html;
+      document.getElementById('textarea').value = md;
+      syncHighlight();
+      isSource = true;
+      updateView();
+      syncToSource();
+    } else {
+      // source → rendered: capture cursor, convert, position
+      const md = document.getElementById('textarea').value;
+      await renderMarkdown(md, document.getElementById('content'));
+      isSource = false;
+      updateView();
+      syncToRendered();
+    }
+  }
+
+  function updateView() {
+    const content = document.getElementById('content');
+    const source = document.getElementById('source');
+    const hint = document.getElementById('sourceHint');
+    const page = document.getElementById('page');
+    if (isSource) {
+      content.classList.add('hidden');
+      source.classList.add('visible');
+      hint.classList.add('visible');
+      page.classList.add('full-width');
+    } else {
+      content.classList.remove('hidden');
+      source.classList.remove('visible');
+      hint.classList.remove('visible');
+      page.classList.remove('full-width');
+    }
+  }
+
+  // ── Save ──
+  function getCurrentMarkdown() {
+    if (isSource) return document.getElementById('textarea').value;
+    const html = document.getElementById('content').innerHTML;
+    return turndownService ? turndownService.turndown(html) : html;
+  }
+
+  async function saveFile() {
+    const markdown = getCurrentMarkdown();
+    const result = await window.pywebview.api.save_file(filePath, markdown);
+    if (result.success) {
+      isDirty = false;
+      if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(false);
+      if (!isSource) { document.getElementById('textarea').value = markdown; syncHighlight(); }
+      else { await renderMarkdown(markdown, document.getElementById('content')); }
+      showStatus('Saved');
+    }
+  }
+
+  let statusTimer = null;
+  function showStatus(text) {
+    const el = document.getElementById('status');
+    el.textContent = text; el.classList.add('visible');
+    clearTimeout(statusTimer);
+    statusTimer = setTimeout(() => el.classList.remove('visible'), 1500);
+  }
+
+  // ── Events ──
+  document.addEventListener('keydown', (e) => {
+    const cmd = e.metaKey;
+    if (cmd && e.key === 's') { e.preventDefault(); saveFile(); }
+    if (cmd && e.key === 'e') { e.preventDefault(); toggleView(); }
+  });
+
+  function pushContentToPython() {
+    if (window.pywebview && window.pywebview.api) window.pywebview.api.store_content(getCurrentMarkdown());
+  }
+
+  function setDirty(dirty) {
+    isDirty = dirty;
+    if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(dirty);
+  }
+
+  document.getElementById('content').addEventListener('input', () => { setDirty(true); pushContentToPython(); });
+  document.getElementById('textarea').addEventListener('input', () => { setDirty(true); syncHighlight(); pushContentToPython(); });
+  setInterval(pushContentToPython, 3000);
+
+  window.addEventListener('pywebviewready', () => {
+    window.pywebview.api.get_initial_content().then((data) => loadContent(data.path, data.content));
+  });
+</script>
+</body>
+</html>
