@@ -201,8 +201,6 @@ If you find mdPreview useful, please consider:
 
 **For a world worth debugging.**
 
-**Made with ❤️ for macOS developers, writers, and Markdown enthusiasts**
-
 [⬆ Back to Top](#mdpreview---macos-markdown-viewer--editor)
 
 </div>
