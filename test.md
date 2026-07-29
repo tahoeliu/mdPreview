@@ -19,21 +19,24 @@ def hello():
 
 ## Table
 
-Feature
+| Feature | Status |
+|---------|--------|
+| Render | ✅ Done |
+| Edit | ✅ Done |
+| Save | ✅ Done |
+| Flowchart | ✅ Done |
+| Properties | ✅ New |
+| Table Balancing | ✅ New |
 
-Status
+### Wider Table (Column Balancing Test)
 
-Render
-
-✅
-
-Edit
-
-✅
-
-Save
-
-✅
+| Name | Description | Category | Priority | Status |
+|------|-------------|----------|----------|--------|
+| Markdown Rendering | Render markdown content with full GFM support including tables, lists, and code blocks | Core | P0 | Complete |
+| Cmd+E Toggle | Switch between rendered preview and source editing mode with cursor sync | Core | P0 | Complete |
+| Mermaid Diagrams | Render flowchart, sequence diagram, class diagram, and other diagram types | Feature | P1 | Complete |
+| File Properties | Show file name, location, size, and modification date in a modal dialog | Core | P1 | Complete |
+| Column Balancing | Auto-balance table column widths based on content for even text wrapping | Feature | P2 | In Progress |
 
 > This is a blockquote. It looks clean and minimal.
 

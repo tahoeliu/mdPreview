@@ -8,19 +8,9 @@ import os
 import json
 import time
 import threading
-import traceback
 import webview
 
-LOG_FILE = '/tmp/mdviewer_debug.log'
 CONFIG_FILE = os.path.expanduser('~/.mdviewer_config.json')
-
-
-def log(msg):
-    try:
-        with open(LOG_FILE, 'a') as f:
-            f.write(f'[{time.strftime("%H:%M:%S")}] {msg}\n')
-    except:
-        pass
 
 
 try:
@@ -28,10 +18,8 @@ try:
     from PyObjCTools import AppHelper
     import objc
     HAS_COCOA = True
-    log('Cocoa imported successfully')
-except ImportError as e:
+except ImportError:
     HAS_COCOA = False
-    log(f'Cocoa import failed: {e}')
 
 
 class MarkdownAPI:
@@ -43,7 +31,6 @@ class MarkdownAPI:
         self.is_dirty = False     # JS-maintained dirty flag
 
     def get_initial_content(self):
-        log(f'get_initial_content: file_path={self.file_path}')
         cfg = load_config()
         page_width = cfg.get('page_width', 720)
         base = {'pageWidth': page_width}
@@ -88,6 +75,47 @@ class MarkdownAPI:
         save_config(cfg)
         return True
 
+    def get_file_properties(self):
+        """Return file properties for the Properties dialog"""
+        if not self.file_path or not os.path.exists(self.file_path):
+            return {
+                'name': os.path.basename(self.file_path) if self.file_path else 'Untitled.md',
+                'location': '',
+                'size': 0,
+                'sizeFormatted': '0 B',
+                'modified': '',
+                'created': '',
+                'exists': False,
+            }
+        try:
+            stat = os.stat(self.file_path)
+            size = stat.st_size
+            # Format size
+            if size < 1024:
+                sizeFmt = f'{size} B'
+            elif size < 1024 * 1024:
+                sizeFmt = f'{size / 1024:.1f} KB'
+            else:
+                sizeFmt = f'{size / (1024 * 1024):.1f} MB'
+
+            import datetime
+            modified = datetime.datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S')
+            created = datetime.datetime.fromtimestamp(stat.st_ctime).strftime('%Y-%m-%d %H:%M:%S')
+
+            return {
+                'name': os.path.basename(self.file_path),
+                'location': os.path.dirname(self.file_path),
+                'size': size,
+                'sizeFormatted': sizeFmt,
+                'modified': modified,
+                'created': created,
+                'exists': True,
+                'ext': os.path.splitext(self.file_path)[1].lstrip('.'),
+            }
+        except Exception:
+            return {'name': 'Unknown', 'location': '', 'size': 0, 'sizeFormatted': '0 B',
+                    'modified': '', 'created': '', 'exists': False}
+
 
 def get_resource_path(filename):
     """Find resource files — works in dev mode and pyinstaller bundle"""
@@ -121,6 +149,13 @@ _initial_file_handled = False
 _window_apis = {}  # id(pywebview_window) -> MarkdownAPI
 _main_window_ref = None
 _main_api_ref = None
+_menus_setup = False
+_view_menu_setup = False
+_file_menu_setup = False
+_window_count = [0]  # list-based counter so it stays mutable inside ObjC callbacks
+WINDOW_OFFSET = 30  # px to offset each new window
+WINDOW_BASE_X = 100  # starting position
+WINDOW_BASE_Y = 80
 
 
 def on_window_closing(window):
@@ -135,9 +170,6 @@ def on_window_closing(window):
         return True
     try:
         api = _window_apis.get(id(window)) or _main_api_ref
-        log(f'on_window_closing: api={api is not None}, '
-            f'is_dirty={getattr(api, "is_dirty", None)}, '
-            f'file_path={getattr(api, "file_path", None)}')
 
         if not (api and api.file_path and api.is_dirty):
             return True  # nothing to save, allow close
@@ -161,34 +193,34 @@ def on_window_closing(window):
         # 1000 = Save, 1001 = Don't Save, 1002 = Cancel
         if response == 1000:
             api.save_file(api.file_path, api.cached_content)
-            log(f'Saved on close: {api.file_path}')
             return True
         elif response == 1001:
-            log(f'Closing without save: {api.file_path}')
             return True
         else:
-            log(f'Close cancelled: {api.file_path}')
             return False  # cancel the close
 
-    except Exception as e:
-        log(f'on_window_closing error: {e}')
-        log(traceback.format_exc())
+    except Exception:
         return True
 
 
-def create_window(file_path=None):
+def create_window(file_path=None, x=None, y=None):
     if file_path:
         file_path = os.path.abspath(file_path)
         if file_path in _opened_files:
-            log(f'File already open, skipping: {file_path}')
             return
         _opened_files.add(file_path)
+
+    # Calculate cascade offset if x,y not specified
+    if x is None or y is None:
+        count = _window_count[0]
+        offset = count * WINDOW_OFFSET
+        x = WINDOW_BASE_X + (offset % 150)
+        y = WINDOW_BASE_Y + (offset % 150)
 
     api = MarkdownAPI(file_path)
     html_path = get_resource_path('index.html')
     title = os.path.basename(file_path) if file_path else 'Markdown Viewer'
 
-    log(f'Creating window for: {file_path or "(empty)"}')
     try:
         win = webview.create_window(
             title=title,
@@ -199,21 +231,21 @@ def create_window(file_path=None):
             min_size=(500, 400),
             text_select=True,
             confirm_close=False,
+            x=x,
+            y=y,
         )
         api.window = win
         _window_apis[id(win)] = api
         if HAS_COCOA:
             win.events.closing += on_window_closing
-        log(f'Window created OK: {file_path}')
+        _window_count[0] += 1
         return win
-    except Exception as e:
-        log(f'create_window error: {e}')
-        log(traceback.format_exc())
+    except Exception:
+        pass
 
 
 def update_main_window(main_window, main_api, file_path):
     """Update the main window with a new file"""
-    log(f'Updating main window with: {file_path}')
     main_api.file_path = file_path
     _opened_files.add(file_path)
 
@@ -223,10 +255,9 @@ def update_main_window(main_window, main_api, file_path):
             try:
                 main_window.evaluate_js('reloadContent();')
                 main_window.set_title(os.path.basename(file_path))
-                log(f'Main window updated (attempt {attempt + 1})')
                 return
-            except Exception as e:
-                log(f'Update attempt {attempt + 1}: {e}')
+            except Exception:
+                pass
 
     threading.Thread(target=do_update, daemon=True).start()
 
@@ -240,7 +271,6 @@ def handle_opened_file(file_path, main_window=None, main_api=None):
 
     valid_extensions = ('.md', '.markdown', '.mdown', '.mkd', '.mkdown')
     if not file_path.lower().endswith(valid_extensions):
-        log(f'Skipping non-markdown file: {file_path}')
         return
 
     if not _initial_file_handled and main_window and main_api:
@@ -254,57 +284,81 @@ def handle_opened_file(file_path, main_window=None, main_api=None):
 
 if HAS_COCOA:
 
-    def setup_view_menu():
-        """Add Increase/Decrease Width menu items under the View menu."""
+    def setup_all_menus():
+        """Set up all custom menu items. Called once menus are ready."""
+        global _view_menu_setup, _file_menu_setup
         try:
-            from AppKit import NSApplication, NSMenuItem
+            from AppKit import NSApplication, NSMenuItem, NSMenu
             from Foundation import NSObject
 
             main_menu = NSApplication.sharedApplication().mainMenu()
             if not main_menu:
-                log('Menu not ready yet, retrying in 0.5s...')
                 _view_menu_handler.performSelector_withObject_afterDelay_(
-                    'setupViewMenuRetry:', None, 0.5
+                    'setupAllMenusRetry:', None, 0.5
                 )
                 return
 
-            # Find the View menu — check submenu titles since item titles are "NSMenuItem"
-            view_menu = None
-            for i in range(main_menu.numberOfItems()):
-                item = main_menu.itemAtIndex_(i)
-                sub = item.submenu()
-                if sub and sub.title() in ('View', '显示', '视图'):
-                    view_menu = sub
-                    break
+            # ── View menu: Increase/Decrease Width ──
+            if not _view_menu_setup:
+                view_menu = None
+                for i in range(main_menu.numberOfItems()):
+                    item = main_menu.itemAtIndex_(i)
+                    sub = item.submenu()
+                    if sub and sub.title() in ('View', '显示', '视图'):
+                        view_menu = sub
+                        break
 
-            if not view_menu:
-                log('View menu not found')
-                return
+                if view_menu:
+                    view_menu.addItem_(NSMenuItem.separatorItem())
+                    inc_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Increase Width", "increaseWidth:", "=")
+                    inc_item.setKeyEquivalentModifierMask_(1 << 20)
+                    view_menu.addItem_(inc_item)
+                    dec_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Decrease Width", "decreaseWidth:", "-")
+                    dec_item.setKeyEquivalentModifierMask_(1 << 20)
+                    view_menu.addItem_(dec_item)
+                    inc_item.setTarget_(_view_menu_handler)
+                    dec_item.setTarget_(_view_menu_handler)
+                    _view_menu_setup = True
 
-            # Add separator + Increase Width (Cmd+=)
-            view_menu.addItem_(NSMenuItem.separatorItem())
+            # ── File menu: Properties ──
+            if not _file_menu_setup:
+                file_menu = None
+                file_menu_index = -1
+                for i in range(main_menu.numberOfItems()):
+                    item = main_menu.itemAtIndex_(i)
+                    sub = item.submenu()
+                    if sub and sub.title() in ('File', '文件'):
+                        file_menu = sub
+                        file_menu_index = i
+                        break
 
-            inc_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-                "Increase Width", "increaseWidth:", "="
-            )
-            inc_item.setKeyEquivalentModifierMask_(1 << 20)  # Cmd
-            view_menu.addItem_(inc_item)
+                if not file_menu:
+                    # Create File menu since it doesn't exist
+                    file_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("File", None, "")
+                    file_menu = NSMenu.alloc().initWithTitle_("File")
+                    file_item.setSubmenu_(file_menu)
+                    # Insert at the beginning (before the empty title item or Edit)
+                    main_menu.insertItem_atIndex_(file_item, 1)
+                    file_menu_index = 1
 
-            # Decrease Width (Cmd+-)
-            dec_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
-                "Decrease Width", "decreaseWidth:", "-"
-            )
-            dec_item.setKeyEquivalentModifierMask_(1 << 20)  # Cmd
-            view_menu.addItem_(dec_item)
+                if file_menu:
+                    file_menu.addItem_(NSMenuItem.separatorItem())
+                    props_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Properties", "showProperties:", "i")
+                    props_item.setKeyEquivalentModifierMask_(1 << 20)
+                    file_menu.addItem_(props_item)
+                    props_item.setTarget_(_view_menu_handler)
+                    _file_menu_setup = True
 
-            # Use the pre-created handler for menu actions
-            inc_item.setTarget_(_view_menu_handler)
-            dec_item.setTarget_(_view_menu_handler)
+        except Exception:
+            pass
 
-            log('View menu items added (Increase/Decrease Width)')
-        except Exception as e:
-            log(f'setup_view_menu error: {e}')
-            log(traceback.format_exc())
+    def setup_view_menu():
+        """Legacy — delegates to setup_all_menus."""
+        setup_all_menus()
+
+    def setup_file_menu():
+        """Legacy — delegates to setup_all_menus."""
+        setup_all_menus()
 
     def _dispatch_js(js_code):
         """Execute JS directly on WKWebView from the main thread.
@@ -323,8 +377,8 @@ if HAS_COCOA:
             browser = BrowserView.instances.get(ref.uid)
             if browser and browser.webview:
                 browser.webview.evaluateJavaScript_completionHandler_(js_code, None)
-        except Exception as e:
-            log(f'_dispatch_js error: {e}')
+        except Exception:
+            pass
 
     # Dynamically create an ObjC class to handle menu actions
     from Foundation import NSObject
@@ -336,8 +390,11 @@ if HAS_COCOA:
         def decreaseWidth_(self, sender):
             _dispatch_js('adjustPageWidth(-40)')
 
-        def setupViewMenuRetry_(self, sender):
-            setup_view_menu()
+        def showProperties_(self, sender):
+            _dispatch_js('showFileProperties()')
+
+        def setupAllMenusRetry_(self, sender):
+            setup_all_menus()
 
     _view_menu_handler = ViewMenuHandler.alloc().init()
 
@@ -347,16 +404,13 @@ if HAS_COCOA:
             AppDelegateClass = cocoa.BrowserView.AppDelegate
 
             if AppDelegateClass.instancesRespondToSelector_(b'application:openFiles:'):
-                log('AppDelegate already has application:openFiles:')
                 return
 
             def application_openFiles_(self, application, filenames):
                 global _initial_file_handled
                 count = filenames.count()
-                log(f'application:openFiles: called, count={count}')
                 for i in range(count):
                     path = filenames.objectAtIndex_(i)
-                    log(f'  File [{i}]: {path}')
                     handle_opened_file(path, _main_window_ref, _main_api_ref)
                 application.replyToOpenOrPrint_(0)
 
@@ -365,18 +419,13 @@ if HAS_COCOA:
                 b'application:openFiles:',
                 application_openFiles_,
             )
-            log('Patched AppDelegate with application:openFiles:')
-        except Exception as e:
-            log(f'patch_app_delegate error: {e}')
-            log(traceback.format_exc())
+        except Exception:
+            pass
 
 
 def main():
     global _initial_file_handled
     global _main_window_ref, _main_api_ref
-
-    log('=== Markdown Viewer starting ===')
-    log(f'argv: {sys.argv}')
 
     if HAS_COCOA:
         patch_app_delegate()
@@ -387,7 +436,6 @@ def main():
         for arg in sys.argv[1:]:
             if arg and os.path.exists(arg) and arg.lower().endswith(valid_extensions):
                 file_path = os.path.abspath(arg)
-                log(f'Found markdown file in argv: {file_path}')
                 break
 
     if file_path:
@@ -397,7 +445,6 @@ def main():
     html_path = get_resource_path('index.html')
     title = os.path.basename(file_path) if file_path else 'Markdown Viewer'
 
-    log('Creating main window...')
     main_window = webview.create_window(
         title=title,
         url=html_path,
@@ -412,17 +459,16 @@ def main():
     _window_apis[id(main_window)] = main_api
     _main_window_ref = main_window
     _main_api_ref = main_api
+    _window_count[0] = 1  # count the main window so subsequent windows are offset
 
     if HAS_COCOA:
         # Official pywebview mechanism: subscribe to the 'closing' event.
         # Returning False from the handler cancels the close.
         main_window.events.closing += on_window_closing
-        log('Subscribed on_window_closing to main window closing event')
         setup_view_menu()
+        setup_file_menu()
 
-    log('Starting webview...')
     webview.start(debug=False)
-    log('Webview exited.')
 
 
 if __name__ == '__main__':

@@ -41,8 +41,9 @@
   .markdown code { font-family: "SF Mono", "Menlo", monospace; font-size: 14px; background: #f5f5f7; padding: 2px 6px; border-radius: 4px; color: #a31515; }
   .markdown pre { margin: 0 0 16px; padding: 14px 18px; background: #f5f5f7; border-radius: 8px; overflow-x: auto; }
   .markdown pre code { background: none; color: #1d1d1f; padding: 0; font-size: 13px; line-height: 1.6; }
-  .markdown table { margin: 0 0 16px; border-collapse: collapse; width: 100%; font-size: 14px; }
-  .markdown th, .markdown td { border: 1px solid #e0e0e0; padding: 8px 14px; text-align: left; }
+  .markdown .table-wrap { width: 100%; margin: 0 0 16px; }
+  .markdown table { border-collapse: collapse; width: 100%; font-size: 14px; table-layout: fixed; }
+  .markdown th, .markdown td { border: 1px solid #e0e0e0; padding: 8px 14px; text-align: left; overflow-wrap: break-word; word-wrap: break-word; }
   .markdown th { background: #f5f5f7; font-weight: 600; }
   .markdown img { max-width: 100%; border-radius: 10px; margin: 8px 0; }
   .markdown hr { border: none; border-top: 1px solid #e8e8e8; margin: 28px 0; }
@@ -58,6 +59,18 @@
   .status.visible { opacity: 1; }
   .source-hint { position: fixed; bottom: 0; left: 0; right: 0; height: 2px; background: #007aff; opacity: 0; transition: opacity 0.3s; }
   .source-hint.visible { opacity: 0.4; }
+  /* ── Properties Modal ── */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-overlay.visible { display: flex; }
+  .modal-box { background: #fff; border-radius: 12px; box-shadow: 0 8px 40px rgba(0,0,0,0.18); width: 420px; max-width: 90vw; overflow: hidden; font-size: 14px; }
+  .modal-header { padding: 18px 22px 0; font-size: 16px; font-weight: 600; }
+  .modal-body { padding: 16px 22px 22px; }
+  .modal-row { display: flex; padding: 6px 0; border-bottom: 1px solid #f0f0f0; }
+  .modal-row:last-child { border-bottom: none; }
+  .modal-label { width: 90px; flex-shrink: 0; color: #888; }
+  .modal-value { flex: 1; color: #333; word-break: break-all; }
+  .modal-close { display: block; margin: 0 22px 18px auto; padding: 6px 20px; background: #007aff; color: #fff; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .modal-close:hover { background: #0066d9; }
 </style>
 </head>
 <body>
@@ -74,6 +87,14 @@
 
 <div class="source-hint" id="sourceHint"></div>
 <div class="status" id="status"></div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-box">
+    <div class="modal-header">File Properties</div>
+    <div class="modal-body" id="modalBody"></div>
+    <button class="modal-close" onclick="closeModal()">Close</button>
+  </div>
+</div>
 
 <script src="marked.min.js"></script>
 <script src="turndown.js"></script>
@@ -139,7 +160,16 @@
   // Render a specific container's markdown and mermaid diagrams
   async function renderMarkdown(content, container) {
     container.innerHTML = marked.parse(content);
+    // Wrap tables in .table-wrap for overflow control
+    const tables = container.querySelectorAll('table');
+    for (const table of tables) {
+      const wrap = document.createElement('div');
+      wrap.className = 'table-wrap';
+      table.parentNode.insertBefore(wrap, table);
+      wrap.appendChild(table);
+    }
     await renderMermaidDiagrams(container);
+    balanceTableColumns(container);
   }
 
   // ── Syntax highlighting ──
@@ -177,7 +207,107 @@
     if (window.pywebview && window.pywebview.api) window.pywebview.api.save_page_width(next);
   }
 
-  // ── Content loading ──
+  // ── File Properties Modal ──
+  async function showFileProperties() {
+    if (!window.pywebview || !window.pywebview.api) return;
+    const props = await window.pywebview.api.get_file_properties();
+    const body = document.getElementById('modalBody');
+    const rows = [
+      { label: 'Name', value: props.name },
+      { label: 'Location', value: props.location || '-' },
+      { label: 'Size', value: props.sizeFormatted },
+      { label: 'Modified', value: props.modified || '-' },
+      { label: 'Created', value: props.created || '-' },
+    ];
+    body.innerHTML = rows.map(r =>
+      `<div class="modal-row"><div class="modal-label">${r.label}</div><div class="modal-value">${escHtml(r.value)}</div></div>`
+    ).join('');
+    document.getElementById('modalOverlay').classList.add('visible');
+  }
+  function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('visible');
+  }
+  document.getElementById('modalOverlay').addEventListener('click', (e) => {
+    if (e.target === e.currentTarget) closeModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeModal();
+  });
+  function escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // ── Table column balancing ──
+  // Balances column widths so each column's content wraps to similar line counts
+  function balanceTableColumns(container) {
+    const tables = container.querySelectorAll('table');
+    const pageWidth = parseInt(getComputedStyle(document.getElementById('page')).getPropertyValue('--page-width').trim()) || 720;
+    // Account for page padding (60+80=140 in normal mode)
+    const availableWidth = pageWidth - 140;
+
+    for (const table of tables) {
+      if (table.rows.length === 0) continue;
+      const colCount = table.rows[0].cells.length;
+      if (colCount === 0) continue;
+
+      // Step 1: Measure each column's content width (with padding buffer)
+      const colWidths = new Array(colCount).fill(0);
+      for (let r = 0; r < table.rows.length; r++) {
+        for (let c = 0; c < Math.min(table.rows[r].cells.length, colCount); c++) {
+          const cell = table.rows[r].cells[c];
+          // Measure the text content length as proxy for width need
+          const textLen = cell.textContent.replace(/\s+/g, ' ').length;
+          // Rough estimate: ~8px per char for typical text
+          const estWidth = Math.max(textLen * 8 + 28, 50); // +28 for padding
+          colWidths[c] = Math.max(colWidths[c], estWidth);
+        }
+      }
+
+      // Step 2: Calculate total desired width
+      let totalDesired = colWidths.reduce((a, b) => a + b, 0);
+
+      // Step 3: Scale to fit available width, with minimum per column
+      const minColWidth = 60;
+      const maxColWidth = Math.min(400, availableWidth * 0.6);
+
+      if (totalDesired > availableWidth) {
+        // Need to compress - scale proportionally
+        const ratio = availableWidth / totalDesired;
+        for (let c = 0; c < colCount; c++) {
+          colWidths[c] = Math.max(minColWidth, Math.floor(colWidths[c] * ratio));
+        }
+      } else if (totalDesired < availableWidth) {
+        // Have extra space - distribute proportionally
+        const extra = availableWidth - totalDesired;
+        for (let c = 0; c < colCount; c++) {
+          colWidths[c] += Math.floor(extra * (colWidths[c] / totalDesired));
+        }
+      }
+
+      // Clamp
+      for (let c = 0; c < colCount; c++) {
+        colWidths[c] = Math.min(colWidths[c], maxColWidth);
+      }
+
+      // Step 4: Fix rounding — make total exactly equal to availableWidth
+      const currentTotal = colWidths.reduce((a, b) => a + b, 0);
+      if (currentTotal < availableWidth) {
+        colWidths[colCount - 1] += availableWidth - currentTotal;
+      } else if (currentTotal > availableWidth) {
+        colWidths[colCount - 1] -= currentTotal - availableWidth;
+        if (colWidths[colCount - 1] < minColWidth) colWidths[colCount - 1] = minColWidth;
+      }
+
+      // Step 5: Apply widths as percentages to avoid sub-pixel border issues
+      for (let r = 0; r < table.rows.length; r++) {
+        for (let c = 0; c < Math.min(table.rows[r].cells.length, colCount); c++) {
+          const pct = (colWidths[c] / availableWidth * 100).toFixed(2);
+          table.rows[r].cells[c].style.width = pct + '%';
+        }
+      }
+    }
+  }
   async function loadContent(path, content, pageWidth) {
     filePath = path;
     if (pageWidth) setPageWidth(pageWidth);
@@ -613,6 +743,7 @@
     const cmd = e.metaKey;
     if (cmd && e.key === 's') { e.preventDefault(); saveFile(); }
     if (cmd && e.key === 'e') { e.preventDefault(); toggleView(); }
+    if (cmd && e.key === 'i') { e.preventDefault(); showFileProperties(); }
   });
 
   function pushContentToPython() {
