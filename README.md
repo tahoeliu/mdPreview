@@ -10,6 +10,42 @@ A **minimalist Markdown viewer** for macOS with live rendering and editing capab
 
 </div>
 
+## 🎯 Want a simple way to view Markdown files on macOS?
+
+Here's the deal: You've got some Markdown files (those `.md` things) and you just want to see them formatted nicely without opening a browser or running through complex installation steps.
+
+**mdPreview** is exactly that — a simple, clean Markdown viewer that just works:
+
+- **Double-click any `.md` file** and it opens instantly
+- **Read it beautifully formatted** with tables, code blocks, and everything
+- **Edit it with one click** if you need to make changes
+- **Save with ⌘+S** and you're done
+
+No bells, no whistles, no setup required. Just clean, focused reading and writing.
+
+## 📥 Download & Install
+
+Just download and drag to Applications:
+
+[📥 Download mdPreview.dmg](dist/mdPreview-1.1.0.dmg) *(14MB)*
+
+**Three simple steps:**
+1. Click the download link above
+2. Open the `.dmg` file 
+3. Drag mdPreview to your Applications folder
+
+Done. Now double-click any `.md` file and watch the magic happen.
+
+---
+
+<div align="center">
+
+**For the curious minds who refuse to accept the default.**
+
+</div>
+
+---
+
 ## ✨ Features
 
 - **🖱️ Double-click to Open** - Associate `.md` files with mdPreview for instant rendering
@@ -18,14 +54,6 @@ A **minimalist Markdown viewer** for macOS with live rendering and editing capab
 - **⌨️ Keyboard Shortcuts** - Cmd+S to save, Cmd+E to switch edit/preview modes
 - **🎨 Minimalist Interface** - Clean, focused reading and writing experience
 - **📱 Native macOS Integration** - Seamless integration with macOS file system and UI
-
-## 📸 Screenshots
-
-<div align="center">
-
-*Preview Mode - Clean, distraction-free reading*
-
-</div>
 
 ## 🚀 Installation
 
@@ -130,6 +158,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 <div align="center">
 
-**Made with ❤️ for macOS users**
+**For a world worth debugging.**
 
 </div>
