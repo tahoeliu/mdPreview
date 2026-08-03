@@ -2,14 +2,7 @@
 
 <div align="center">
 
-**Simple, fast, and free Markdown viewer for macOS** - Perfect for developers, writers, and anyone who works with `.md` files.
-
-[![Python Version](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
-[![Download](https://img.shields.io/badge/download-14MB-orange.svg)](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg)
-
-**⭐ Star this repo if you find it useful!**
+**Simple, fast, and free Markdown viewer for macOS** - Perfect for AI-natives and anyone who works with `.md` files.
 
 </div>
 
@@ -75,6 +68,13 @@ Now every `.md` file will open automatically with mdPreview!
 </div>
 
 ---
+
+[![Python Version](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
+[![Download](https://img.shields.io/badge/download-14MB-orange.svg)](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg)
+
+**⭐ Star this repo if you find it useful!**
 
 ## ✨ Features
 
