@@ -19,7 +19,11 @@
 
 **Stop struggling with Markdown files in plain text editors!** mdPreview gives you instant, beautiful Markdown rendering with one simple double-click.
 
-Whether you're a **developer** reading README files, a **writer** working with Markdown documents, or just someone who wants to **view formatted Markdown** on macOS - this app is for you.
+<div align="center">
+  <img src="images/screenshot.png" alt="mdPreview screenshot" width="70%">
+</div>
+
+<br>
 
 <table width="100%">
   <tr>
