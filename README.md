@@ -7,7 +7,7 @@
 [![Python Version](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
-[![Download](https://img.shields.io/badge/download-14MB-orange.svg)](dist/mdPreview-1.2.1.dmg)
+[![Download](https://img.shields.io/badge/download-14MB-orange.svg)](dist/mdPreview-1.2.2.dmg)
 
 **⭐ Star this repo if you find it useful!**
 
@@ -40,7 +40,7 @@ Whether you're a **developer** reading README files, a **writer** working with M
 
 **Get mdPreview in 3 simple steps:**
 
-[📥 **Download mdPreview.dmg**](dist/mdPreview-1.2.1.dmg) *(14MB)*
+[📥 **Download mdPreview.dmg**](dist/mdPreview-1.2.2.dmg) *(14MB)*
 
 1. Click the download button above
 2. Open the downloaded `.dmg` file

@@ -65,8 +65,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName': 'mdPreview',
         'CFBundleDisplayName': 'mdPreview',
-        'CFBundleVersion': '1.2.1',
-        'CFBundleShortVersionString': '1.2.1',
+        'CFBundleVersion': '1.2.2',
+        'CFBundleShortVersionString': '1.2.2',
         'LSMinimumSystemVersion': '10.13',
         'NSHighResolutionCapable': True,
         'NSAppTransportSecurity': {

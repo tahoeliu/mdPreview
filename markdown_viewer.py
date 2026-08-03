@@ -14,7 +14,7 @@ CONFIG_FILE = os.path.expanduser('~/.mdviewer_config.json')
 
 
 try:
-    from AppKit import NSApplication, NSObject, NSAlert, NSColor, NSMutableAttributedString
+    from AppKit import NSApplication, NSObject, NSAlert, NSColor, NSMutableAttributedString, NSImage
     from PyObjCTools import AppHelper
     import objc
     HAS_COCOA = True
@@ -74,6 +74,15 @@ class MarkdownAPI:
         cfg['page_width'] = int(width)
         save_config(cfg)
         return True
+
+    def open_external_link(self, url):
+        """Open an external URL (http/https/mailto) in the default browser."""
+        try:
+            import webbrowser
+            webbrowser.open(url)
+            return {'success': True}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
 
     def get_file_properties(self):
         """Return file properties for the Properties dialog"""
@@ -298,6 +307,16 @@ if HAS_COCOA:
                 )
                 return
 
+            # ── App menu: About ──
+            # Connect the default "About mdPreview" item to our handler
+            app_menu_item = main_menu.itemAtIndex_(0)
+            app_menu = app_menu_item.submenu()
+            if app_menu and app_menu.numberOfItems() > 0:
+                about_item = app_menu.itemAtIndex_(0)
+                if about_item:
+                    about_item.setAction_('showAbout:')
+                    about_item.setTarget_(_view_menu_handler)
+
             # ── View menu: Increase/Decrease Width ──
             if not _view_menu_setup:
                 view_menu = None
@@ -392,6 +411,11 @@ if HAS_COCOA:
 
         def showProperties_(self, sender):
             _dispatch_js('showFileProperties()')
+
+        def showAbout_(self, sender):
+            """Show the standard macOS About panel.
+            Reads app name, version, and icon from the .app bundle's Info.plist."""
+            NSApplication.sharedApplication().orderFrontStandardAboutPanel_(sender)
 
         def setupAllMenusRetry_(self, sender):
             setup_all_menus()

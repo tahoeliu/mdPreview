@@ -33,7 +33,7 @@
   .markdown h5 { font-size: 14px; font-weight: 600; margin: 18px 0 8px; color: #555; }
   .markdown h6 { font-size: 13px; font-weight: 600; margin: 18px 0 8px; color: #888; }
   .markdown p { margin: 0 0 16px; }
-  .markdown a { color: #007aff; text-decoration: none; }
+  .markdown a { color: #007aff; text-decoration: none; cursor: pointer !important; }
   .markdown a:hover { text-decoration: underline; }
   .markdown ul, .markdown ol { margin: 0 0 16px; padding-left: 26px; }
   .markdown li { margin-bottom: 4px; }
@@ -117,6 +117,59 @@
         const svg = node.querySelector('svg');
         const source = svg ? svg.getAttribute('data-source') : '';
         return source ? '```mermaid\n' + source.trim() + '\n```' : '';
+      }
+    });
+
+    // Convert HTML tables back to GFM pipe-table syntax
+    turndownService.addRule('table', {
+      filter: function (node) {
+        return node.nodeName === 'TABLE';
+      },
+      replacement: function (content, node) {
+        var rows = node.rows;
+        if (!rows || rows.length === 0) return '';
+
+        var colCount = 0;
+        for (var r = 0; r < rows.length; r++) {
+          colCount = Math.max(colCount, rows[r].cells.length);
+        }
+        if (colCount === 0) return '';
+
+        // Escape pipe chars in cell text
+        function escPipe(s) {
+          return (s || '').trim().replace(/\|/g, '\\|').replace(/\n/g, ' ');
+        }
+
+        var lines = [];
+
+        // Header row (always first row in GFM tables)
+        var headerCells = [];
+        for (var c = 0; c < colCount; c++) {
+          headerCells.push(escPipe((rows[0].cells[c] || {}).textContent || ''));
+        }
+        lines.push('| ' + headerCells.join(' | ') + ' |');
+
+        // Separator row with alignment
+        var sepCells = [];
+        for (var c2 = 0; c2 < colCount; c2++) {
+          var cell = rows[0].cells[c2];
+          var align = cell ? (cell.getAttribute('align') || cell.style.textAlign || '') : '';
+          if (align === 'center') sepCells.push(':---:');
+          else if (align === 'right') sepCells.push('---:');
+          else sepCells.push('---');
+        }
+        lines.push('| ' + sepCells.join(' | ') + ' |');
+
+        // Data rows
+        for (var r2 = 1; r2 < rows.length; r2++) {
+          var cells = [];
+          for (var c3 = 0; c3 < colCount; c3++) {
+            cells.push(escPipe((rows[r2].cells[c3] || {}).textContent || ''));
+          }
+          lines.push('| ' + cells.join(' | ') + ' |');
+        }
+
+        return '\n\n' + lines.join('\n') + '\n\n';
       }
     });
   }
@@ -744,6 +797,20 @@
     if (cmd && e.key === 's') { e.preventDefault(); saveFile(); }
     if (cmd && e.key === 'e') { e.preventDefault(); toggleView(); }
     if (cmd && e.key === 'i') { e.preventDefault(); showFileProperties(); }
+  });
+
+  // Open external links in the default browser (the webview would otherwise swallow them)
+  document.addEventListener('click', (e) => {
+    const a = e.target.closest('a[href]');
+    if (!a) return;
+    const href = a.getAttribute('href') || '';
+    if (/^(https?:|mailto:)/i.test(href)) {
+      e.preventDefault();
+      if (window.pywebview && window.pywebview.api) window.pywebview.api.open_external_link(href);
+      return;
+    }
+    // Other links (file:, relative, #anchor): keep the webview from navigating away
+    e.preventDefault();
   });
 
   function pushContentToPython() {
