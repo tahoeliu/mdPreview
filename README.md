@@ -21,22 +21,25 @@
 
 Whether you're a **developer** reading README files, a **writer** working with Markdown documents, or just someone who wants to **view formatted Markdown** on macOS - this app is for you.
 
-### Why mdPreview?
-
-- **🚀 Instant Preview** - Double-click any `.md` file and see it beautifully formatted
-- **✏️ Easy Editing** - Switch between view and edit modes with one click
-- **🎨 Clean Interface** - Minimal design focused on reading and writing
-- **🔗 Native Integration** - Feels like a real Mac app, not a web page
-- **🆓 Completely Free** - No ads, no tracking, no hidden costs
-- **⚡ Fast & Lightweight** - Built for speed with native macOS technologies
-
-### Perfect For
-
-- 📖 **Reading README files** from GitHub projects
-- 📝 **Writing technical documentation** in Markdown
-- 📚 **Managing note files** in Markdown format
-- 💻 **Developers** who work with Markdown daily
-- ✍️ **Content creators** who prefer Markdown
+<table width="100%">
+  <tr>
+    <td align="center" width="33%" valign="top">
+      <h3>🚀 Instant Preview</h3>
+      <p>Double-click any <code>.md</code> file → beautiful, live rendering in a clean, native macOS window. No waiting, no web browser, no clutter.</p>
+      <p><sub>Great for reading README files, reviewing docs, or just browsing Markdown notes.</sub></p>
+    </td>
+    <td align="center" width="33%" valign="top">
+      <h3>✏️ Easy Editing</h3>
+      <p>Switch between view and edit with one click. Tables, code blocks, lists — everything round-trips cleanly between preview and source.</p>
+      <p><sub>Perfect for writing technical docs, taking notes, or tweaking README files on the fly.</sub></p>
+    </td>
+    <td align="center" width="33%" valign="top">
+      <h3>🆓 Completely Free</h3>
+      <p>No ads. No tracking. No hidden costs. Open source on GitHub — the code is yours to inspect, fork, or improve.</p>
+      <p><sub>Built for developers, writers, and anyone who works with Markdown daily.</sub></p>
+    </td>
+  </tr>
+</table>
 
 ## 📥 Download & Install
 
