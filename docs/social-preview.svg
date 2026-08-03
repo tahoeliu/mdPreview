@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="600" viewBox="0 0 1200 600">
+  <rect width="1200" height="600" fill="#ffffff"/>
+  <rect x="0" y="0" width="1200" height="12" fill="#2563eb"/>
+  <text x="80" y="250" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="120" font-weight="700" letter-spacing="-2" fill="#111418">mdPreview</text>
+  <text x="84" y="320" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="36" fill="#475569">Free Markdown viewer &amp; editor for macOS</text>
+  <text x="84" y="382" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="26" fill="#64748b">Live preview · Dark mode · Mermaid · 100% offline · MIT</text>
+  <text x="84" y="540" font-family="-apple-system, Helvetica, Arial, sans-serif" font-size="28" fill="#94a3b8">github.com/tahoeliu/mdPreview</text>
+</svg>

@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>mdPreview — Free Markdown Viewer &amp; Editor for macOS</title>
+  <meta name="description" content="mdPreview is a free, open-source Markdown viewer and editor for macOS with live rendering, dark mode, in-file search, and Mermaid diagram support. No account, no internet required." />
+  <meta name="keywords" content="markdown viewer mac, markdown editor mac, free markdown app, open source markdown, typora alternative, macdown replacement, minimalist markdown, tahoe liu" />
+  <meta name="author" content="Tahoe Liu" />
+  <link rel="canonical" href="https://github.com/tahoeliu/mdPreview" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="mdPreview — Free Markdown Viewer &amp; Editor for macOS" />
+  <meta property="og:description" content="A free, open-source Markdown viewer and editor for macOS with live rendering, dark mode, and Mermaid support." />
+  <meta property="og:url" content="https://tahoeliu.github.io/mdPreview/" />
+  <meta property="og:image" content="https://tahoeliu.github.io/mdPreview/social-preview.png" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="mdPreview — Free Markdown Viewer &amp; Editor for macOS" />
+  <meta name="twitter:description" content="A free, open-source Markdown viewer and editor for macOS with live rendering, dark mode, and Mermaid support." />
+  <meta name="twitter:image" content="https://tahoeliu.github.io/mdPreview/social-preview.png" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "mdPreview",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "macOS",
+    "url": "https://github.com/tahoeliu/mdPreview",
+    "downloadUrl": "https://github.com/tahoeliu/mdPreview/releases/latest",
+    "license": "https://opensource.org/licenses/MIT",
+    "author": { "@type": "Person", "name": "Tahoe Liu", "url": "https://github.com/tahoeliu" },
+    "description": "A free, open-source Markdown viewer and editor for macOS with live rendering, dark mode, in-file search, and Mermaid diagram support.",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
+  <style>
+    :root { --ink:#111418; --muted:#5b6675; --line:#e6e8eb; --accent:#2563eb; --bg:#ffffff; }
+    * { box-sizing: border-box; }
+    html { -webkit-font-smoothing: antialiased; }
+    body {
+      margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+      color: var(--ink); background: var(--bg); line-height: 1.6;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 0 24px; }
+    header.nav { border-bottom: 1px solid var(--line); }
+    header.nav .wrap { display:flex; align-items:center; justify-content:space-between; height:64px; }
+    .brand { font-weight:700; font-size:18px; letter-spacing:-0.01em; }
+    .nav a { color: var(--muted); text-decoration:none; font-size:14px; }
+    .nav a:hover { color: var(--ink); }
+    .hero { padding: 72px 0 56px; text-align:center; }
+    .hero h1 { font-size: 56px; margin:0 0 12px; letter-spacing:-0.02em; }
+    .hero p.tag { font-size: 20px; color: var(--muted); margin: 0 auto 28px; max-width: 560px; }
+    .cta { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+    a.btn { display:inline-block; padding: 12px 22px; border-radius: 10px; font-weight:600; text-decoration:none; font-size:15px; }
+    a.btn.primary { background: var(--accent); color:#fff; }
+    a.btn.ghost { border:1px solid var(--line); color: var(--ink); }
+    section { padding: 48px 0; border-top: 1px solid var(--line); }
+    h2 { font-size: 30px; letter-spacing:-0.01em; margin: 0 0 8px; }
+    .sub { color: var(--muted); margin: 0 0 28px; }
+    .features { display:grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .feature { border:1px solid var(--line); border-radius:12px; padding:18px 20px; }
+    .feature h3 { margin:0 0 6px; font-size:16px; }
+    .feature p { margin:0; color: var(--muted); font-size:14px; }
+    table { width:100%; border-collapse: collapse; font-size:14px; }
+    th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); }
+    th { font-weight:600; color: var(--muted); }
+    td:not(:first-child), th:not(:first-child) { text-align:center; }
+    .faq details { border-bottom:1px solid var(--line); padding:14px 0; }
+    .faq summary { cursor:pointer; font-weight:600; }
+    .faq p { color: var(--muted); margin: 10px 0 0; }
+    footer { padding: 40px 0 64px; color: var(--muted); font-size:14px; text-align:center; }
+    footer a { color: var(--accent); text-decoration:none; }
+    @media (max-width: 600px) { .hero h1 { font-size:40px; } .features { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="wrap">
+      <span class="brand">mdPreview</span>
+      <a href="https://github.com/tahoeliu/mdPreview" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </header>
+
+  <div class="hero">
+    <div class="wrap">
+      <h1>mdPreview</h1>
+      <p class="tag">A free, open-source Markdown viewer &amp; editor for macOS. Open any <code>.md</code> file and read it beautifully — live, offline, zero config.</p>
+      <div class="cta">
+        <a class="btn primary" href="https://github.com/tahoeliu/mdPreview/releases/latest" target="_blank" rel="noopener">Download for Mac</a>
+        <a class="btn ghost" href="https://github.com/tahoeliu/mdPreview" target="_blank" rel="noopener">View on GitHub</a>
+      </div>
+    </div>
+  </div>
+
+  <section>
+    <div class="wrap">
+      <h2>Features</h2>
+      <p class="sub">Built for people who just want to read and write Markdown on a Mac.</p>
+      <div class="features">
+        <div class="feature"><h3>⚡ Live preview</h3><p>Double-click a <code>.md</code> file and see it rendered instantly with marked.js.</p></div>
+        <div class="feature"><h3>✏️ Edit mode</h3><p>Toggle between preview and source editing with one key (⌘E).</p></div>
+        <div class="feature"><h3>🌙 Dark mode</h3><p>Follows your macOS appearance automatically.</p></div>
+        <div class="feature"><h3>🔍 In-file search</h3><p>Quickly find content inside any document.</p></div>
+        <div class="feature"><h3>📊 Mermaid diagrams</h3><p>Render flowcharts and sequence diagrams inline.</p></div>
+        <div class="feature"><h3>🔌 100% offline</h3><p>No account, no telemetry, no internet required.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>mdPreview vs other Markdown apps for Mac</h2>
+      <p class="sub">A free, native, lightweight alternative to Typora, MacDown, Bear, and VS Code.</p>
+      <table>
+        <thead>
+          <tr><th>Capability</th><th>mdPreview</th><th>Typora</th><th>MacDown</th><th>Bear</th><th>VS Code</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>Free &amp; open-source (MIT)</td><td>✅</td><td>❌</td><td>✅</td><td>❌</td><td>✅</td></tr>
+          <tr><td>Native macOS app</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td></tr>
+          <tr><td>Double-click <code>.md</code> to open</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td></tr>
+          <tr><td>Offline / no account</td><td>✅</td><td>✅</td><td>✅</td><td>❌</td><td>✅</td></tr>
+          <tr><td>Lightweight (&lt;20 MB)</td><td>✅</td><td>⚠️</td><td>✅</td><td>✅</td><td>❌</td></tr>
+          <tr><td>Mermaid diagrams</td><td>✅</td><td>⚠️</td><td>❌</td><td>❌</td><td>⚠️</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="faq">
+    <div class="wrap">
+      <h2>Frequently asked questions</h2>
+      <p class="sub">Clear answers help search engines and AI assistants describe mdPreview accurately.</p>
+      <details open><summary>What is mdPreview?</summary><p>mdPreview is a free, open-source Markdown viewer and editor for macOS that renders <code>.md</code> files with live preview, dark mode, in-file search, and Mermaid diagrams — fully offline.</p></details>
+      <details><summary>Is mdPreview free?</summary><p>Yes. It is MIT-licensed and completely free: no ads, no tracking, no subscription.</p></details>
+      <details><summary>Which macOS versions are supported?</summary><p>macOS 10.13 (High Sierra) and later.</p></details>
+      <details><summary>How do I set mdPreview as the default Markdown viewer?</summary><p>Right-click any <code>.md</code> file → Get Info → Open with → select mdPreview → Change All….</p></details>
+      <details><summary>Does mdPreview work offline?</summary><p>Yes. It needs no internet connection and sends no data externally.</p></details>
+      <details><summary>How is mdPreview built?</summary><p>Python 3.13+, pywebview (native WKWebView), and marked.js for rendering.</p></details>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap">
+      <p>mdPreview by <a href="https://github.com/tahoeliu" target="_blank" rel="noopener">Tahoe Liu</a> · MIT License · <a href="https://github.com/tahoeliu/mdPreview" target="_blank" rel="noopener">Source on GitHub</a></p>
+    </div>
+  </footer>
+</body>
+</html>

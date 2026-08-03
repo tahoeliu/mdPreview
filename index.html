@@ -44,7 +44,8 @@
   .markdown .table-wrap { width: 100%; margin: 0 0 16px; }
   .markdown table { border-collapse: collapse; width: 100%; font-size: 14px; table-layout: fixed; }
   .markdown th, .markdown td { border: 1px solid #e0e0e0; padding: 8px 14px; text-align: left; overflow-wrap: break-word; word-wrap: break-word; }
-  .markdown th { background: #f5f5f7; font-weight: 600; }
+  .markdown th { background: #f5f5f7; font-weight: 600; position: relative; }
+  .markdown th.col-edge::after, .markdown td.col-edge::after { content: ''; position: absolute; top: 0; right: 0; width: 3px; height: 100%; background: #007aff; }
   .markdown img { max-width: 100%; border-radius: 10px; margin: 8px 0; }
   .markdown hr { border: none; border-top: 1px solid #e8e8e8; margin: 28px 0; }
   .markdown strong { font-weight: 700; }
@@ -291,12 +292,10 @@
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  // ── Table column balancing ──
-  // Balances column widths so each column's content wraps to similar line counts
+  // ── Table column balancing + drag-resize ──
   function balanceTableColumns(container) {
     const tables = container.querySelectorAll('table');
     const pageWidth = parseInt(getComputedStyle(document.getElementById('page')).getPropertyValue('--page-width').trim()) || 720;
-    // Account for page padding (60+80=140 in normal mode)
     const availableWidth = pageWidth - 140;
 
     for (const table of tables) {
@@ -304,62 +303,148 @@
       const colCount = table.rows[0].cells.length;
       if (colCount === 0) continue;
 
-      // Step 1: Measure each column's content width (with padding buffer)
       const colWidths = new Array(colCount).fill(0);
       for (let r = 0; r < table.rows.length; r++) {
         for (let c = 0; c < Math.min(table.rows[r].cells.length, colCount); c++) {
           const cell = table.rows[r].cells[c];
-          // Measure the text content length as proxy for width need
           const textLen = cell.textContent.replace(/\s+/g, ' ').length;
-          // Rough estimate: ~8px per char for typical text
-          const estWidth = Math.max(textLen * 8 + 28, 50); // +28 for padding
+          const estWidth = Math.max(textLen * 8 + 28, 50);
           colWidths[c] = Math.max(colWidths[c], estWidth);
         }
       }
 
-      // Step 2: Calculate total desired width
       let totalDesired = colWidths.reduce((a, b) => a + b, 0);
-
-      // Step 3: Scale to fit available width, with minimum per column
       const minColWidth = 60;
       const maxColWidth = Math.min(400, availableWidth * 0.6);
 
       if (totalDesired > availableWidth) {
-        // Need to compress - scale proportionally
         const ratio = availableWidth / totalDesired;
-        for (let c = 0; c < colCount; c++) {
-          colWidths[c] = Math.max(minColWidth, Math.floor(colWidths[c] * ratio));
-        }
+        for (let c = 0; c < colCount; c++) colWidths[c] = Math.max(minColWidth, Math.floor(colWidths[c] * ratio));
       } else if (totalDesired < availableWidth) {
-        // Have extra space - distribute proportionally
         const extra = availableWidth - totalDesired;
-        for (let c = 0; c < colCount; c++) {
-          colWidths[c] += Math.floor(extra * (colWidths[c] / totalDesired));
-        }
+        for (let c = 0; c < colCount; c++) colWidths[c] += Math.floor(extra * (colWidths[c] / totalDesired));
       }
+      for (let c = 0; c < colCount; c++) colWidths[c] = Math.min(colWidths[c], maxColWidth);
 
-      // Clamp
-      for (let c = 0; c < colCount; c++) {
-        colWidths[c] = Math.min(colWidths[c], maxColWidth);
-      }
-
-      // Step 4: Fix rounding — make total exactly equal to availableWidth
       const currentTotal = colWidths.reduce((a, b) => a + b, 0);
-      if (currentTotal < availableWidth) {
-        colWidths[colCount - 1] += availableWidth - currentTotal;
-      } else if (currentTotal > availableWidth) {
+      if (currentTotal < availableWidth) colWidths[colCount - 1] += availableWidth - currentTotal;
+      else if (currentTotal > availableWidth) {
         colWidths[colCount - 1] -= currentTotal - availableWidth;
         if (colWidths[colCount - 1] < minColWidth) colWidths[colCount - 1] = minColWidth;
       }
 
-      // Step 5: Apply widths as percentages to avoid sub-pixel border issues
-      for (let r = 0; r < table.rows.length; r++) {
-        for (let c = 0; c < Math.min(table.rows[r].cells.length, colCount); c++) {
-          const pct = (colWidths[c] / availableWidth * 100).toFixed(2);
-          table.rows[r].cells[c].style.width = pct + '%';
-        }
+      // Apply widths through a <colgroup> so columns stay independently resizable
+      const total = colWidths.reduce((a, b) => a + b, 0);
+      let colgroup = table.querySelector('colgroup');
+      if (!colgroup) {
+        colgroup = document.createElement('colgroup');
+        table.insertBefore(colgroup, table.firstChild);
       }
+      colgroup.innerHTML = '';
+      colWidths.forEach((w) => {
+        const col = document.createElement('col');
+        col.style.width = (w / total * 100).toFixed(2) + '%';
+        colgroup.appendChild(col);
+      });
+
+      enableTableResize(table);
     }
+  }
+
+  // Allow dragging a column's right border to resize it; the space taken/given
+  // is borrowed from the adjacent column so the table width stays constant.
+  // Highlight (or clear) every cell in a given column, across all rows.
+  function setColumnEdge(table, colIndex, on) {
+    for (let r = 0; r < table.rows.length; r++) {
+      const cells = table.rows[r].cells;
+      if (colIndex >= cells.length) continue;
+      const cell = cells[colIndex];
+      cell.classList.toggle('col-edge', on);
+      cell.style.cursor = on ? 'col-resize' : '';
+    }
+  }
+  function clearColumnEdges(table) {
+    const all = table.querySelectorAll('th, td');
+    for (const cell of all) {
+      cell.classList.remove('col-edge');
+      if (cell.style.cursor === 'col-resize') cell.style.cursor = '';
+    }
+  }
+
+  function enableTableResize(table) {
+    if (table.__resizeReady) return;
+    table.__resizeReady = true;
+
+    const EDGE = 6; // px band beside the right border that starts a resize
+
+    // Attach handlers to every cell in every row (except the last column,
+    // which has no right border to grab). Because the table uses
+    // table-layout: fixed with a <colgroup>, all cells in a column share the
+    // same width, so resizing from any row behaves identically.
+    for (let r = 0; r < table.rows.length; r++) {
+      const cells = Array.from(table.rows[r].cells);
+      cells.forEach((cell, i) => {
+        if (i >= cells.length - 1) return; // last column has no right border to grab
+        cell.style.position = 'relative';
+
+        cell.addEventListener('mousemove', (e) => {
+          if (table.__dragging) return; // don't fight the active drag
+          const rect = cell.getBoundingClientRect();
+          const nearRight = e.clientX >= rect.right - EDGE && e.clientX <= rect.right + 2;
+          clearColumnEdges(table);
+          if (nearRight) setColumnEdge(table, i, true);
+        });
+        cell.addEventListener('mouseleave', () => {
+          if (table.__dragging) return;
+          clearColumnEdges(table);
+        });
+        cell.addEventListener('mousedown', (e) => {
+          const rect = cell.getBoundingClientRect();
+          if (e.clientX < rect.right - EDGE) return; // not on the border → normal click
+          e.preventDefault();
+          startColDrag(table, i, e);
+        });
+      });
+    }
+  }
+
+  function startColDrag(table, i, e) {
+    const colgroup = table.querySelector('colgroup');
+    if (!colgroup) return;
+    const cols = Array.from(colgroup.querySelectorAll('col'));
+    if (i + 1 >= cols.length) return;
+
+    const headerCells = Array.from(table.rows[0].cells);
+    const totalPx = table.getBoundingClientRect().width;
+    const widthsPx = headerCells.map((c) => c.getBoundingClientRect().width);
+    const startX = e.clientX;
+    const minPx = 40;
+
+    table.__dragging = true;
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+
+    const onMove = (ev) => {
+      const deltaPx = ev.clientX - startX;
+      let newCur = widthsPx[i] + deltaPx;
+      let newNext = widthsPx[i + 1] - deltaPx;
+      if (newCur < minPx) { newNext -= minPx - newCur; newCur = minPx; }
+      if (newNext < minPx) { newCur -= minPx - newNext; newNext = minPx; }
+      if (newCur < minPx) newCur = minPx;
+      if (newNext < minPx) newNext = minPx;
+      cols[i].style.width = (newCur / totalPx * 100).toFixed(2) + '%';
+      cols[i + 1].style.width = (newNext / totalPx * 100).toFixed(2) + '%';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      table.__dragging = false;
+      Array.from(table.querySelectorAll('th, td')).forEach((c) => { c.classList.remove('col-edge'); c.style.cursor = ''; });
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }
   async function loadContent(path, content, pageWidth) {
     filePath = path;
