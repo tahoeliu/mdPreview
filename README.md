@@ -7,11 +7,13 @@
 [![Python Version](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
-[![Download](https://img.shields.io/badge/download-14MB-orange.svg)](dist/mdPreview-1.2.2.dmg)
+[![Download](https://img.shields.io/badge/download-14MB-orange.svg)](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg)
 
 **⭐ Star this repo if you find it useful!**
 
 </div>
+
+> **mdPreview is a free, open-source Markdown viewer and editor for macOS** that opens, previews, and edits `.md` files with native live rendering — no account, no internet connection, and zero configuration required.
 
 ## 🎯 The Simplest Markdown Viewer for macOS
 
@@ -40,7 +42,7 @@ Whether you're a **developer** reading README files, a **writer** working with M
 
 **Get mdPreview in 3 simple steps:**
 
-[📥 **Download mdPreview.dmg**](dist/mdPreview-1.2.2.dmg) *(14MB)*
+[📥 **Download mdPreview.dmg**](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg) *(14MB)*
 
 1. Click the download button above
 2. Open the downloaded `.dmg` file
@@ -161,6 +163,24 @@ MarkdownViewer/
 | Lightweight | ✅ | ✅ | ✅ |
 | Beautiful Rendering | ✅ | ❌ | ✅ |
 
+## 🆚 mdPreview vs Other Markdown Apps for Mac
+
+Looking for a **free Markdown editor for Mac**, a **Typora alternative**, or a lightweight **MacDown replacement**? Here's how mdPreview compares:
+
+| Feature | **mdPreview** | Typora | MacDown | Bear | VS Code |
+|---------|:---:|:---:|:---:|:---:|:---:|
+| Free & open-source (MIT) | ✅ | ❌ (paid) | ✅ | ❌ (subscription) | ✅ |
+| Native macOS app | ✅ | ✅ | ✅ | ✅ | ❌ (Electron) |
+| Double-click `.md` to open | ✅ | ✅ | ✅ | ✅ | ❌ |
+| Offline / no account | ✅ | ✅ | ✅ | ❌ | ✅ |
+| Lightweight (<20 MB) | ✅ | ⚠️ | ✅ | ✅ | ❌ |
+| Mermaid diagram support | ✅ | ⚠️ | ❌ | ❌ | ⚠️ |
+| Live edit + preview | ✅ | ✅ | ✅ | ✅ | ⚠️ (extension) |
+
+**Best for:** anyone who wants a simple, fast, and completely free way to **view and edit Markdown on Mac** — without subscriptions or a heavy IDE.
+
+---
+
 ## 🤝 Contributing
 
 Contributions are welcome! Feel free to:
@@ -169,6 +189,31 @@ Contributions are welcome! Feel free to:
 - 💡 Suggest new features
 - 🔧 Submit pull requests
 - 📖 Improve documentation
+
+## ❓ Frequently Asked Questions
+
+**What is mdPreview?**  
+mdPreview is a free, open-source Markdown viewer and editor for macOS. It renders `.md` files with live preview, supports editing, dark mode, in-file search, and Mermaid diagrams, and runs fully offline.
+
+**Is mdPreview free?**  
+Yes. mdPreview is MIT-licensed and completely free — no ads, no tracking, no subscription.
+
+**Which macOS versions are supported?**  
+macOS 10.13 (High Sierra) and later.
+
+**How do I set mdPreview as the default Markdown viewer on Mac?**  
+Right-click any `.md` file → *Get Info* → *Open with* → select **mdPreview** → click *Change All…*.
+
+**Does mdPreview work offline?**  
+Yes. mdPreview requires no internet connection and sends no data externally.
+
+**What Markdown features are supported?**  
+Headers, bold/italic, lists, links, images, fenced code with syntax highlighting, tables, blockquotes, inline HTML, and Mermaid diagrams.
+
+**How is mdPreview built?**  
+It uses Python 3.13+, pywebview (native WKWebView), and marked.js for rendering.
+
+---
 
 ## 📄 License
 
@@ -207,4 +252,6 @@ If you find mdPreview useful, please consider:
 
 ---
 
-**Keywords:** macOS Markdown viewer, Markdown reader, Markdown editor, Markdown tool, Markdown app, Markdown rendering, Markdown preview, macOS app, free Markdown viewer, open source Markdown
+**Keywords:** macOS Markdown viewer, Markdown reader, Markdown editor, Markdown app, Markdown preview, Markdown rendering, free Markdown editor for Mac, open source Markdown, Typora alternative, MacDown replacement, minimalist Markdown tool, Tahoe Liu
+
+*Author: [Tahoe Liu](https://github.com/tahoeliu) · License: MIT*
