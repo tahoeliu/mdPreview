@@ -858,8 +858,26 @@
 
   async function saveFile() {
     const markdown = getCurrentMarkdown();
+    if (!filePath || filePath === 'Untitled.md') {
+      // Untitled document — show Save As dialog
+      await saveAsFile();
+      return;
+    }
     const result = await window.pywebview.api.save_file(filePath, markdown);
     if (result.success) {
+      isDirty = false;
+      if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(false);
+      if (!isSource) { document.getElementById('textarea').value = markdown; syncHighlight(); }
+      else { await renderMarkdown(markdown, document.getElementById('content')); }
+      showStatus('Saved');
+    }
+  }
+
+  async function saveAsFile() {
+    const markdown = getCurrentMarkdown();
+    const result = await window.pywebview.api.save_as_dialog(markdown);
+    if (result.success) {
+      filePath = result.path;
       isDirty = false;
       if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(false);
       if (!isSource) { document.getElementById('textarea').value = markdown; syncHighlight(); }
