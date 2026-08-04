@@ -37,15 +37,75 @@
 
 ## 📥 Download & Install
 
-**Get mdPreview in 3 simple steps:**
+**Get mdPreview in 2 simple steps:**
 
 [📥 **Download mdPreview.dmg**](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg) *(14MB)*
 
-1. Click the download button above
-2. Open the downloaded `.dmg` file
-3. Drag **mdPreview** to your **Applications** folder
+1. Click the download button above to get the `.dmg` file
+2. Open the `.dmg` → **double-click "Double-click to install"**
 
-**That's it!** Now double-click any Markdown file and watch it render beautifully.
+**That's it!** The installer copies mdPreview to your Applications folder, clears the macOS security quarantine automatically, and launches the app. No Terminal needed.
+
+> **Alternative**: If you prefer manual installation, drag `mdPreview.app` from the DMG to your Applications folder, then run `xattr -cr /Applications/mdPreview.app` in Terminal to clear the quarantine flag.
+
+Now double-click any Markdown file and watch it render beautifully.
+
+### ⚠️ "mdPreview cannot be opened" / "Cannot verify the developer"?
+
+If you installed mdPreview by dragging the app manually (instead of using the included installer script), macOS Gatekeeper may block it because the app isn't signed with an Apple Developer certificate. Here's how to fix it — **pick one method**:
+
+<details>
+<summary><b>Method 1 — Easiest: Use the installer script (recommended)</b></summary>
+
+The DMG includes a **"Double-click to install"** script that copies the app and clears the quarantine flag automatically:
+
+1. Open the downloaded `.dmg` file
+2. **Double-click** "Double-click to install"
+3. If macOS asks, click "Open" to allow the script
+4. That's it — mdPreview is installed and ready
+
+This is the recommended method and handles everything for you.
+
+</details>
+
+<details>
+<summary><b>Method 2 — Right-click → Open</b></summary>
+
+If you dragged the app to Applications manually:
+
+1. In Finder, go to **Applications**
+2. **Right-click** (or Control-click) **mdPreview**
+3. Select **"Open"** from the context menu
+4. A dialog appears: click **"Open"** again
+
+This permanently trusts the app on your Mac. You only need to do this once.
+
+</details>
+
+<details>
+<summary><b>Method 3 — Terminal command</b></summary>
+
+If you're comfortable with the Terminal:
+
+```bash
+xattr -cr /Applications/mdPreview.app
+```
+
+This removes the quarantine attribute. After that, double-click mdPreview normally.
+
+</details>
+
+<details>
+<summary><b>Method 4 — System Settings (macOS Sequoia+)</b></summary>
+
+If none of the above works on macOS 15+:
+
+1. Open **System Settings → Privacy & Security**
+2. Scroll down to the **Security** section
+3. You should see "mdPreview was blocked" — click **"Open Anyway"**
+4. Enter your password if prompted
+
+</details>
 
 ### Make mdPreview Your Default Markdown Viewer
 
@@ -201,6 +261,9 @@ mdPreview is a free, open-source Markdown viewer and editor for macOS. It render
 
 **Is mdPreview free?**  
 Yes. mdPreview is MIT-licensed and completely free — no ads, no tracking, no subscription.
+
+**Why does macOS say "mdPreview cannot be opened" or "cannot verify the developer"?**  
+mdPreview is open-source and not signed with an Apple Developer certificate ($99/year). macOS Gatekeeper blocks unsigned apps by default. To open it: right-click mdPreview in Finder → select "Open" → click "Open" in the dialog. You only need to do this once. See the [troubleshooting section](#-mdpreview-cannot-be-opened--cannot-verify-the-developer) above for more methods.
 
 **Which macOS versions are supported?**  
 macOS 10.13 (High Sierra) and later.

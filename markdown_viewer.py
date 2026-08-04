@@ -443,6 +443,30 @@ if HAS_COCOA:
                     props_item.setTarget_(_view_menu_handler)
                     _file_menu_setup = True
 
+            # ── Edit menu: Find ──
+            if not _app_menu_setup or not getattr(_view_menu_handler, '_edit_menu_setup', False):
+                edit_menu = None
+                for i in range(main_menu.numberOfItems()):
+                    item = main_menu.itemAtIndex_(i)
+                    sub = item.submenu()
+                    if sub and sub.title() in ('Edit', '编辑', '编辑'):
+                        edit_menu = sub
+                        break
+
+                if edit_menu and not getattr(_view_menu_handler, '_edit_menu_setup', False):
+                    edit_menu.addItem_(NSMenuItem.separatorItem())
+                    find_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Find", "findAction:", "f")
+                    find_item.setTarget_(_view_menu_handler)
+                    edit_menu.addItem_(find_item)
+                    find_next_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Find Next", "findNextAction:", "g")
+                    find_next_item.setTarget_(_view_menu_handler)
+                    edit_menu.addItem_(find_next_item)
+                    find_prev_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Find Previous", "findPrevAction:", "g")
+                    find_prev_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 17))  # Cmd+Shift+G
+                    find_prev_item.setTarget_(_view_menu_handler)
+                    edit_menu.addItem_(find_prev_item)
+                    _view_menu_handler._edit_menu_setup = True
+
         except Exception:
             pass
 
@@ -491,6 +515,15 @@ if HAS_COCOA:
             # Open a new blank window
             import threading
             threading.Thread(target=create_window, args=(None,), daemon=True).start()
+
+        def findAction_(self, sender):
+            _dispatch_js('openFindBar()')
+
+        def findNextAction_(self, sender):
+            _dispatch_js('findNext()')
+
+        def findPrevAction_(self, sender):
+            _dispatch_js('findPrev()')
 
         def checkForUpdates_(self, sender):
             """Manual update check — bypasses the 48h throttle."""

@@ -72,9 +72,30 @@
   .modal-value { flex: 1; color: #333; word-break: break-all; }
   .modal-close { display: block; margin: 0 22px 18px auto; padding: 6px 20px; background: #007aff; color: #fff; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; }
   .modal-close:hover { background: #0066d9; }
+  /* ── Find Bar ── */
+  .find-bar { display: none; position: fixed; top: 0; left: 0; right: 0; height: 40px; background: #f5f5f7; border-bottom: 1px solid #d0d0d0; align-items: center; padding: 0 12px; gap: 8px; z-index: 900; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .find-bar.visible { display: flex; }
+  .find-bar input { flex: 1; height: 26px; border: 1px solid #c8c8c8; border-radius: 5px; padding: 0 8px; font-size: 14px; outline: none; background: #fff; }
+  .find-bar input:focus { border-color: #007aff; box-shadow: 0 0 0 2px rgba(0,122,255,0.15); }
+  .find-bar .find-count { font-size: 12px; color: #888; min-width: 60px; text-align: center; user-select: none; }
+  .find-bar button { height: 26px; min-width: 26px; border: 1px solid #c8c8c8; border-radius: 5px; background: #fff; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0 6px; color: #555; }
+  .find-bar button:hover { background: #e8e8e8; }
+  .find-bar button:disabled { opacity: 0.4; cursor: default; }
+  .find-bar .find-close { font-size: 18px; line-height: 1; padding: 0 8px; }
+  mark.find-highlight { background: #ffd95e; color: inherit; }
+  mark.find-highlight.current { background: #ff8c00; color: #fff; }
 </style>
 </head>
 <body>
+
+<!-- Find Bar -->
+<div class="find-bar" id="findBar">
+  <input type="text" id="findInput" placeholder="Find" autocomplete="off" spellcheck="false" />
+  <span class="find-count" id="findCount"></span>
+  <button id="findPrev" title="Previous (Shift+Cmd+G)">&#x25B2;</button>
+  <button id="findNext" title="Next (Cmd+G)">&#x25BC;</button>
+  <button class="find-close" id="findClose" title="Close (Esc)">&#x2715;</button>
+</div>
 
 <div class="scroll-wrap">
   <div class="page" id="page">
@@ -894,12 +915,237 @@
     statusTimer = setTimeout(() => el.classList.remove('visible'), 1500);
   }
 
+  // ── Find ──
+  let findState = { query: '', matches: [], currentIdx: -1, scrollTop: 0 };
+
+  function openFindBar() {
+    const bar = document.getElementById('findBar');
+    const input = document.getElementById('findInput');
+    bar.classList.add('visible');
+    // Push content down so the bar doesn't overlap
+    document.querySelector('.scroll-wrap').style.top = '40px';
+    input.focus();
+    // Pre-fill with current selection
+    const sel = window.getSelection().toString();
+    if (sel) { input.value = sel; doFind(); }
+    else { input.select(); }
+  }
+
+  function closeFindBar() {
+    const bar = document.getElementById('findBar');
+    bar.classList.remove('visible');
+    document.querySelector('.scroll-wrap').style.top = '';
+    clearFindHighlights();
+    document.getElementById('findCount').textContent = '';
+    findState = { query: '', matches: [], currentIdx: -1, scrollTop: 0 };
+    // Return focus to editor
+    if (isSource) document.getElementById('textarea').focus();
+    else document.getElementById('content').focus();
+  }
+
+  function getSearchableText() {
+    if (isSource) return document.getElementById('textarea');
+    return document.getElementById('content');
+  }
+
+  function doFind() {
+    const query = document.getElementById('findInput').value;
+    if (!query) {
+      clearFindHighlights();
+      document.getElementById('findCount').textContent = '';
+      findState = { query: '', matches: [], currentIdx: -1, scrollTop: 0 };
+      return;
+    }
+
+    if (isSource) {
+      findInTextarea(query);
+    } else {
+      findInContentEditable(query);
+    }
+  }
+
+  function findInTextarea(query) {
+    const textarea = document.getElementById('textarea');
+    const text = textarea.value;
+    const matches = [];
+    const lowerText = text.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    let pos = 0;
+    while (true) {
+      const idx = lowerText.indexOf(lowerQuery, pos);
+      if (idx === -1) break;
+      matches.push(idx);
+      pos = idx + query.length;
+    }
+    findState.query = query;
+    findState.matches = matches;
+
+    const countEl = document.getElementById('findCount');
+    if (matches.length === 0) {
+      countEl.textContent = '0/0';
+      findState.currentIdx = -1;
+    } else {
+      // Find the match closest to the current cursor
+      const cursor = textarea.selectionStart;
+      let idx = 0;
+      for (let i = 0; i < matches.length; i++) {
+        if (matches[i] >= cursor) { idx = i; break; }
+        idx = i;
+      }
+      findState.currentIdx = idx;
+      countEl.textContent = (idx + 1) + '/' + matches.length;
+      scrollToTextareaMatch(idx);
+    }
+    updateFindButtons();
+  }
+
+  function scrollToTextareaMatch(idx) {
+    const textarea = document.getElementById('textarea');
+    const start = findState.matches[idx];
+    const end = start + findState.query.length;
+    textarea.focus();
+    textarea.setSelectionRange(start, end);
+    // Scroll into view
+    const lines = textarea.value.substring(0, start).split('\n').length;
+    const lineHeight = 25;
+    document.querySelector('.scroll-wrap').scrollTo({ top: Math.max(0, (lines - 1) * lineHeight - 100), behavior: 'auto' });
+  }
+
+  function clearFindHighlights() {
+    const content = document.getElementById('content');
+    const marks = content.querySelectorAll('mark.find-highlight');
+    for (const mark of marks) {
+      const parent = mark.parentNode;
+      parent.replaceChild(document.createTextNode(mark.textContent), mark);
+      parent.normalize();
+    }
+  }
+
+  function findInContentEditable(query) {
+    clearFindHighlights();
+    const content = document.getElementById('content');
+    const matches = [];
+    const lowerQuery = query.toLowerCase();
+
+    // Walk all text nodes, find matches, and wrap in <mark>
+    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, null, false);
+    const textNodes = [];
+    let node;
+    while (node = walker.nextNode()) {
+      // Skip nodes inside <mark> tags (already highlighted)
+      if (node.parentElement && node.parentElement.tagName === 'MARK') continue;
+      textNodes.push(node);
+    }
+
+    for (const tn of textNodes) {
+      const text = tn.textContent;
+      const lowerText = text.toLowerCase();
+      let pos = 0;
+      let parts = [];
+      let lastEnd = 0;
+
+      while (true) {
+        const idx = lowerText.indexOf(lowerQuery, pos);
+        if (idx === -1) break;
+        // Record match position (absolute offset within content text)
+        matches.push({ node: tn, offset: idx, length: query.length });
+        pos = idx + query.length;
+      }
+    }
+
+    // Now wrap matches in <mark> elements (do in reverse to not disturb offsets)
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const m = matches[i];
+      const range = document.createRange();
+      range.setStart(m.node, m.offset);
+      range.setEnd(m.node, m.offset + m.length);
+      const mark = document.createElement('mark');
+      mark.className = 'find-highlight';
+      range.surroundContents(mark);
+    }
+
+    findState.query = query;
+    findState.matches = matches;
+
+    const countEl = document.getElementById('findCount');
+    if (matches.length === 0) {
+      countEl.textContent = '0/0';
+      findState.currentIdx = -1;
+    } else {
+      findState.currentIdx = 0;
+      countEl.textContent = '1/' + matches.length;
+      // Highlight current match
+      highlightCurrentMatch();
+    }
+    updateFindButtons();
+  }
+
+  function highlightCurrentMatch() {
+    const content = document.getElementById('content');
+    const marks = content.querySelectorAll('mark.find-highlight');
+    for (let i = 0; i < marks.length; i++) {
+      marks[i].classList.toggle('current', i === findState.currentIdx);
+    }
+    // Scroll current match into view
+    if (findState.currentIdx >= 0 && marks.length > findState.currentIdx) {
+      const mark = marks[findState.currentIdx];
+      const rect = mark.getBoundingClientRect();
+      const wrap = document.querySelector('.scroll-wrap');
+      const wrapRect = wrap.getBoundingClientRect();
+      if (rect.top < wrapRect.top + 60 || rect.bottom > wrapRect.bottom) {
+        wrap.scrollTo({ top: wrap.scrollTop + rect.top - wrapRect.top - 80, behavior: 'auto' });
+      }
+    }
+  }
+
+  function findNext() {
+    if (findState.matches.length === 0) return;
+    findState.currentIdx = (findState.currentIdx + 1) % findState.matches.length;
+    if (isSource) {
+      scrollToTextareaMatch(findState.currentIdx);
+    } else {
+      highlightCurrentMatch();
+    }
+    document.getElementById('findCount').textContent = (findState.currentIdx + 1) + '/' + findState.matches.length;
+    updateFindButtons();
+  }
+
+  function findPrev() {
+    if (findState.matches.length === 0) return;
+    findState.currentIdx = (findState.currentIdx - 1 + findState.matches.length) % findState.matches.length;
+    if (isSource) {
+      scrollToTextareaMatch(findState.currentIdx);
+    } else {
+      highlightCurrentMatch();
+    }
+    document.getElementById('findCount').textContent = (findState.currentIdx + 1) + '/' + findState.matches.length;
+    updateFindButtons();
+  }
+
+  function updateFindButtons() {
+    const has = findState.matches.length > 0;
+    document.getElementById('findNext').disabled = !has;
+    document.getElementById('findPrev').disabled = !has;
+  }
+
+  // Find bar events
+  document.getElementById('findInput').addEventListener('input', () => { doFind(); });
+  document.getElementById('findInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? findPrev() : findNext(); }
+    if (e.key === 'Escape') { e.preventDefault(); closeFindBar(); }
+  });
+  document.getElementById('findNext').addEventListener('click', findNext);
+  document.getElementById('findPrev').addEventListener('click', findPrev);
+  document.getElementById('findClose').addEventListener('click', closeFindBar);
+
   // ── Events ──
   document.addEventListener('keydown', (e) => {
     const cmd = e.metaKey;
     if (cmd && e.key === 's') { e.preventDefault(); saveFile(); }
     if (cmd && e.key === 'e') { e.preventDefault(); toggleView(); }
     if (cmd && e.key === 'i') { e.preventDefault(); showFileProperties(); }
+    if (cmd && e.key === 'f') { e.preventDefault(); openFindBar(); }
+    if (cmd && e.key === 'g') { e.preventDefault(); e.shiftKey ? findPrev() : findNext(); }
   });
 
   // Open external links in the default browser (the webview would otherwise swallow them)
