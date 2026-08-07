@@ -50,6 +50,7 @@
   .markdown hr { border: none; border-top: 1px solid #e8e8e8; margin: 28px 0; }
   .markdown strong { font-weight: 700; }
   .markdown em { font-style: italic; }
+  .markdown .frontmatter { font-family: "SF Mono", "Menlo", monospace; font-size: 13px; line-height: 1.6; background: #f5f5f7; border: 1px solid #e0e0e0; border-radius: 8px; padding: 14px 18px; margin: 0 0 28px; white-space: pre-wrap; word-wrap: break-word; color: #333; overflow-x: auto; }
   .mermaid-diagram { margin: 16px 0; padding: 20px; background: #fafafa; border-radius: 10px; border: 1px solid #e8e8e8; overflow-x: auto; text-align: center; }
   .mermaid-diagram svg { max-width: 100%; height: auto; }
   ::-webkit-scrollbar { width: 6px; }
@@ -126,10 +127,26 @@
   let isDirty = false;
   let filePath = '';
   let turndownService = null;
+  // True when the rendered (contenteditable) view has been edited by the user.
+  // When false, Cmd+E switches back to source using the pristine markdown
+  // instead of round-tripping the (possibly browser-rewritten) DOM via turndown.
+  let renderedDirty = false;
 
   if (typeof marked !== 'undefined') marked.setOptions({ breaks: true, gfm: true });
   if (typeof TurndownService !== 'undefined') {
     turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-', emDelimiter: '*', strongDelimiter: '**' });
+    // Preserve YAML frontmatter blocks during HTML→Markdown conversion
+    turndownService.addRule('frontmatter', {
+      filter: function (node) {
+        return node.classList && node.classList.contains('frontmatter');
+      },
+      replacement: function (content, node) {
+        // Round-trip via the stored raw YAML (data-raw) so that block-scalar
+        // indicators (>, |, -) are preserved exactly when toggling to source.
+        const raw = node.getAttribute('data-raw');
+        return (raw || node.textContent) + '\n\n';
+      }
+    });
     // Preserve mermaid code blocks during HTML→Markdown conversion
     turndownService.addRule('mermaid', {
       filter: function (node) {
@@ -234,7 +251,32 @@
 
   // Render a specific container's markdown and mermaid diagrams
   async function renderMarkdown(content, container) {
-    container.innerHTML = marked.parse(content);
+    // Extract YAML frontmatter (--- at start, ending with ---) before marked.parse
+    // so it doesn't get mangled into <hr> tags
+    let frontmatter = '';
+    let body = content;
+    const fmMatch = content.match(/^\s*---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
+    if (fmMatch) {
+      frontmatter = fmMatch[1];
+      body = content.substring(fmMatch[0].length);
+    }
+
+    if (frontmatter) {
+      const fmDiv = document.createElement('div');
+      fmDiv.className = 'frontmatter';
+      fmDiv.setAttribute('data-frontmatter', 'true');
+      fmDiv.setAttribute('data-raw', '---\n' + frontmatter + '\n---');
+      fmDiv.innerHTML = renderFrontmatter(frontmatter);
+      container.innerHTML = '';
+      container.appendChild(fmDiv);
+      const bodyDiv = document.createElement('div');
+      bodyDiv.innerHTML = marked.parse(body);
+      while (bodyDiv.firstChild) {
+        container.appendChild(bodyDiv.firstChild);
+      }
+    } else {
+      container.innerHTML = marked.parse(content);
+    }
     // Wrap tables in .table-wrap for overflow control
     const tables = container.querySelectorAll('table');
     for (const table of tables) {
@@ -247,18 +289,102 @@
     balanceTableColumns(container);
   }
 
-  // ── Syntax highlighting ──
+  // ── YAML frontmatter rendering ──
+  // Renders frontmatter as plain text (no syntax colors) but resolves
+  // block scalar indicators per YAML semantics:
+  //   ">"  folded block scalar  → indicator hidden; following indented lines
+  //        are one string, ordinary newlines folded into spaces
+  //   "|"  literal block scalar → indicator hidden; newlines preserved
+  //   "-"  chomping indicator   → trailing newline(s) of the scalar stripped
+  //   "+"  chomping indicator   → all trailing newlines kept
+  // The original raw frontmatter is kept in data-raw for exact round-trips.
+  function renderFrontmatter(text) {
+    const lines = text.split('\n');
+    const out = [];
+    let i = 0;
+    while (i < lines.length) {
+      const line = lines[i];
+      // key: value
+      const m = line.match(/^(\s*)([^:]+?)(\s*:\s*)(.*)$/);
+      if (m && m[2].indexOf('#') !== 0) {
+        const indent = m[1];
+        const key = m[2];
+        const val = m[4];
+        const bm = val.match(/^([>|])([-+]?)\s*$/);
+        if (bm) {
+          const style = bm[1];      // '>' folded, '|' literal
+          const chomp = bm[2] || ''; // '' clip, '-' strip, '+' keep
+          // Collect following more-indented lines as the scalar content.
+          const block = [];
+          const keyIndentLen = indent.length;
+          let baseIndent = null;
+          i++;
+          while (i < lines.length) {
+            const n = lines[i];
+            if (n.trim() === '') { block.push(''); i++; continue; }
+            const ind = n.match(/^(\s*)/)[1].length;
+            if (ind <= keyIndentLen) break;
+            if (baseIndent === null) baseIndent = ind;
+            block.push(n.slice(baseIndent));
+            i++;
+          }
+          out.push(indent + key + ': ' + resolveBlockScalar(block, style, chomp));
+          continue;
+        }
+        out.push(line);
+        i++;
+        continue;
+      }
+      out.push(line);
+      i++;
+    }
+    return escHtml('---\n' + out.join('\n') + '\n---');
+  }
+
+  function resolveBlockScalar(lines, style, chomp) {
+    let text;
+    if (style === '>') {
+      // Folded: ordinary newlines become spaces; blank lines become "\n"
+      const parts = [];
+      for (let k = 0; k < lines.length; k++) {
+        const l = lines[k];
+        if (l === '') {
+          parts.push('\n');
+        } else {
+          if (parts.length > 0 && parts[parts.length - 1] !== '\n' && !parts[parts.length - 1].endsWith(' ')) {
+            parts.push(' ');
+          }
+          parts.push(l);
+        }
+      }
+      text = parts.join('');
+    } else {
+      // Literal: newlines preserved as-is
+      text = lines.join('\n');
+    }
+    // Chomping: '-' strip trailing newlines, '+' keep all, default clip to one
+    if (chomp === '-') return text.replace(/\n+$/, '');
+    if (chomp === '+') return text;
+    return text.replace(/\n+$/, '') + '\n';
+  }
+
+  // ── Markdown syntax highlighting ──
   function highlightMarkdown(text) {
     let h = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // Highlight YAML frontmatter block as a unit
+    h = h.replace(/^---\r?\n([\s\S]*?)\r?\n---/m, function(match) {
+      return '<span class="syn-codeblock">' + match + '</span>';
+    });
     h = h.replace(/(```)/g, '<span class="syn-codeblock">$1</span>');
     h = h.replace(/^(#{1,6})(\s)/gm, '<span class="syn-heading">$1</span>$2');
     h = h.replace(/(\*\*|__)(.+?)\1/g, '<span class="syn-bold">$1</span>$2<span class="syn-bold">$1</span>');
     h = h.replace(/(^|[^\*])(\*)([^\s\*][^\*]*?)\*(?!\*)/gm, '$1<span class="syn-italic">$2</span>$3<span class="syn-italic">$2</span>');
     h = h.replace(/`([^`]+)`/g, '<span class="syn-code">`</span>$1<span class="syn-code">`</span>');
     h = h.replace(/\[([^\]]*)\]\(([^)]*)\)/g, '<span class="syn-link">[</span>$1<span class="syn-link">]</span><span class="syn-link">(</span>$2<span class="syn-link">)</span>');
+    // Horizontal rules — must run before the list rule so "***", "* * *", "---", "- - -" all highlight
+    h = h.replace(/^(\s*)((?:(?:\* ?){2,}\*)|(?:(?:- ?){2,}-))\s*$/gm, '$1<span class="syn-hr">$2</span>');
     h = h.replace(/^(\s*)([-*+])(\s)/gm, '$1<span class="syn-list">$2</span>$3');
     h = h.replace(/^(&gt;)(\s?)/gm, '<span class="syn-quote">$1</span>$2');
-    h = h.replace(/^(-{3,}|\*{3,})$/gm, '<span class="syn-hr">$1</span>');
     return h;
   }
 
@@ -474,6 +600,7 @@
     document.getElementById('textarea').value = content;
     syncHighlight();
     isDirty = false;
+    renderedDirty = false;
     if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(false);
     isSource = false;
     updateView();
@@ -835,9 +962,13 @@
     if (!isSource) {
       // rendered → source: capture cursor, convert, position
       const content = document.getElementById('content');
-      const html = content.innerHTML;
-      const md = turndownService ? turndownService.turndown(html) : html;
-      document.getElementById('textarea').value = md;
+      const textarea = document.getElementById('textarea');
+      if (renderedDirty) {
+        // Only round-trip the DOM when the user actually edited the rendered view.
+        const html = content.innerHTML;
+        textarea.value = turndownService ? turndownService.turndown(html) : html;
+      }
+      // Otherwise the textarea already holds the pristine markdown.
       syncHighlight();
       isSource = true;
       updateView();
@@ -846,6 +977,7 @@
       // source → rendered: capture cursor, convert, position
       const md = document.getElementById('textarea').value;
       await renderMarkdown(md, document.getElementById('content'));
+      renderedDirty = false;
       isSource = false;
       updateView();
       syncToRendered();
@@ -873,6 +1005,7 @@
   // ── Save ──
   function getCurrentMarkdown() {
     if (isSource) return document.getElementById('textarea').value;
+    if (!renderedDirty) return document.getElementById('textarea').value;
     const html = document.getElementById('content').innerHTML;
     return turndownService ? turndownService.turndown(html) : html;
   }
@@ -1171,7 +1304,7 @@
     if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(dirty);
   }
 
-  document.getElementById('content').addEventListener('input', () => { setDirty(true); pushContentToPython(); });
+  document.getElementById('content').addEventListener('input', () => { renderedDirty = true; setDirty(true); pushContentToPython(); });
   document.getElementById('textarea').addEventListener('input', () => { setDirty(true); syncHighlight(); pushContentToPython(); });
   setInterval(pushContentToPython, 3000);
 

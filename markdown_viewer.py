@@ -192,14 +192,67 @@ _initial_file_handled = False
 _window_apis = {}  # id(pywebview_window) -> MarkdownAPI
 _main_window_ref = None
 _main_api_ref = None
+_active_window_ref = None
 _menus_setup = False
 _view_menu_setup = False
 _file_menu_setup = False
 _app_menu_setup = False
+_update_menu_item = None
+_available_update_version = None
 _window_count = [0]  # list-based counter so it stays mutable inside ObjC callbacks
 WINDOW_OFFSET = 30  # px to offset each new window
 WINDOW_BASE_X = 100  # starting position
 WINDOW_BASE_Y = 80
+
+
+def _set_active_window(window):
+    """Remember the frontmost pywebview window for menu action dispatch."""
+    global _active_window_ref
+    if window:
+        _active_window_ref = window
+
+
+def _get_target_window():
+    """Return the best window target for menu-triggered JavaScript calls."""
+    if HAS_COCOA:
+        try:
+            from AppKit import NSApplication
+            import webview.platforms.cocoa as cocoa
+            key_window = NSApplication.sharedApplication().keyWindow()
+            if key_window:
+                for browser in cocoa.BrowserView.instances.values():
+                    if browser.window == key_window and id(browser.pywebview_window) in _window_apis:
+                        _set_active_window(browser.pywebview_window)
+                        return browser.pywebview_window
+        except Exception:
+            pass
+    if _active_window_ref and id(_active_window_ref) in _window_apis:
+        return _active_window_ref
+    if _main_window_ref and id(_main_window_ref) in _window_apis:
+        return _main_window_ref
+    for api in list(_window_apis.values()):
+        if api.window:
+            return api.window
+    return None
+
+
+def _forget_window(window):
+    """Remove a closed window and its file from the app registries."""
+    global _active_window_ref, _main_window_ref, _main_api_ref
+    api = _window_apis.pop(id(window), None)
+    if api and api.file_path and not api.is_untitled:
+        _opened_files.discard(os.path.abspath(api.file_path))
+    if _active_window_ref is window:
+        _active_window_ref = _main_window_ref if (_main_window_ref and id(_main_window_ref) in _window_apis) else None
+    if _main_window_ref is window:
+        _main_window_ref = None
+        _main_api_ref = None
+
+
+def _allow_close(window):
+    """Allow the close and perform successful-close cleanup."""
+    _forget_window(window)
+    return True
 
 
 def on_window_closing(window):
@@ -213,13 +266,13 @@ def on_window_closing(window):
     if not HAS_COCOA:
         return True
     try:
+        _set_active_window(window)
         api = _window_apis.get(id(window)) or _main_api_ref
 
         # Only prompt if there are unsaved changes
         if not (api and api.is_dirty):
-            # No save prompt needed — proceed to update check before closing
-            _maybe_check_update_on_close()
-            return True
+            # No save prompt needed — close immediately. Update checks run silently after launch.
+            return _allow_close(window)
 
         # Determine document name for the alert
         if api.file_path and not api.is_untitled:
@@ -249,9 +302,8 @@ def on_window_closing(window):
             if api.file_path and not api.is_untitled:
                 # Existing file — save in place
                 api.save_file(api.file_path, api.cached_content)
-                # Save completed — now check for updates before closing
-                _maybe_check_update_on_close()
-                return True
+                # Save completed — close immediately. Update checks run silently after launch.
+                return _allow_close(window)
             else:
                 # Untitled document — show Save panel
                 result = api.save_as_dialog(api.cached_content)
@@ -261,20 +313,19 @@ def on_window_closing(window):
                         window.set_title(os.path.basename(result['path']))
                     except Exception:
                         pass
-                    # Save completed — now check for updates before closing
-                    _maybe_check_update_on_close()
-                    return True
+                    # Save completed — close immediately. Update checks run silently after launch.
+                    return _allow_close(window)
                 else:
                     return False  # user cancelled the save panel → keep window open
         elif response == 1001:
-            # Don't Save — no save prompt was triggered, check for updates
-            _maybe_check_update_on_close()
-            return True
+            # Don't Save closes the window, but it did trigger a save prompt,
+            # so it intentionally does NOT run the automatic update check.
+            return _allow_close(window)
         else:
             return False  # cancel the close
 
     except Exception:
-        return True
+        return _allow_close(window)
 
 
 def create_window(file_path=None, x=None, y=None):
@@ -310,6 +361,7 @@ def create_window(file_path=None, x=None, y=None):
         )
         api.window = win
         _window_apis[id(win)] = api
+        _set_active_window(win)
         if HAS_COCOA:
             win.events.closing += on_window_closing
         _window_count[0] += 1
@@ -320,8 +372,11 @@ def create_window(file_path=None, x=None, y=None):
 
 def update_main_window(main_window, main_api, file_path):
     """Update the main window with a new file"""
+    file_path = os.path.abspath(file_path)
     main_api.file_path = file_path
+    main_api.is_untitled = False
     _opened_files.add(file_path)
+    _set_active_window(main_window)
 
     def do_update():
         for attempt in range(20):
@@ -360,7 +415,7 @@ if HAS_COCOA:
 
     def setup_all_menus():
         """Set up all custom menu items. Called once menus are ready."""
-        global _view_menu_setup, _file_menu_setup, _app_menu_setup
+        global _view_menu_setup, _file_menu_setup, _app_menu_setup, _update_menu_item
         try:
             from AppKit import NSApplication, NSMenuItem, NSMenu
             from Foundation import NSObject
@@ -385,6 +440,7 @@ if HAS_COCOA:
                 update_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Check for Updates…", "checkForUpdates:", "")
                 update_item.setTarget_(_view_menu_handler)
                 app_menu.insertItem_atIndex_(update_item, 1)
+                _update_menu_item = update_item
                 _app_menu_setup = True
 
             # ── View menu: Increase/Decrease Width ──
@@ -489,7 +545,7 @@ if HAS_COCOA:
         """
         try:
             from webview.platforms.cocoa import BrowserView
-            ref = _main_window_ref
+            ref = _get_target_window()
             if not ref:
                 return
             browser = BrowserView.instances.get(ref.uid)
@@ -526,7 +582,11 @@ if HAS_COCOA:
             _dispatch_js('findPrev()')
 
         def checkForUpdates_(self, sender):
-            """Manual update check — bypasses the 48h throttle."""
+            """Manual update check — user explicitly asked, so alerts are OK."""
+            global _available_update_version
+            if _available_update_version:
+                AppHelper.callAfter(_show_update_alert, _available_update_version)
+                return
             def _do_check():
                 try:
                     remote = _fetch_latest_version()
@@ -535,8 +595,10 @@ if HAS_COCOA:
                         return
                     local = _get_current_version()
                     if _is_newer(remote, local):
+                        _set_update_available(remote)
                         AppHelper.callAfter(_show_update_alert, remote)
                     else:
+                        _clear_update_available()
                         AppHelper.callAfter(_manual_check_up_to_date)
                 except Exception:
                     AppHelper.callAfter(_manual_check_error)
@@ -579,7 +641,7 @@ if HAS_COCOA:
 
 def main():
     global _initial_file_handled
-    global _main_window_ref, _main_api_ref
+    global _main_window_ref, _main_api_ref, _active_window_ref
 
     if HAS_COCOA:
         patch_app_delegate()
@@ -613,6 +675,7 @@ def main():
     _window_apis[id(main_window)] = main_api
     _main_window_ref = main_window
     _main_api_ref = main_api
+    _active_window_ref = main_window
     _window_count[0] = 1  # count the main window so subsequent windows are offset
 
     if HAS_COCOA:
@@ -622,16 +685,19 @@ def main():
         setup_view_menu()
         setup_file_menu()
 
-    # Check if a previous update was downloaded and offer to install it
+    # Check if a previous update was downloaded and offer to install it.
+    # New-version checks are delayed and quiet so startup/close is not interrupted.
     if HAS_COCOA:
         _check_pending_install()
+        _schedule_startup_update_check()
 
     webview.start(debug=False)
 
 
 # ── Auto-update check ──
 DOWNLOAD_URL = 'https://github.com/tahoeliu/mdPreview/releases/latest'
-CHECK_INTERVAL = 172800  # 48 hours
+CHECK_INTERVAL = 604800  # 7 days
+STARTUP_UPDATE_DELAY = 30  # seconds
 
 
 def _get_current_version():
@@ -699,12 +765,43 @@ def _mark_update_checked():
     save_config(cfg)
 
 
+def _set_update_available(remote_version):
+    """Remember that an update is available and gently surface it in the menu."""
+    global _available_update_version
+    _available_update_version = remote_version
+    if HAS_COCOA:
+        def _update_menu():
+            try:
+                if _update_menu_item:
+                    _update_menu_item.setTitle_(f'Update Available: {remote_version}…')
+                _dispatch_js(f"showStatus({json.dumps('mdPreview ' + remote_version + ' is available')})")
+            except Exception:
+                pass
+        AppHelper.callAfter(_update_menu)
+
+
+def _clear_update_available():
+    """Clear remembered update availability and restore the menu title."""
+    global _available_update_version
+    _available_update_version = None
+    if HAS_COCOA:
+        def _update_menu():
+            try:
+                if _update_menu_item:
+                    _update_menu_item.setTitle_('Check for Updates…')
+            except Exception:
+                pass
+        AppHelper.callAfter(_update_menu)
+
+
 def _show_update_alert(remote_version):
     """Show a modal alert offering to download the update.
 
-    If user clicks Download, downloads the DMG to ~/Downloads and records it
-    in config so the next launch can offer to install it.
-    Returns True if the user clicked Download (and download succeeded), False otherwise.
+    If user clicks Download, starts the download in a background thread
+    (showing a brief 'Downloading…' message) and returns immediately.
+    The actual download is non-blocking; on next launch the install
+    prompt appears.
+    Returns True if the user clicked Download, False otherwise.
     """
     if not HAS_COCOA:
         return False
@@ -717,14 +814,16 @@ def _show_update_alert(remote_version):
         alert.addButtonWithTitle_('Later')
         response = alert.runModal()
         if response == 1000:  # Download
-            dmg_path = _download_dmg(remote_version)
-            if dmg_path:
-                # Record for next-launch install prompt
-                cfg = load_config()
-                cfg['pending_update_dmg'] = dmg_path
-                cfg['pending_update_version'] = remote_version
-                save_config(cfg)
-                return True
+            # Download in a background thread — never block the main thread
+            def _bg_download():
+                dmg_path = _download_dmg(remote_version)
+                if dmg_path:
+                    cfg = load_config()
+                    cfg['pending_update_dmg'] = dmg_path
+                    cfg['pending_update_version'] = remote_version
+                    save_config(cfg)
+            threading.Thread(target=_bg_download, daemon=True).start()
+            return True
         return False
     except Exception:
         return False
@@ -756,32 +855,38 @@ def _download_dmg(version):
         return None
 
 
-def _maybe_check_update_on_close():
-    """Called when a window is about to close without a save prompt.
+def _schedule_startup_update_check():
+    """Schedule a low-friction automatic update check after app launch.
 
-    Conditions (all must be true):
-    1. Window is closing (Cmd+W, Cmd+Q, or mouse close)
-    2. No save prompt was triggered (file is clean, or user already saved)
-    3. 48 hours since last check
-
-    If all conditions are met, check for updates synchronously.
-    If a newer version exists, show download alert.
-    If the check fails, silently allow the close.
+    Automatic checks are intentionally quiet:
+    - wait STARTUP_UPDATE_DELAY seconds after launch
+    - run at most once every CHECK_INTERVAL (7 days)
+    - fail silently on network errors
+    - if an update exists, only update the menu title and show a brief status
+      message; the blocking download prompt is shown only after the user
+      explicitly chooses the update menu item.
     """
     if not HAS_COCOA:
         return
-    try:
-        if not _should_check_update():
-            return
-        _mark_update_checked()
-        remote = _fetch_latest_version()
-        if not remote:
-            return  # check failed — silently close
-        local = _get_current_version()
-        if _is_newer(remote, local):
-            _show_update_alert(remote)  # blocking modal — user decides
-    except Exception:
-        pass  # silent failure — never block the close
+
+    def _delayed_check():
+        try:
+            time.sleep(STARTUP_UPDATE_DELAY)
+            if not _should_check_update():
+                return
+            _mark_update_checked()
+            remote = _fetch_latest_version()
+            if not remote:
+                return
+            local = _get_current_version()
+            if _is_newer(remote, local):
+                _set_update_available(remote)
+            else:
+                _clear_update_available()
+        except Exception:
+            pass
+
+    threading.Thread(target=_delayed_check, daemon=True).start()
 
 
 def _manual_check_up_to_date():

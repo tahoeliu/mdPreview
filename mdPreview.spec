@@ -1,5 +1,8 @@
 # mdPreview.spec — PyInstaller build configuration for standalone macOS app
 
+from pathlib import Path
+
+VERSION = Path('VERSION').read_text(encoding='utf-8').strip()
 block_cipher = None
 
 a = Analysis(
@@ -12,6 +15,7 @@ a = Analysis(
         ('turndown.js', '.'),
         ('mermaid.min.js', '.'),
         ('app_icon.icns', '.'),
+        ('doc_icon.icns', '.'),
     ],
     hiddenimports=[
         'webview.platforms.cocoa',
@@ -65,8 +69,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName': 'mdPreview',
         'CFBundleDisplayName': 'mdPreview',
-        'CFBundleVersion': '1.2.5',
-        'CFBundleShortVersionString': '1.2.5',
+        'CFBundleVersion': VERSION,
+        'CFBundleShortVersionString': VERSION,
         'LSMinimumSystemVersion': '10.13',
         'NSHighResolutionCapable': True,
         'NSAppTransportSecurity': {
@@ -77,6 +81,7 @@ app = BUNDLE(
                 'CFBundleTypeName': 'Markdown Document',
                 'CFBundleTypeRole': 'Viewer',
                 'LSHandlerRank': 'Default',
+                'CFBundleTypeIconFile': 'doc_icon.icns',
                 'LSItemContentTypes': [
                     'net.daringfireball.markdown',
                     'com.apple.traditional-mac-plain-text',

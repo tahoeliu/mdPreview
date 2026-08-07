@@ -1,12 +1,9 @@
 #!/bin/bash
-#
-# mdPreview - Installation Script
-#
-
-set -e
+# install.sh — Install the canonical PyInstaller build to /Applications.
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-APP_PATH="$SCRIPT_DIR/build/mdPreview.app"
+APP_PATH="$SCRIPT_DIR/dist/mdPreview.app"
 DEST_PATH="/Applications/mdPreview.app"
 
 echo "============================================"
@@ -20,30 +17,18 @@ if [ ! -d "$APP_PATH" ]; then
 fi
 
 echo "Copying mdPreview.app to /Applications..."
-if [ -d "$DEST_PATH" ]; then
-    echo "  Existing app found, replacing..."
-    rm -rf "$DEST_PATH"
-fi
-cp -R "$APP_PATH" "$DEST_PATH"
+ditto "$APP_PATH" "$DEST_PATH"
+xattr -cr "$DEST_PATH" 2>/dev/null || true
+
 echo "  Done."
 echo ""
-
-xattr -rd com.apple.quarantine "$DEST_PATH" 2>/dev/null || true
-
 echo "Installation complete!"
 echo ""
-echo "============================================"
-echo "  Set as default .md viewer"
-echo "============================================"
-echo ""
-echo "To make mdPreview the default app for .md files:"
-echo ""
-echo "  1. Find any .md file in Finder"
-echo "  2. Right-click → Get Info"
-echo "  3. Open With → select mdPreview"
-echo "  4. Click 'Change All...'"
-echo ""
 echo "Keyboard shortcuts:"
-echo "  Cmd+S  - Save file"
-echo "  Cmd+E  - Toggle Rendered/Source view"
-echo ""
+echo "  Cmd+N        - New file"
+echo "  Cmd+S        - Save file"
+echo "  Cmd+E        - Toggle Rendered/Source view"
+echo "  Cmd+F        - Find"
+echo "  Cmd+G        - Find next"
+echo "  Cmd+Shift+G  - Find previous"
+echo "  Cmd+I        - File properties"
