@@ -19,14 +19,24 @@ echo ""
 echo "=== Creating DMG ==="
 rm -f "dist/mdPreview-${VERSION}.dmg"
 
-STAGE=$(mktemp -d)
-# Standard layout: app + Applications shortcut + installation guide
-cp -R dist/mdPreview.app "$STAGE/"
-ln -s /Applications "$STAGE/Applications"
-cp "安装指引.txt" "$STAGE/"
+# NOTE: `hdiutil create -srcfolder` fails with "Resource busy" on the
+# PyInstaller bundle layout (mutual symlinks between Contents/Resources
+# and Contents/Frameworks). Workaround: build a raw HFS+ image, mount it,
+# copy files in, unmount, then convert to compressed UDZO.
+RAW="/tmp/mdPreview-${VERSION}-raw.dmg"
+MNT="/tmp/mdPreview-${VERSION}-mnt"
 
-hdiutil create -volname "mdPreview" -srcfolder "$STAGE" -format UDZO -ov "dist/mdPreview-${VERSION}.dmg"
-rm -rf "$STAGE"
+rm -f "$RAW"
+hdiutil create -size "80m" -fs HFS+ -volname "mdPreview" -ov "$RAW"
+mkdir -p "$MNT"
+hdiutil attach "$RAW" -mountpoint "$MNT"
+# Standard layout: app + Applications shortcut + installation guide
+cp -R dist/mdPreview.app "$MNT/"
+ln -s /Applications "$MNT/Applications"
+cp "安装指引.txt" "$MNT/"
+hdiutil detach "$MNT"
+hdiutil convert "$RAW" -format UDZO -o "dist/mdPreview-${VERSION}.dmg"
+rm -f "$RAW"
 
 echo ""
 echo "=== Done ==="
