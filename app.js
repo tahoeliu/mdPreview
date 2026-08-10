@@ -18,21 +18,37 @@ let isSource = false;
   let isZh = false;
 
   if (typeof marked !== 'undefined') marked.setOptions({ breaks: true, gfm: true });
-  if (typeof TurndownService !== 'undefined') {
+
+  // ── Lazy-load heavy JS libraries (turndown.js, mermaid.min.js) ──
+  // These are loaded on-demand to speed up cold start by ~300-500ms.
+  let _turndownLoaded = false;
+  let _mermaidLoaded = false;
+  let _mermaidLoadingPromise = null;
+
+  function _loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[src="' + src + '"]');
+      if (existing) { resolve(); return; }
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error('Failed to load ' + src));
+      document.head.appendChild(s);
+    });
+  }
+
+  function _initTurndown() {
+    if (turndownService || typeof TurndownService === 'undefined') return;
     turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-', emDelimiter: '*', strongDelimiter: '**' });
-    // Preserve YAML frontmatter blocks during HTML→Markdown conversion
     turndownService.addRule('frontmatter', {
       filter: function (node) {
         return node.classList && node.classList.contains('frontmatter');
       },
       replacement: function (content, node) {
-        // Round-trip via the stored raw YAML (data-raw) so that block-scalar
-        // indicators (>, |, -) are preserved exactly when toggling to source.
         const raw = node.getAttribute('data-raw');
         return (raw || node.textContent) + '\n\n';
       }
     });
-    // Preserve mermaid code blocks during HTML→Markdown conversion
     turndownService.addRule('mermaid', {
       filter: function (node) {
         return node.classList && node.classList.contains('mermaid-diagram');
@@ -42,8 +58,6 @@ let isSource = false;
         return source ? '```mermaid\n' + source.trim() + '\n```' : '';
       }
     });
-
-    // Convert HTML tables back to GFM pipe-table syntax
     turndownService.addRule('table', {
       filter: function (node) {
         return node.nodeName === 'TABLE';
@@ -51,28 +65,20 @@ let isSource = false;
       replacement: function (content, node) {
         var rows = node.rows;
         if (!rows || rows.length === 0) return '';
-
         var colCount = 0;
         for (var r = 0; r < rows.length; r++) {
           colCount = Math.max(colCount, rows[r].cells.length);
         }
         if (colCount === 0) return '';
-
-        // Escape pipe chars in cell text
         function escPipe(s) {
           return (s || '').trim().replace(/\|/g, '\\|').replace(/\n/g, ' ');
         }
-
         var lines = [];
-
-        // Header row (always first row in GFM tables)
         var headerCells = [];
         for (var c = 0; c < colCount; c++) {
           headerCells.push(escPipe((rows[0].cells[c] || {}).textContent || ''));
         }
         lines.push('| ' + headerCells.join(' | ') + ' |');
-
-        // Separator row with alignment
         var sepCells = [];
         for (var c2 = 0; c2 < colCount; c2++) {
           var cell = rows[0].cells[c2];
@@ -82,8 +88,6 @@ let isSource = false;
           else sepCells.push('---');
         }
         lines.push('| ' + sepCells.join(' | ') + ' |');
-
-        // Data rows
         for (var r2 = 1; r2 < rows.length; r2++) {
           var cells = [];
           for (var c3 = 0; c3 < colCount; c3++) {
@@ -91,10 +95,15 @@ let isSource = false;
           }
           lines.push('| ' + cells.join(' | ') + ' |');
         }
-
         return '\n\n' + lines.join('\n') + '\n\n';
       }
     });
+  }
+
+  function ensureTurndown() {
+    if (_turndownLoaded) return Promise.resolve();
+    if (typeof TurndownService !== 'undefined') { _initTurndown(); _turndownLoaded = true; return Promise.resolve(); }
+    return _loadScript('turndown.js').then(() => { _initTurndown(); _turndownLoaded = true; });
   }
 
   // ── Mermaid initialization ──
@@ -111,21 +120,31 @@ let isSource = false;
       sequence: { useMaxWidth: true },
     });
   }
+  function ensureMermaid() {
+    if (_mermaidLoaded) return Promise.resolve();
+    if (_mermaidLoadingPromise) return _mermaidLoadingPromise;
+    if (typeof mermaid !== 'undefined') { initMermaid(); _mermaidLoaded = true; return Promise.resolve(); }
+    _mermaidLoadingPromise = _loadScript('mermaid.min.js').then(() => { initMermaid(); _mermaidLoaded = true; _mermaidLoadingPromise = null; });
+    return _mermaidLoadingPromise;
+  }
   initMermaid();
   // Re-init and re-render when system theme changes
   if (window.matchMedia) {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-      initMermaid();
-      // Clear cache so diagrams re-render with new theme
-      mermaidSvgCache.clear();
-      renderMermaidDiagrams(document.getElementById('content'));
+      if (_mermaidLoaded) {
+        initMermaid();
+        mermaidSvgCache.clear();
+        renderMermaidDiagrams(document.getElementById('content'));
+      }
     });
   }
 
   // Render all mermaid code blocks to SVG diagrams
   async function renderMermaidDiagrams(root) {
-    if (typeof mermaid === 'undefined') return;
     const codeBlocks = root.querySelectorAll('code.language-mermaid');
+    if (codeBlocks.length === 0) return;
+    await ensureMermaid();
+    if (typeof mermaid === 'undefined') return;
     for (const code of codeBlocks) {
       const pre = code.parentElement;
       if (!pre || pre.nodeName !== 'PRE') continue;
@@ -915,6 +934,13 @@ let isSource = false;
     isSource = false;
     updateView();
     if (draftRecovered) showDraftRecoveredBanner();
+    // Preload turndown.js in background (non-blocking) so it's ready
+    // when the user first toggles to source mode.
+    ensureTurndown();
+    // Preload mermaid.min.js in background if the document contains diagrams.
+    if (content.includes('```mermaid') || content.includes('graph ') || content.includes('sequenceDiagram')) {
+      ensureMermaid();
+    }
   }
 
   function showDraftRecoveredBanner() {
@@ -1304,6 +1330,7 @@ let isSource = false;
       const textarea = document.getElementById('textarea');
       if (renderedDirty) {
         // Only round-trip the DOM when the user actually edited the rendered view.
+        await ensureTurndown();
         const html = content.innerHTML;
         textarea.value = turndownService ? turndownService.turndown(html) : html;
       }
@@ -1342,6 +1369,18 @@ let isSource = false;
       page.classList.remove('full-width');
     }
     updateEmptyState();
+    showModeIndicator();
+  }
+
+  // ── Mode indicator (semi-transparent "Preview" / "Source" label) ──
+  let _modeIndicatorTimer = null;
+  function showModeIndicator() {
+    const el = document.getElementById('modeIndicator');
+    if (!el) return;
+    el.textContent = isSource ? 'mdSource' : 'mdPreview';
+    el.classList.add('visible');
+    if (_modeIndicatorTimer) clearTimeout(_modeIndicatorTimer);
+    _modeIndicatorTimer = setTimeout(() => { el.classList.remove('visible'); }, 1500);
   }
 
   function updateEmptyState() {
@@ -1358,7 +1397,7 @@ let isSource = false;
         overlay.className = 'welcome-overlay';
         const tips = isZh
           ? '拖拽 <strong>.md</strong> 文件到此处，或双击打开'
-          : 'Drag a <strong>.md</strong> file here, or double click to open';
+          : 'or double click a <strong>.md</strong> file to open';
         const toggleTip = isZh
           ? '<kbd>⌘</kbd><kbd>E</kbd> 切换源码 / 预览'
           : '<kbd>⌘</kbd><kbd>E</kbd> to toggle source / preview';
@@ -1463,6 +1502,50 @@ let isSource = false;
     el.classList.add('visible');
     clearTimeout(statusTimer);
     statusTimer = setTimeout(() => el.classList.remove('visible'), isError ? 5000 : 1500);
+  }
+
+  let _updateBubbleDismissed = false;
+
+  function showUpdateBubble() {
+    if (_updateBubbleDismissed) return;
+    const el = document.getElementById('updateBubble');
+    if (el) el.classList.add('visible');
+  }
+
+  function dismissUpdateBubble(event) {
+    if (event) event.stopPropagation();
+    _updateBubbleDismissed = true;
+    const el = document.getElementById('updateBubble');
+    if (el) el.classList.remove('visible');
+  }
+
+  function installUpdate() {
+    const el = document.getElementById('updateBubble');
+    if (el && el.classList.contains('installing')) return;
+    if (el) {
+      el.querySelector('.update-bubble-text').textContent = 'Installing...';
+      el.classList.add('installing');
+    }
+    showStatus('Installing update...');
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.perform_auto_install().then(function(result) {
+        if (result && result.success) {
+          showStatus('Update installed. Restarting...');
+        } else {
+          showStatus('Update failed: ' + (result ? result.error : 'unknown'), true);
+          if (el) {
+            el.querySelector('.update-bubble-text').textContent = 'Update available, click to install...';
+            el.classList.remove('installing');
+          }
+        }
+      }).catch(function(err) {
+        showStatus('Update failed: ' + err, true);
+        if (el) {
+          el.querySelector('.update-bubble-text').textContent = 'Update available, click to install...';
+          el.classList.remove('installing');
+        }
+      });
+    }
   }
 
   // ── Find ──

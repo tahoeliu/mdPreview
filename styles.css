@@ -65,11 +65,20 @@
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 3px; }
   ::-webkit-scrollbar-thumb:hover { background: #b0b0b0; }
-  .status { position: fixed; bottom: 16px; right: 20px; font-size: 12px; color: #666; background: rgba(245,245,247,0.96); border: 1px solid #e0e0e0; border-radius: 8px; padding: 7px 14px; opacity: 0; transition: opacity 0.4s; pointer-events: none; user-select: none; box-shadow: 0 3px 16px rgba(0,0,0,0.08); max-width: 400px; word-break: break-word; }
+  .status { position: fixed; bottom: 16px; right: 20px; font-size: 12px; color: #666; background: rgba(245,245,247,0.85); border: 1px solid #e0e0e0; border-radius: 8px; padding: 7px 14px; opacity: 0; transition: opacity 0.4s; pointer-events: none; user-select: none; box-shadow: 0 3px 16px rgba(0,0,0,0.08); max-width: 400px; word-break: break-word; }
   .status.visible { opacity: 1; }
   .status.error { color: #b00020; background: #fff1f1; border-color: #f0b8b8; pointer-events: auto; cursor: pointer; }
+  .update-bubble { position: fixed; top: 16px; right: 20px; z-index: 600; display: none; align-items: center; gap: 8px; background: rgba(245,245,247,0.85); color: #333; border: 1px solid #d0d0d0; border-radius: 20px; padding: 8px 12px; font-size: 12px; font-weight: 500; cursor: pointer; user-select: none; box-shadow: 0 2px 12px rgba(0,0,0,0.08); opacity: 0; transition: opacity 0.3s, transform 0.3s; transform: translateY(-8px); max-width: 300px; }
+  .update-bubble.visible { display: flex; opacity: 1; transform: translateY(0); }
+  .update-bubble:hover { background: rgba(235,235,237,0.96); border-color: #b0b0b0; }
+  .update-bubble.installing { pointer-events: none; opacity: 0.6; }
+  .update-bubble-text { white-space: nowrap; }
+  .update-bubble-close { background: none; border: none; color: #999; font-size: 16px; cursor: pointer; padding: 0 0 0 4px; line-height: 1; }
+  .update-bubble-close:hover { color: #555; }
   .source-hint { position: fixed; bottom: 0; left: 0; right: 0; height: 2px; background: #007aff; opacity: 0; transition: opacity 0.3s; }
   .source-hint.visible { opacity: 0.4; }
+  .mode-indicator { position: fixed; bottom: 16px; right: 20px; z-index: 500; font-size: 22px; font-weight: 600; letter-spacing: 0.5px; color: #888; opacity: 0; pointer-events: none; user-select: none; transition: opacity 0.25s ease; }
+  .mode-indicator.visible { opacity: 0.4; }
   /* ── Properties Modal ── */
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 1000; align-items: center; justify-content: center; }
   .modal-overlay.visible { display: flex; }
@@ -123,7 +132,7 @@
   /* ── Print ── */
   @media print {
     body { background: #fff !important; color: #000 !important; overflow: visible !important; height: auto !important; }
-    .toc-sidebar, .toc-toggle, .find-bar, .status, .source-hint, .modal-overlay, .image-lightbox { display: none !important; }
+    .toc-sidebar, .toc-toggle, .find-bar, .status, .source-hint, .modal-overlay, .image-lightbox, .mode-indicator, .update-bubble { display: none !important; }
     .scroll-wrap { position: static !important; overflow: visible !important; }
     .page { max-width: none !important; margin: 0 !important; padding: 0 !important; }
     .markdown pre, .markdown .math-block, .markdown .frontmatter, .mermaid-diagram { overflow: visible !important; white-space: pre-wrap !important; }
@@ -157,4 +166,10 @@
     .welcome-overlay .welcome-tip { color: #888; }
     .welcome-overlay .welcome-icon { opacity: 0.5; }
     .welcome-overlay .welcome-tip kbd { background: #333336; border-color: #555; color: #ccc; }
+    .update-bubble { background: rgba(42,42,44,0.96); color: #ddd; border-color: #444; }
+    .update-bubble:hover { background: rgba(52,52,54,0.96); border-color: #555; }
+    .update-bubble-close { color: #888; }
+    .update-bubble-close:hover { color: #ccc; }
+    .mode-indicator { color: #aaa; }
+    .mode-indicator.visible { opacity: 0.4; }
   }

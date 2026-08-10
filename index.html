@@ -32,7 +32,12 @@
 </div>
 
 <div class="source-hint" id="sourceHint"></div>
+<div class="mode-indicator" id="modeIndicator"></div>
 <div class="status" id="status"></div>
+<div class="update-bubble" id="updateBubble" onclick="installUpdate()" role="alert">
+  <span class="update-bubble-text">Update available, click to install...</span>
+  <button class="update-bubble-close" onclick="dismissUpdateBubble(event)" title="Dismiss" aria-label="Dismiss">&times;</button>
+</div>
 <div class="image-lightbox" id="imageLightbox"><img id="imageLightboxImg" alt="Preview"></div>
 
 <div class="modal-overlay" id="modalOverlay">
@@ -44,8 +49,6 @@
 </div>
 
 <script src="marked.min.js"></script>
-<script src="turndown.js"></script>
-<script src="mermaid.min.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

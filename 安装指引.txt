@@ -1,5 +1,9 @@
-如何安装 mdPreview
-===================
+如何安装 mdPreview  /  How to Install mdPreview
+================================================
+
+─────────────────────────────────────────────────
+中文
+─────────────────────────────────────────────────
 
 第一步：安装应用
 -----------------
@@ -51,3 +55,60 @@ mdPreview 是开源软件，未购买 Apple 开发者签名证书（$99/年）�
 ----------
 • 项目主页：https://github.com/tahoeliu/mdPreview
 • 提交 Issue：https://github.com/tahoeliu/mdPreview/issues
+
+
+─────────────────────────────────────────────────
+English
+─────────────────────────────────────────────────
+
+Step 1: Install the App
+-----------------------
+Drag mdPreview.app to the Applications folder on the right.
+
+
+Step 2: First Launch (Bypassing macOS Security)
+------------------------------------------------
+mdPreview is open-source software without an Apple Developer code signing
+certificate ($99/year). macOS will block it and show "cannot be opened" or
+"cannot verify the developer."
+
+Choose any of the following methods to resolve this:
+
+Method 1 (Recommended): Right-click → Open
+  1. Open Finder → go to the Applications folder
+  2. Find mdPreview, hold Control and click (or right-click) its icon
+  3. Select "Open" from the context menu
+  4. A dialog appears — click "Open"
+  5. You can now double-click to open it normally. This is only needed once.
+
+Method 2: Terminal Command
+  1. Open the Terminal app (Launchpad → Other → Terminal, or search "Terminal")
+  2. Copy and paste the following command, then press Enter:
+
+     xattr -cr /Applications/mdPreview.app
+
+  3. Now double-click mdPreview to open it normally
+
+Method 3: System Settings (macOS 13 Ventura and later)
+  1. Try double-clicking mdPreview first, then close the block dialog
+  2. Open System Settings → Privacy & Security
+  3. Scroll down to the Security section — you'll see "mdPreview was blocked"
+  4. Click "Open Anyway" and enter your password
+  5. Double-click mdPreview again to open it
+
+
+Step 3: Set as Default Markdown Viewer
+--------------------------------------
+  1. Find any .md file in Finder
+  2. Right-click → select "Get Info"
+  3. Expand the "Open with" section
+  4. Select mdPreview from the dropdown
+  5. Click "Change All..."
+
+All .md files will now open with mdPreview.
+
+
+Having Issues?
+--------------
+• Project page: https://github.com/tahoeliu/mdPreview
+• Report an issue: https://github.com/tahoeliu/mdPreview/issues

@@ -19,6 +19,7 @@ CONFIG_FILE = os.path.join(APP_SUPPORT_DIR, 'config.json')
 LEGACY_CONFIG_FILE = os.path.expanduser('~/.mdviewer_config.json')
 LOG_FILE = os.path.expanduser('~/Library/Logs/mdPreview.log')
 DRAFT_DIR = os.path.join(APP_SUPPORT_DIR, 'Drafts')
+UPDATE_STAGING_DIR = os.path.join(APP_SUPPORT_DIR, 'UpdateStaging')
 
 
 def _setup_logging():
@@ -286,7 +287,6 @@ class MarkdownAPI:
         try:
             from AppKit import NSSavePanel, NSOKButton
             from PyObjCTools import AppHelper
-            import threading
 
             result_holder = {}
 
@@ -344,7 +344,6 @@ class MarkdownAPI:
         try:
             from AppKit import NSOpenPanel, NSOKButton
             from PyObjCTools import AppHelper
-            import threading
 
             result_holder = {}
 
@@ -397,7 +396,6 @@ class MarkdownAPI:
         try:
             from AppKit import NSSavePanel, NSOKButton
             from PyObjCTools import AppHelper
-            import threading
 
             result_holder = {}
 
@@ -487,6 +485,10 @@ class MarkdownAPI:
         """Return app metadata (version, etc.) for the About panel."""
         return {'version': _get_current_version()}
 
+    def perform_auto_install(self):
+        """Called from JS when user clicks the update bubble."""
+        return _perform_auto_install()
+
     def get_file_properties(self):
         """Return file properties for the Properties dialog"""
         if not self.file_path or not os.path.exists(self.file_path):
@@ -557,8 +559,7 @@ def load_config():
 def save_config(cfg):
     try:
         os.makedirs(APP_SUPPORT_DIR, exist_ok=True)
-        with open(CONFIG_FILE, 'w') as f:
-            json.dump(cfg, f)
+        _safe_write_text(CONFIG_FILE, json.dumps(cfg))
     except Exception:
         log_exception('save config failed')
 
@@ -603,8 +604,8 @@ WINDOW_BASE_Y = 80
 # forever and the process never exits. Fixes below (see patch_evaluate_js,
 # on_window_closing, _start_quit_watchdog).
 _QUIT_REQUESTED = threading.Event()  # set by every close/quit path
-QUIT_FORCE_EXIT_DELAY = 4.0          # seconds of "quitting" before force exit
-EVALUATE_JS_TIMEOUT = 2.0            # max seconds to wait for a JS round-trip
+QUIT_FORCE_EXIT_DELAY = 1.5          # seconds of "quitting" before force exit
+EVALUATE_JS_TIMEOUT = 1.0            # max seconds to wait for a JS round-trip
 
 
 def _set_active_window(window):
@@ -1188,7 +1189,6 @@ if HAS_COCOA:
 
         def newFile_(self, sender):
             # Open a new blank window
-            import threading
             threading.Thread(target=create_window, args=(None,), daemon=True).start()
 
         def findAction_(self, sender):
@@ -1287,7 +1287,7 @@ def main():
         js_api=main_api,
         width=900,
         height=680,
-        min_size=(500, 400),
+        min_size=(680, 400),
         text_select=True,
         confirm_close=False,
     )
@@ -1308,17 +1308,35 @@ def main():
         setup_view_menu()
         setup_file_menu()
 
-    # Check if a previous update was downloaded and offer to install it.
-    # New-version checks are delayed and quiet so startup/close is not interrupted.
+    # Post-startup tasks: run after the runloop starts so they don't delay
+    # window display. These are non-critical for the initial render.
     if HAS_COCOA:
-        _check_pending_install()
+        def _post_startup():
+            time.sleep(0.5)
+            try:
+                _check_pending_install()
+            except Exception:
+                pass
+            try:
+                _try_set_default_handler()
+            except Exception:
+                pass
+        threading.Thread(target=_post_startup, daemon=True).start()
         _schedule_startup_update_check()
-        _try_set_default_handler()
 
     _start_quit_watchdog()
     _maybe_run_selftest(main_window)
 
     webview.start(debug=False)
+
+    # ── Instant exit ──
+    # At this point webview.start() has returned, meaning all windows are
+    # closed, the runloop has stopped, all drafts/config are persisted by
+    # on_window_closing. The Python interpreter would now try to join
+    # non-daemon pywebview bridge threads (which can be stuck in semaphore
+    # waits for EVALUATE_JS_TIMEOUT), causing a 1-2 second hang with a
+    # spinning cursor. Since there is nothing left to do, exit immediately.
+    os._exit(0)
 
 
 def _maybe_run_selftest(main_window):
@@ -1372,16 +1390,14 @@ def _get_current_version():
 
 def _fetch_latest_version():
     """Get the latest release version by following the GitHub releases/latest redirect.
-    
+
     This avoids the GitHub API rate limit (60 req/hour for unauthenticated API calls)
-    by using the HTML redirect instead: releases/latest → releases/tag/vX.Y.Z
+    by using the HTML redirect instead: releases/latest -> releases/tag/vX.Y.Z
     """
     import urllib.request
     url = 'https://github.com/tahoeliu/mdPreview/releases/latest'
     req = urllib.request.Request(url, headers={'User-Agent': 'mdPreview'})
     # Don't follow redirects automatically — we want the Location header
-    opener = urllib.request.build_opener(urllib.request.HTTPRedirectHandler)
-    # Use a custom handler that stops at the redirect
     class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             return None  # don't follow — let it raise
@@ -1426,18 +1442,28 @@ def _mark_update_checked():
 
 
 def _set_update_available(remote_version):
-    """Remember that an update is available and gently surface it in the menu."""
+    """Remember that an update is available, auto-download, and show bubble."""
     global _available_update_version
     _available_update_version = remote_version
     if HAS_COCOA:
         def _update_menu():
             try:
                 if _update_menu_item:
-                    _update_menu_item.setTitle_(f'Update Available: {remote_version}…')
-                _dispatch_js(f"showStatus({json.dumps('mdPreview ' + remote_version + ' is available')})")
+                    _update_menu_item.setTitle_(f'Update Available: {remote_version}...')
             except Exception:
                 pass
         AppHelper.callAfter(_update_menu)
+    # Auto-download in background to hidden staging dir
+    def _bg_download():
+        staging_app = _download_and_extract(remote_version)
+        if staging_app:
+            cfg = load_config()
+            cfg['pending_staging_app'] = staging_app
+            cfg['pending_update_version'] = remote_version
+            save_config(cfg)
+            if HAS_COCOA:
+                AppHelper.callAfter(lambda: _dispatch_js('showUpdateBubble()'))
+    threading.Thread(target=_bg_download, daemon=True).start()
 
 
 def _clear_update_available():
@@ -1457,10 +1483,8 @@ def _clear_update_available():
 def _show_update_alert(remote_version):
     """Show a modal alert offering to download the update.
 
-    If user clicks Download, starts the download in a background thread
-    (showing a brief 'Downloading…' message) and returns immediately.
-    The actual download is non-blocking; on next launch the install
-    prompt appears.
+    If user clicks Download, starts auto-download to staging dir in a
+    background thread. When download completes, shows the update bubble.
     Returns True if the user clicked Download, False otherwise.
     """
     if not HAS_COCOA:
@@ -1474,14 +1498,15 @@ def _show_update_alert(remote_version):
         alert.addButtonWithTitle_('Later')
         response = alert.runModal()
         if response == 1000:  # Download
-            # Download in a background thread — never block the main thread
+            # Auto-download and extract to staging, then show bubble
             def _bg_download():
-                dmg_path = _download_dmg(remote_version)
-                if dmg_path:
+                staging_app = _download_and_extract(remote_version)
+                if staging_app:
                     cfg = load_config()
-                    cfg['pending_update_dmg'] = dmg_path
+                    cfg['pending_staging_app'] = staging_app
                     cfg['pending_update_version'] = remote_version
                     save_config(cfg)
+                    AppHelper.callAfter(lambda: _dispatch_js('showUpdateBubble()'))
             threading.Thread(target=_bg_download, daemon=True).start()
             return True
         return False
@@ -1489,15 +1514,14 @@ def _show_update_alert(remote_version):
         return False
 
 
-def _download_dmg(version):
-    """Download the latest DMG to ~/Downloads. Returns the local path or None."""
+def _download_and_extract(version):
+    """Download DMG to hidden staging dir, extract .app, return staging path."""
+    import urllib.request
+    import subprocess
     try:
-        import urllib.request
+        os.makedirs(UPDATE_STAGING_DIR, exist_ok=True)
+        dmg_path = os.path.join(UPDATE_STAGING_DIR, 'mdPreview.dmg')
         url = 'https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg'
-        downloads_dir = os.path.expanduser('~/Downloads')
-        if not os.path.isdir(downloads_dir):
-            os.makedirs(downloads_dir, exist_ok=True)
-        dmg_path = os.path.join(downloads_dir, 'mdPreview.dmg')
         req = urllib.request.Request(url, headers={'User-Agent': 'mdPreview'})
         with urllib.request.urlopen(req, timeout=60) as resp:
             with open(dmg_path, 'wb') as f:
@@ -1506,12 +1530,26 @@ def _download_dmg(version):
                     if not chunk:
                         break
                     f.write(chunk)
-        # Verify it's a real file (not an error page)
-        if os.path.getsize(dmg_path) < 1000000:  # < 1MB = probably an error
+        if os.path.getsize(dmg_path) < 1000000:
             os.remove(dmg_path)
             return None
-        return dmg_path
+        # Mount and copy .app to staging
+        mount_dir = tempfile.mkdtemp()
+        subprocess.run(
+            ['hdiutil', 'attach', '-nobrowse', '-mountpoint', mount_dir, dmg_path],
+            capture_output=True, check=True
+        )
+        src_app = os.path.join(mount_dir, 'mdPreview.app')
+        staging_app = os.path.join(UPDATE_STAGING_DIR, 'mdPreview.app')
+        if os.path.exists(staging_app):
+            shutil.rmtree(staging_app)
+        shutil.copytree(src_app, staging_app)
+        subprocess.run(['hdiutil', 'detach', mount_dir], capture_output=True)
+        os.remove(dmg_path)
+        shutil.rmtree(mount_dir, ignore_errors=True)
+        return staging_app
     except Exception:
+        log_exception('auto download and extract failed')
         return None
 
 
@@ -1522,9 +1560,8 @@ def _schedule_startup_update_check():
     - wait STARTUP_UPDATE_DELAY seconds after launch
     - run at most once every CHECK_INTERVAL (7 days)
     - fail silently on network errors
-    - if an update exists, only update the menu title and show a brief status
-      message; the blocking download prompt is shown only after the user
-      explicitly chooses the update menu item.
+    - if an update exists, auto-download to staging dir and show a
+      non-blocking update bubble in the top-right corner.
     """
     if not HAS_COCOA:
         return
@@ -1596,49 +1633,97 @@ def _try_set_default_handler():
 
 
 def _check_pending_install():
-    """On app launch, check if a DMG was downloaded previously and offer to install."""
+    """On app launch, check if a staged update exists and show the bubble."""
     if not HAS_COCOA:
         return
     try:
         cfg = load_config()
-        dmg_path = cfg.get('pending_update_dmg', '')
+        staging_app = cfg.get('pending_staging_app', '')
         version = cfg.get('pending_update_version', '')
-        if not dmg_path or not os.path.exists(dmg_path):
-            # Clean up stale entry
-            if 'pending_update_dmg' in cfg:
-                del cfg['pending_update_dmg']
-                del cfg['pending_update_version']
+        if staging_app and os.path.exists(staging_app):
+            local = _get_current_version()
+            if not _is_newer(version, local):
+                # Already updated — clean up staging
+                cfg.pop('pending_staging_app', None)
+                cfg.pop('pending_update_version', None)
                 save_config(cfg)
-            return
-
-        local = _get_current_version()
-        # Only prompt if the downloaded version is actually newer
-        if not _is_newer(version, local):
-            # Already updated — clean up
-            cfg.pop('pending_update_dmg', None)
-            cfg.pop('pending_update_version', None)
-            save_config(cfg)
-            return
-
-        # Show install prompt
-        alert = NSAlert.alloc().init()
-        alert.setMessageText_(f'mdPreview {version} is ready to install!')
-        alert.setInformativeText_(f'You have version {local}. The update has been downloaded. Install now?')
-        alert.addButtonWithTitle_('Install')
-        alert.addButtonWithTitle_('Later')
-        response = alert.runModal()
-        if response == 1000:  # Install
-            # Mount the DMG (same as double-clicking it)
-            import subprocess
-            subprocess.Popen(['open', dmg_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            # Clean up the pending flag
-            cfg.pop('pending_update_dmg', None)
-            cfg.pop('pending_update_version', None)
-            save_config(cfg)
-            # Quit the app so the user can install the new version
-            NSApplication.sharedApplication().terminate_(None)
+                shutil.rmtree(staging_app, ignore_errors=True)
+                return
+            # Show the update bubble (non-blocking)
+            global _available_update_version
+            _available_update_version = version
+            if _update_menu_item:
+                def _update_menu():
+                    try:
+                        _update_menu_item.setTitle_(f'Update Available: {version}...')
+                    except Exception:
+                        pass
+                AppHelper.callAfter(_update_menu)
+            AppHelper.callAfter(lambda: _dispatch_js('showUpdateBubble()'))
+        else:
+            # Clean up stale config entries
+            if 'pending_staging_app' in cfg or 'pending_update_dmg' in cfg:
+                cfg.pop('pending_staging_app', None)
+                cfg.pop('pending_update_version', None)
+                cfg.pop('pending_update_dmg', None)
+                save_config(cfg)
     except Exception:
         pass
+
+
+def _perform_auto_install():
+    """Execute auto-install: write helper script, quit app, let script replace + restart."""
+    import subprocess
+    try:
+        cfg = load_config()
+        staging_app = cfg.get('pending_staging_app', '')
+        version = cfg.get('pending_update_version', '')
+        if not staging_app or not os.path.exists(staging_app):
+            return {'success': False, 'error': 'No staged update found'}
+
+        # Write helper script that runs after app exits
+        script = (
+            '#!/bin/bash\n'
+            'sleep 2\n'
+            f'mv /Applications/mdPreview.app /Applications/mdPreview.app.old 2>/dev/null\n'
+            f'cp -R "{staging_app}" /Applications/mdPreview.app\n'
+            'if [ $? -eq 0 ]; then\n'
+            '  rm -rf /Applications/mdPreview.app.old\n'
+            '  xattr -cr /Applications/mdPreview.app\n'
+            '  open /Applications/mdPreview.app\n'
+            f'  rm -rf "{staging_app}"\n'
+            'else\n'
+            '  mv /Applications/mdPreview.app.old /Applications/mdPreview.app 2>/dev/null\n'
+            'fi\n'
+            f'rm -rf "{staging_app}"\n'
+        )
+        script_path = os.path.join(UPDATE_STAGING_DIR, 'install_update.sh')
+        os.makedirs(UPDATE_STAGING_DIR, exist_ok=True)
+        with open(script_path, 'w') as f:
+            f.write(script)
+        os.chmod(script_path, 0o755)
+
+        # Launch helper detached from this process
+        subprocess.Popen(
+            ['nohup', 'bash', script_path],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            start_new_session=True
+        )
+
+        # Clean up config
+        cfg.pop('pending_staging_app', None)
+        cfg.pop('pending_update_version', None)
+        save_config(cfg)
+
+        # Quit the app so the helper can replace it
+        if HAS_COCOA:
+            from AppKit import NSApplication
+            NSApplication.sharedApplication().terminate_(None)
+
+        return {'success': True}
+    except Exception as e:
+        log_exception('auto install failed')
+        return {'success': False, 'error': str(e)}
 
 
 if __name__ == '__main__':
