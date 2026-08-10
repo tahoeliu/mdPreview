@@ -1,0 +1,160 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; background: #fff; color: #1d1d1f; height: 100vh; overflow: hidden; }
+  .scroll-wrap { position: absolute; top: 0; bottom: 0; left: 0; right: 0; overflow-y: auto; overflow-x: hidden; }
+  .page { position: relative; max-width: var(--page-width, 720px); margin: 0 auto; padding: 60px 32px 120px; }
+  .page.full-width { max-width: none; padding: 30px 40px 120px; }
+  .markdown { outline: none; min-height: 80vh; font-size: 16px; line-height: 1.8; color: #333; }
+  .markdown:empty::before { content: ''; }
+  .welcome-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #aaa; pointer-events: auto; cursor: text; z-index: 0; transition: opacity 0.2s ease; }
+  .welcome-overlay.welcome-fadeout { opacity: 0; pointer-events: none; }
+  .welcome-overlay .welcome-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.3; }
+  .welcome-overlay .welcome-title { font-size: 20px; font-weight: 600; color: #888; margin-bottom: 8px; }
+  .welcome-overlay .welcome-tip { font-size: 14px; line-height: 1.6; color: #aaa; margin-top: 4px; }
+  .welcome-overlay .welcome-tip kbd { font-family: -apple-system; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; padding: 1px 6px; font-size: 12px; color: #666; margin: 0 1px; }
+  .markdown.hidden { display: none; }
+  .source { display: none; position: relative; min-height: 80vh; }
+  .source.visible { display: block; }
+  .highlight-layer, #textarea { margin: 0; padding: 0; font-family: "SF Mono", "Menlo", monospace; font-size: 14px; line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; tab-size: 4; border: none; }
+  .highlight-layer { position: relative; pointer-events: none; color: #333; z-index: 1; min-height: 80vh; }
+  #textarea { position: absolute; top: 0; left: 0; right: 0; height: 100%; background: transparent; color: transparent; caret-color: #1d1d1f; outline: none; resize: none; overflow: hidden; z-index: 2; }
+  .syn-heading { color: #007aff; font-weight: 600; }
+  .syn-bold { color: #c41e3a; }
+  .syn-italic { color: #8e44ad; }
+  .syn-code { color: #d6336c; }
+  .syn-codeblock { color: #6a737d; }
+  .syn-link { color: #007aff; }
+  .syn-list { color: #28a745; }
+  .syn-quote { color: #6a737d; }
+  .syn-hr { color: #d0d0d0; }
+  .markdown h1 { font-size: 30px; font-weight: 700; margin: 0 0 20px; letter-spacing: -0.5px; line-height: 1.3; }
+  .markdown h2 { font-size: 23px; font-weight: 600; margin: 32px 0 14px; letter-spacing: -0.3px; line-height: 1.3; }
+  .markdown h3 { font-size: 18px; font-weight: 600; margin: 26px 0 10px; line-height: 1.4; }
+  .markdown h4 { font-size: 15px; font-weight: 600; margin: 22px 0 8px; }
+  .markdown h5 { font-size: 14px; font-weight: 600; margin: 18px 0 8px; color: #555; }
+  .markdown h6 { font-size: 13px; font-weight: 600; margin: 18px 0 8px; color: #888; }
+  .markdown p { margin: 0 0 16px; }
+  .markdown a { color: #007aff; text-decoration: none; cursor: pointer !important; }
+  .markdown a:hover { text-decoration: underline; }
+  .markdown ul, .markdown ol { margin: 0 0 16px; padding-left: 26px; }
+  .markdown li { margin-bottom: 4px; }
+  .markdown blockquote { margin: 0 0 16px; padding: 4px 20px; border-left: 3px solid #e0e0e0; color: #666; }
+  .markdown code { font-family: "SF Mono", "Menlo", monospace; font-size: 14px; background: #f5f5f7; padding: 2px 6px; border-radius: 4px; color: #a31515; }
+  .markdown pre { margin: 0 0 16px; padding: 14px 18px; background: #f5f5f7; border-radius: 8px; overflow-x: auto; }
+  .markdown pre code { background: none; color: #1d1d1f; padding: 0; font-size: 13px; line-height: 1.6; }
+  .markdown .table-wrap { width: 100%; margin: 0 0 16px; }
+  .markdown table { border-collapse: collapse; width: 100%; font-size: 14px; table-layout: fixed; }
+  .markdown th, .markdown td { border: 1px solid #e0e0e0; padding: 8px 14px; text-align: left; overflow-wrap: break-word; word-wrap: break-word; }
+  .markdown th { background: #f5f5f7; font-weight: 600; position: relative; }
+  .markdown th.col-edge::after, .markdown td.col-edge::after { content: ''; position: absolute; top: 0; right: 0; width: 3px; height: 100%; background: #007aff; }
+  .markdown img { max-width: 100%; border-radius: 10px; margin: 8px 0; cursor: zoom-in; }
+  .markdown hr { border: none; border-top: 1px solid #e8e8e8; margin: 28px 0; }
+  .markdown strong { font-weight: 700; }
+  .markdown em { font-style: italic; }
+  .markdown del { color: #777; }
+  .markdown input[type="checkbox"] { margin-right: 8px; transform: translateY(1px); }
+  .markdown .footnotes { margin-top: 32px; padding-top: 14px; border-top: 1px solid #e8e8e8; font-size: 13px; color: #555; }
+  .markdown .footnotes ol { padding-left: 22px; }
+  .markdown .footnote-ref, .markdown .footnote-backref { font-size: 12px; }
+  .markdown .math-inline, .markdown .math-block { font-family: "SF Mono", "Menlo", monospace; background: #f8f8fa; border: 1px solid #ececf0; border-radius: 6px; color: #5a3b8f; }
+  .markdown .math-inline { padding: 1px 5px; }
+  .markdown .math-block { display: block; padding: 12px 14px; margin: 0 0 16px; overflow-x: auto; text-align: center; }
+  .markdown .frontmatter { font-family: "SF Mono", "Menlo", monospace; font-size: 13px; line-height: 1.6; background: #f5f5f7; border: 1px solid #e0e0e0; border-radius: 8px; padding: 14px 18px; margin: 0 0 28px; white-space: pre-wrap; word-wrap: break-word; color: #333; overflow-x: auto; }
+  .mermaid-diagram { margin: 16px 0; padding: 20px; background: #fafafa; border-radius: 10px; border: 1px solid #e8e8e8; overflow-x: auto; text-align: center; }
+  .mermaid-diagram svg { max-width: 100%; height: auto; }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #d0d0d0; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #b0b0b0; }
+  .status { position: fixed; bottom: 16px; right: 20px; font-size: 12px; color: #666; background: rgba(245,245,247,0.96); border: 1px solid #e0e0e0; border-radius: 8px; padding: 7px 14px; opacity: 0; transition: opacity 0.4s; pointer-events: none; user-select: none; box-shadow: 0 3px 16px rgba(0,0,0,0.08); max-width: 400px; word-break: break-word; }
+  .status.visible { opacity: 1; }
+  .status.error { color: #b00020; background: #fff1f1; border-color: #f0b8b8; pointer-events: auto; cursor: pointer; }
+  .source-hint { position: fixed; bottom: 0; left: 0; right: 0; height: 2px; background: #007aff; opacity: 0; transition: opacity 0.3s; }
+  .source-hint.visible { opacity: 0.4; }
+  /* ── Properties Modal ── */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 1000; align-items: center; justify-content: center; }
+  .modal-overlay.visible { display: flex; }
+  .modal-box { background: #fff; border-radius: 12px; box-shadow: 0 8px 40px rgba(0,0,0,0.18); width: 420px; max-width: 90vw; overflow: hidden; font-size: 14px; }
+  .modal-header { padding: 18px 22px 0; font-size: 16px; font-weight: 600; }
+  .modal-body { padding: 16px 22px 22px; }
+  .modal-row { display: flex; padding: 6px 0; border-bottom: 1px solid #f0f0f0; }
+  .modal-row:last-child { border-bottom: none; }
+  .modal-label { width: 90px; flex-shrink: 0; color: #888; }
+  .modal-value { flex: 1; color: #333; word-break: break-all; }
+  .modal-copy { flex-shrink: 0; align-self: center; margin-left: 10px; padding: 3px 9px; border: 1px solid #c8c8c8; border-radius: 5px; background: #fff; color: #555; font-size: 12px; cursor: pointer; }
+  .modal-copy:hover { background: #f0f0f0; color: #333; }
+  .modal-close { display: block; margin: 0 22px 18px auto; padding: 6px 20px; background: #007aff; color: #fff; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .modal-close:hover { background: #0066d9; }
+  /* ── Find Bar ── */
+  .find-bar { display: none; position: fixed; top: 0; left: 0; right: 0; height: 40px; background: #f5f5f7; border-bottom: 1px solid #d0d0d0; align-items: center; padding: 0 12px; gap: 8px; z-index: 900; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .find-bar.visible { display: flex; }
+  .find-bar input { flex: 1; height: 26px; border: 1px solid #c8c8c8; border-radius: 5px; padding: 0 8px; font-size: 14px; outline: none; background: #fff; }
+  .find-bar input:focus { border-color: #007aff; box-shadow: 0 0 0 2px rgba(0,122,255,0.15); }
+  .find-bar .find-count { font-size: 12px; color: #888; min-width: 60px; text-align: center; user-select: none; }
+  .find-bar button { height: 26px; min-width: 26px; border: 1px solid #c8c8c8; border-radius: 5px; background: #fff; cursor: pointer; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0 6px; color: #555; }
+  .find-bar button:hover { background: #e8e8e8; }
+  .find-bar button:disabled { opacity: 0.4; cursor: default; }
+  .find-bar .find-close { font-size: 18px; line-height: 1; padding: 0 8px; }
+  mark.find-highlight { background: #ffd95e; color: inherit; }
+  mark.find-highlight.current { background: #ff8c00; color: #fff; }
+  .toc-sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 200px; padding: 58px 18px 24px; overflow-y: auto; color: #8a8a8a; font-size: 12px; line-height: 1.45; background: inherit; z-index: 100; transition: transform 0.22s ease, visibility 0.22s ease; scrollbar-width: none; -ms-overflow-style: none; }
+  .toc-sidebar::-webkit-scrollbar { display: none; }
+  .toc-sidebar.hidden { transform: translateX(-100%); visibility: hidden; pointer-events: none; }
+  .toc-toggle { position: fixed; top: 16px; left: 16px; width: 28px; height: 28px; z-index: 101; border: none; border-radius: 7px; background: transparent; color: #8a8a8a; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: color 0.15s ease, background 0.15s ease, transform 0.2s ease; }
+  .toc-toggle:hover { color: #555; background: rgba(0,0,0,0.05); }
+  .toc-toggle-icon { width: 9px; height: 9px; border-top: 1.8px solid currentColor; border-left: 1.8px solid currentColor; transform: rotate(-45deg); transition: transform 0.2s ease; }
+  .toc-toggle.collapsed .toc-toggle-icon { transform: rotate(135deg); }
+  .toc-sidebar a { display: block; color: #7a7a7a; text-decoration: none; padding-top: 3px; padding-bottom: 3px; padding-right: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 4px; }
+  .toc-sidebar a:hover { color: #444; background: rgba(0,0,0,0.04); }
+  .toc-sidebar a.toc-active { color: #007aff; font-weight: 600; background: rgba(0,122,255,0.06); }
+  .toc-sidebar .toc-level-1 { padding-left: 0; font-weight: 600; }
+  .toc-sidebar .toc-level-2 { padding-left: 12px; }
+  .toc-sidebar .toc-level-3 { padding-left: 24px; }
+  .toc-sidebar .toc-level-4 { padding-left: 36px; }
+  .toc-sidebar .toc-level-5 { padding-left: 48px; }
+  .toc-sidebar .toc-level-6 { padding-left: 60px; }
+  body.has-toc .page { margin-left: max(200px, calc((100vw - var(--page-width, 720px)) / 2)); margin-right: auto; width: min(var(--page-width, 720px), calc(100vw - 200px)); max-width: var(--page-width, 720px); }
+  .frontmatter-toggle { float: right; border: none; background: transparent; color: #888; cursor: pointer; font-size: 12px; }
+  .frontmatter.collapsed { max-height: 42px; overflow: hidden; }
+  .mermaid-error { margin: 16px 0; padding: 12px 14px; border: 1px solid #f0c0c0; background: #fff5f5; color: #b00020; border-radius: 8px; font-family: "SF Mono", "Menlo", monospace; font-size: 13px; white-space: pre-wrap; }
+  .image-lightbox { display: none; position: fixed; inset: 0; z-index: 1200; background: rgba(0,0,0,0.82); align-items: center; justify-content: center; padding: 32px; }
+  .image-lightbox.visible { display: flex; }
+  .image-lightbox img { max-width: 96vw; max-height: 90vh; border-radius: 8px; box-shadow: 0 10px 48px rgba(0,0,0,0.4); }
+  @media (max-width: 799px) { body:not(.has-toc) .page { margin: 0 auto; max-width: var(--page-width, 720px); } }
+  /* ── Print ── */
+  @media print {
+    body { background: #fff !important; color: #000 !important; overflow: visible !important; height: auto !important; }
+    .toc-sidebar, .toc-toggle, .find-bar, .status, .source-hint, .modal-overlay, .image-lightbox { display: none !important; }
+    .scroll-wrap { position: static !important; overflow: visible !important; }
+    .page { max-width: none !important; margin: 0 !important; padding: 0 !important; }
+    .markdown pre, .markdown .math-block, .markdown .frontmatter, .mermaid-diagram { overflow: visible !important; white-space: pre-wrap !important; }
+    .markdown { font-size: 12pt; line-height: 1.5; color: #000 !important; }
+    .markdown h1 { font-size: 20pt; page-break-after: avoid; }
+    .markdown h2, .markdown h3, .markdown h4 { page-break-after: avoid; }
+    .markdown pre, .markdown blockquote, .markdown table, .markdown img { page-break-inside: avoid; }
+    .markdown code { background: #f5f5f5 !important; color: #333 !important; }
+    .markdown a { color: #000 !important; text-decoration: underline !important; }
+    .markdown table { width: 100% !important; }
+  }
+  @media (prefers-color-scheme: dark) {
+    body { background: #1e1e1f; color: #f2f2f2; }
+    .markdown, .highlight-layer { color: #e8e8e8; }
+    #textarea { caret-color: #fff; }
+    .markdown code, .markdown pre, .markdown th, .markdown .frontmatter { background: #2a2a2c; color: #f0f0f0; border-color: #3a3a3c; }
+    .markdown blockquote { border-left-color: #4a4a4c; color: #c8c8c8; }
+    .markdown th, .markdown td { border-color: #3a3a3c; }
+    .markdown hr { border-top-color: #3a3a3c; }
+    .modal-box, .find-bar, .find-bar input { background: #2a2a2c; color: #f0f0f0; border-color: #444; }
+    .modal-value { color: #f0f0f0; }
+    .modal-copy { background: #333336; color: #ddd; border-color: #555; }
+    .modal-copy:hover { background: #3d3d40; color: #fff; }
+    .toc-toggle:hover { color: #ddd; background: rgba(255,255,255,0.08); }
+    .toc-sidebar a { color: #aaa; }
+    .toc-sidebar a:hover { color: #eee; background: rgba(255,255,255,0.07); }
+    .toc-sidebar a.toc-active { color: #4dA2FF; background: rgba(0,122,255,0.12); }
+    .mermaid-diagram, .math-inline, .math-block { background: #28282a; border-color: #3a3a3c; }
+    .status { background: rgba(42,42,44,0.96); color: #ddd; border-color: #444; }
+    .welcome-overlay .welcome-title { color: #aaa; }
+    .welcome-overlay .welcome-tip { color: #888; }
+    .welcome-overlay .welcome-icon { opacity: 0.5; }
+    .welcome-overlay .welcome-tip kbd { background: #333336; border-color: #555; color: #ccc; }
+  }

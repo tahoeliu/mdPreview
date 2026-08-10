@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 VERSION="$(cat VERSION)"
-PYTHON="/Users/liutianhao.29/.workbuddy/binaries/python/envs/markdown-viewer/bin/python"
+PYTHON="${PYTHON:-python3}"
 
 echo "=== Building mdPreview ${VERSION} ==="
 "$PYTHON" -m PyInstaller mdPreview.spec --noconfirm --clean

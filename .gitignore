@@ -4,6 +4,9 @@ build/
 *.app
 *.dmg
 
+# Local backups (app snapshots from the dev machine)
+backups/
+
 # Python
 __pycache__/
 *.py[cod]

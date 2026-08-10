@@ -122,7 +122,7 @@ Now every `.md` file will open automatically with mdPreview!
 - **✏️ Edit Mode** - One-click toggle to edit Markdown source directly
 - **⌨️ Keyboard Shortcuts** - Cmd+S to save, Cmd+E to switch edit/preview modes
 - **🎨 Minimalist Interface** - Clean, focused reading and writing experience
-- **📱 Native macOS Integration** - Seamless integration with macOS file system and UI
+- **📱 macOS Integration** - Native window, menus, file association, and WKWebView-based rendering
 - **🌙 Dark Mode Support** - Respects your macOS appearance preferences
 - **🔍 Search Functionality** - Quickly find content in your Markdown files
 
@@ -158,9 +158,9 @@ mdPreview supports standard Markdown syntax including:
 ## 🛠️ Tech Stack
 
 - **Python 3.13+** - Core application logic
-- **pywebview** - Native macOS WKWebView wrapper
+- **pywebview** - Native macOS window wrapper around WKWebView
 - **marked.js** - Markdown rendering engine
-- **macOS Native** - AppKit integration and native UI
+- **AppKit integrations** - Native menus, dialogs, file open events, and packaging metadata
 
 ## 🔧 Development
 
@@ -187,8 +187,10 @@ pip install pywebview
 
 ```
 MarkdownViewer/
-├── markdown_viewer.py    # Main application logic
-├── index.html           # WebView interface
+├── markdown_viewer.py    # Python app, window, menu, and file APIs
+├── index.html           # WebView shell
+├── styles.css           # App styles
+├── app.js               # Frontend editor, rendering, search, and bridge logic
 ├── marked.min.js        # Markdown renderer
 ├── turndown.js          # HTML to Markdown converter
 ├── mermaid.min.js       # Diagram support
@@ -206,7 +208,7 @@ MarkdownViewer/
 
 | Feature | mdPreview | Text Editors | Online Tools |
 |---------|-----------|--------------|--------------|
-| Native macOS Experience | ✅ | ❌ | ❌ |
+| macOS-integrated desktop experience | ✅ | ❌ | ❌ |
 | Offline Use | ✅ | ✅ | ❌ |
 | File Association | ✅ | ❌ | ❌ |
 | Zero Configuration | ✅ | ❌ | ❌ |
@@ -221,7 +223,7 @@ Looking for a **free Markdown editor for Mac**, a **Typora alternative**, or a l
 | Feature | **mdPreview** | Typora | MacDown | Bear | VS Code |
 |---------|:---:|:---:|:---:|:---:|:---:|
 | Free & open-source (MIT) | ✅ | ❌ (paid) | ✅ | ❌ (subscription) | ✅ |
-| Native macOS app | ✅ | ✅ | ✅ | ✅ | ❌ (Electron) |
+| Native window + macOS menus | ✅ | ✅ | ✅ | ✅ | ❌ (Electron) |
 | Double-click `.md` to open | ✅ | ✅ | ✅ | ✅ | ❌ |
 | Offline / no account | ✅ | ✅ | ✅ | ❌ | ✅ |
 | Lightweight (<20 MB) | ✅ | ⚠️ | ✅ | ✅ | ❌ |

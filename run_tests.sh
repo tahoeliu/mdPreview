@@ -3,6 +3,8 @@
 set -euo pipefail
 
 cd "$(dirname "$0")"
-NODE="/Users/liutianhao.29/.workbuddy/binaries/node/versions/22.22.2/bin/node"
+NODE="${NODE:-node}"
+PYTHON="${PYTHON:-python3}"
 
 "$NODE" tests/regression.test.js
+"$PYTHON" tests/python_smoke.test.py

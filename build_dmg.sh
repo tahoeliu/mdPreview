@@ -5,13 +5,15 @@ set -e
 cd "$(dirname "$0")"
 
 VERSION="$(cat VERSION)"
-PYTHON="/Users/liutianhao.29/.workbuddy/binaries/python/envs/markdown-viewer/bin/python"
+PYTHON="${PYTHON:-python3}"
 
 echo "=== Building mdPreview.app ==="
-pkill -f mdPreview 2>/dev/null || true
-sleep 1
+if pgrep -x mdPreview >/dev/null 2>&1; then
+  echo "mdPreview is running. Please quit it before building the DMG."
+  exit 1
+fi
 rm -rf build dist/mdPreview.app
-$PYTHON -m PyInstaller mdPreview.spec --noconfirm --clean
+"$PYTHON" -m PyInstaller mdPreview.spec --noconfirm --clean
 
 echo ""
 echo "=== Creating DMG ==="

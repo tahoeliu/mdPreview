@@ -11,6 +11,8 @@ a = Analysis(
     binaries=[],
     datas=[
         ('index.html', '.'),
+        ('styles.css', '.'),
+        ('app.js', '.'),
         ('marked.min.js', '.'),
         ('turndown.js', '.'),
         ('mermaid.min.js', '.'),
@@ -74,12 +76,14 @@ app = BUNDLE(
         'LSMinimumSystemVersion': '10.13',
         'NSHighResolutionCapable': True,
         'NSAppTransportSecurity': {
-            'NSAllowsArbitraryLoads': True,
+            # Keep ATS enabled. mdPreview only uses HTTPS endpoints for update checks,
+            # so it does not need global arbitrary network loads.
+            'NSAllowsArbitraryLoads': False,
         },
         'CFBundleDocumentTypes': [
             {
                 'CFBundleTypeName': 'Markdown Document',
-                'CFBundleTypeRole': 'Viewer',
+                'CFBundleTypeRole': 'Editor',
                 'LSHandlerRank': 'Default',
                 'CFBundleTypeIconFile': 'doc_icon.icns',
                 'LSItemContentTypes': [
