@@ -14,12 +14,10 @@ let isSource = false;
   // pending JS->Python bridge traffic so teardown never deadlocks.
   let closing = false;
   let keepAliveTimer = null;
-  // Locale flag set from Python on init
   let isZh = false;
 
   if (typeof marked !== 'undefined') marked.setOptions({ breaks: true, gfm: true });
 
-  // ── Lazy-load heavy JS libraries (turndown.js, mermaid.min.js) ──
   // These are loaded on-demand to speed up cold start by ~300-500ms.
   let _turndownLoaded = false;
   let _mermaidLoaded = false;
@@ -106,7 +104,6 @@ let isSource = false;
     return _loadScript('turndown.js').then(() => { _initTurndown(); _turndownLoaded = true; });
   }
 
-  // ── Mermaid initialization ──
   function getMermaidTheme() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
   }
@@ -128,7 +125,6 @@ let isSource = false;
     return _mermaidLoadingPromise;
   }
   initMermaid();
-  // Re-init and re-render when system theme changes
   if (window.matchMedia) {
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
       if (_mermaidLoaded) {
@@ -139,7 +135,6 @@ let isSource = false;
     });
   }
 
-  // Render all mermaid code blocks to SVG diagrams
   async function renderMermaidDiagrams(root) {
     const codeBlocks = root.querySelectorAll('code.language-mermaid');
     if (codeBlocks.length === 0) return;
@@ -221,7 +216,6 @@ let isSource = false;
     root.appendChild(section);
   }
 
-  // Render a specific container's markdown and mermaid diagrams
   async function renderMarkdown(content, container) {
     // Extract YAML frontmatter (--- at start, ending with ---) before marked.parse
     // so it doesn't get mangled into <hr> tags
@@ -258,7 +252,6 @@ let isSource = false;
     applyHeadingAnchors(container);
     rewriteRelativeImages(container);
     buildToc(container);
-    // Wrap tables in .table-wrap for overflow control
     const tables = container.querySelectorAll('table');
     for (const table of tables) {
       const wrap = document.createElement('div');
@@ -335,6 +328,7 @@ let isSource = false;
       return;
     }
     applyTocVisibility();
+    if (!isSource) scheduleScrollSpy();
   }
 
   function buildToc(container) {
@@ -342,7 +336,6 @@ let isSource = false;
     const toggle = document.getElementById('tocToggle');
     const headings = Array.from(container.querySelectorAll('h1, h2, h3, h4, h5, h6'));
     tocHasContent = headings.length >= 2;
-    // Hide the toggle button entirely when there are no headings to outline
     if (toggle) toggle.style.display = tocHasContent ? '' : 'none';
     toc.innerHTML = headings.map((h) => {
       const level = h.tagName.slice(1);
@@ -350,40 +343,62 @@ let isSource = false;
     }).join('');
     applyTocVisibility();
     setupScrollSpy(headings);
+    // Re-sync the highlight once layout settles (e.g. after mermaid reflow).
+    requestAnimationFrame(() => { if (!isSource) updateScrollSpy(); });
   }
 
-  let scrollSpyObserver = null;
+  // ── Scroll-spy: keep the TOC highlight in sync with the rendered view ──
+  // Deterministic geometric spy: the "current" heading is the last heading
+  // whose top has scrolled to/above a small band near the top of the
+  // viewport. This replaces the previous IntersectionObserver-based spy,
+  // whose result depended on WHEN the browser delivered intersection
+  // callbacks (throttled/coalesced differently in WKWebView vs Blink) and on
+  // the exact landing geometry of the scroll, so it could disagree with the
+  // entry the user actually clicked. An explicitly-clicked TOC target
+  // (explicitTocTarget) temporarily wins over the spy until the user scrolls.
+  let scrollSpyRaf = null;
   function setupScrollSpy(headings) {
-    if (scrollSpyObserver) { scrollSpyObserver.disconnect(); scrollSpyObserver = null; }
     if (!headings || headings.length === 0) return;
+    updateScrollSpy();
+  }
+
+  function updateScrollSpy() {
+    if (isSource) return; // source mode maintains its own highlight
+    if (explicitTocTarget) return; // a click is in flight; don't clobber it
+    const content = document.getElementById('content');
     const toc = document.getElementById('tocSidebar');
+    if (!content || !toc) return;
+    const headings = Array.from(content.querySelectorAll('h1, h2, h3, h4, h5, h6'));
     const links = toc.querySelectorAll('a');
-    if (links.length === 0) return;
-    // Use IntersectionObserver to detect which heading is in view
-    const visibleIds = new Set();
-    scrollSpyObserver = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) visibleIds.add(entry.target.id);
-        else visibleIds.delete(entry.target.id);
-      });
-      // Pick the first visible heading
-      let currentId = null;
-      if (visibleIds.size > 0) {
-        for (const h of headings) { if (visibleIds.has(h.id)) { currentId = h.id; break; } }
-      }
-      // If none visible, pick the last one we scrolled past
-      if (!currentId) {
-        const scrollY = document.querySelector('.scroll-wrap').scrollTop;
-        for (const h of headings) {
-          if (h.offsetTop - 80 <= scrollY) currentId = h.id;
-          else break;
-        }
-      }
-      links.forEach(a => {
-        a.classList.toggle('toc-active', a.getAttribute('data-target') === currentId);
-      });
-    }, { root: document.querySelector('.scroll-wrap'), rootMargin: '0px 0px -70% 0px', threshold: 0 });
-    headings.forEach(h => scrollSpyObserver.observe(h));
+    if (headings.length === 0 || links.length === 0) return;
+    const scrollY = document.querySelector('.scroll-wrap').scrollTop;
+    let currentId = null;
+    for (const h of headings) {
+      if (h.offsetTop - TOC_SPY_BAND <= scrollY) currentId = h.id;
+      else break;
+    }
+    if (!currentId) currentId = headings[0].id;
+    links.forEach(a => {
+      a.classList.toggle('toc-active', a.getAttribute('data-target') === currentId);
+    });
+    ensureTocActiveVisible();
+  }
+
+  function scheduleScrollSpy() {
+    if (scrollSpyRaf) return;
+    scrollSpyRaf = requestAnimationFrame(() => { scrollSpyRaf = null; updateScrollSpy(); });
+  }
+
+  // Mode-aware scroll handler: as soon as the user scrolls (i.e. the wrap
+  // moves away from the position our own code last set programmatically),
+  // the explicitly-clicked target expires and the spy takes over again.
+  function scheduleTocSync() {
+    const wrap = document.querySelector('.scroll-wrap');
+    if (explicitTocTarget && wrap && Math.abs(wrap.scrollTop - lastProgrammaticScrollTop) > 2) {
+      explicitTocTarget = null;
+    }
+    if (isSource) scheduleSourceTocHighlight();
+    else scheduleScrollSpy();
   }
 
   function toggleToc() {
@@ -429,14 +444,46 @@ let isSource = false;
     const raw = hash.slice(1);
     let id = raw;
     try { id = decodeURIComponent(raw); } catch (e) {}
+
+    // In source mode, scroll the textarea to the heading line instead of
+    // looking for a DOM element (which only exists in rendered mode).
+    if (isSource) {
+      const textarea = document.getElementById('textarea');
+      const md = textarea.value;
+      const line = findHeadingLineInMarkdown(md, id);
+      if (line >= 0) {
+        let pos = 0;
+        const lines = md.split('\n');
+        for (let i = 0; i < line; i++) {
+          pos += lines[i].length + 1;
+        }
+        textarea.setSelectionRange(pos, pos);
+        // Scroll first, then focus with preventScroll: focusing a textarea
+        // reveals the caret and may scroll its scrollport, which would fight
+        // the explicit scroll (and WKWebView can do so asynchronously).
+        scrollTextareaToLine(line);
+        try { textarea.focus({ preventScroll: true }); } catch (e) { textarea.focus(); }
+        markExplicitTocTarget(id);
+        return true;
+      }
+      return false;
+    }
+
     const target = document.getElementById(id) || document.getElementById(raw);
     if (!target) return false;
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (history && history.replaceState) history.replaceState(null, '', '#' + encodeURIComponent(target.id));
+    // Highlight the clicked entry immediately (explicit user intent) instead
+    // of relying on the scroll-spy to observe where the scroll landed, and
+    // scroll with the same measured math used elsewhere (a plain
+    // scrollIntoView leaves the final geometry up to the engine).
+    markExplicitTocTarget(id);
+    scrollToTocTarget(id);
+    // Reflect the jump in the URL; harmless if the engine refuses on file://.
+    try {
+      if (history && history.replaceState) history.replaceState(null, '', '#' + encodeURIComponent(target.id));
+    } catch (e) {}
     return true;
   }
 
-  // ── YAML frontmatter rendering ──
   // Renders frontmatter as plain text (no syntax colors) but resolves
   // block scalar indicators per YAML semantics:
   //   ">"  folded block scalar  → indicator hidden; following indented lines
@@ -451,7 +498,6 @@ let isSource = false;
     let i = 0;
     while (i < lines.length) {
       const line = lines[i];
-      // key: value
       const m = line.match(/^(\s*)([^:]+?)(\s*:\s*)(.*)$/);
       if (m && m[2].indexOf('#') !== 0) {
         const indent = m[1];
@@ -461,7 +507,6 @@ let isSource = false;
         if (bm) {
           const style = bm[1];      // '>' folded, '|' literal
           const chomp = bm[2] || ''; // '' clip, '-' strip, '+' keep
-          // Collect following more-indented lines as the scalar content.
           const block = [];
           const keyIndentLen = indent.length;
           let baseIndent = null;
@@ -506,7 +551,6 @@ let isSource = false;
       }
       text = parts.join('');
     } else {
-      // Literal: newlines preserved as-is
       text = lines.join('\n');
     }
     // Chomping: '-' strip trailing newlines, '+' keep all, default clip to one
@@ -515,7 +559,6 @@ let isSource = false;
     return text.replace(/\n+$/, '') + '\n';
   }
 
-  // ── Markdown syntax highlighting ──
   function highlightInlineMarkdown(line) {
     let h = escHtml(line);
     h = h.replace(/^(#{1,6})(\s)/, '<span class="syn-heading">$1</span>$2');
@@ -570,8 +613,22 @@ let isSource = false;
     return out.join('\n');
   }
 
+  // Cached text and per-logical-line start offsets of the highlight layer;
+  // the source-mode geometry code uses them to locate a line inside the <pre>
+  // (whose rendered text is HTML-escaped, so character offsets differ from
+  // the textarea's value).
+  let _sourceLayerText = '';
+  let _sourceLineStarts = null;
+
   function syncHighlight() {
-    document.getElementById('highlightLayer').innerHTML = highlightMarkdown(document.getElementById('textarea').value) + '\n';
+    const layer = document.getElementById('highlightLayer');
+    layer.innerHTML = highlightMarkdown(document.getElementById('textarea').value) + '\n';
+    _sourceLayerText = layer.textContent;
+    const starts = [0];
+    for (let i = 0; i < _sourceLayerText.length; i++) {
+      if (_sourceLayerText[i] === '\n') starts.push(i + 1);
+    }
+    _sourceLineStarts = starts;
   }
 
   function scheduleHighlightSync() {
@@ -579,7 +636,6 @@ let isSource = false;
     highlightTimer = setTimeout(syncHighlight, 120);
   }
 
-  // ── Page width control ──
   function setPageWidth(w) {
     const page = document.getElementById('page');
     page.style.setProperty('--page-width', w + 'px');
@@ -591,7 +647,6 @@ let isSource = false;
     if (next < 360) next = 360;
     if (next > 2000) next = 2000;
     setPageWidth(next);
-    // Notify Python to persist
     if (window.pywebview && window.pywebview.api) window.pywebview.api.save_page_width(next);
   }
   function resetPageWidth() {
@@ -606,7 +661,6 @@ let isSource = false;
     if (window.pywebview && window.pywebview.api) window.pywebview.api.close_window();
   }
   async function showPreferences() {
-    // Show an informational modal about the app
     const body = document.getElementById('modalBody');
     let version = '—';
     try {
@@ -648,30 +702,25 @@ let isSource = false;
     const snippets = files.map(f => `![${f.name}](${f.path || f.name})`).join('\n');
     insertMarkdownSnippet('\n' + snippets + '\n');
     // Switch back to rendered view so the user sees the image immediately
+    // (renderMarkdown already rebuilds the TOC and scroll-spy).
     if (isSource) {
       isSource = false;
       renderMarkdown(getCurrentMarkdown(), document.getElementById('content')).then(() => {
         updateView();
-        buildToc(document.getElementById('content'));
       });
     }
   }
   function exportHTML() {
     const title = filePath && filePath !== 'Untitled.md' ? filePath.split('/').pop().replace(/\.[^.]+$/, '') : 'Untitled';
-    // Clone the rendered content and clean up editor-internal attributes
     const clone = document.getElementById('content').cloneNode(true);
-    // Remove editor-only elements
     clone.querySelectorAll('.frontmatter-toggle, .colgroup, colgroup').forEach(el => el.remove());
-    // Strip contenteditable and data-* attributes from all elements
     clone.querySelectorAll('*').forEach(el => {
       el.removeAttribute('contenteditable');
       el.removeAttribute('spellcheck');
-      // Remove data-* attributes
       Array.from(el.attributes).forEach(attr => {
         if (attr.name.startsWith('data-')) el.removeAttribute(attr.name);
       });
     });
-    // Get the CSS to inline
     const styles = document.querySelector('link[href*="styles.css"]') ? '<link rel="stylesheet" href="styles.css">' : '';
     const html = '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>' + escHtml(title) + '</title>\n' +
       '<style>\n' +
@@ -697,7 +746,6 @@ let isSource = false;
   }
   function printDocument() { window.print(); }
 
-  // ── File Properties Modal ──
   async function copyTextToClipboard(text) {
     if (!text || text === '-') return false;
     try {
@@ -772,7 +820,6 @@ let isSource = false;
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  // ── Table column balancing + drag-resize ──
   function balanceTableColumns(container) {
     const tables = container.querySelectorAll('table');
     const pageWidth = parseInt(getComputedStyle(document.getElementById('page')).getPropertyValue('--page-width').trim()) || 720;
@@ -833,7 +880,6 @@ let isSource = false;
 
   // Allow dragging a column's right border to resize it; the space taken/given
   // is borrowed from the adjacent column so the table width stays constant.
-  // Highlight (or clear) every cell in a given column, across all rows.
   function setColumnEdge(table, colIndex, on) {
     for (let r = 0; r < table.rows.length; r++) {
       const cells = table.rows[r].cells;
@@ -937,7 +983,6 @@ let isSource = false;
     // Preload turndown.js in background (non-blocking) so it's ready
     // when the user first toggles to source mode.
     ensureTurndown();
-    // Preload mermaid.min.js in background if the document contains diagrams.
     if (content.includes('```mermaid') || content.includes('graph ') || content.includes('sequenceDiagram')) {
       ensureMermaid();
     }
@@ -961,7 +1006,6 @@ let isSource = false;
     discard.addEventListener('click', (e) => {
       e.preventDefault();
       if (window.pywebview && window.pywebview.api) window.pywebview.api.discard_draft();
-      // Reload the original file content
       if (window.pywebview && window.pywebview.api) {
         window.pywebview.api.get_initial_content().then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh));
       }
@@ -977,331 +1021,301 @@ let isSource = false;
     }
   }
 
-  // ── Cursor sync: rendered → source ──
-  // Strategy: find the block element (p, h1, li, etc.) containing the cursor,
-  // get its text, search for it in markdown, then apply cursor offset within the block.
-  function syncToSource() {
-    const content = document.getElementById('content');
-    const textarea = document.getElementById('textarea');
-    const md = textarea.value;
+  // ── TOC-based position sync ──
+  // When toggling between source and rendered modes, instead of trying to
+  // map the exact cursor position (which is fragile), we use the currently
+  // active TOC entry as the anchor point and scroll to that heading.
+
+  function getActiveTocTarget() {
+    const toc = document.getElementById('tocSidebar');
+    if (!toc) return null;
+    const active = toc.querySelector('a.toc-active');
+    return active ? active.getAttribute('data-target') : null;
+  }
+
+  // The heading is "current" when its top is at/above this band below the
+  // viewport top. Used by both the rendered-mode scroll-spy and the
+  // source-mode reference line so the two modes agree on the active heading.
+  const TOC_SPY_BAND = 80;
+
+  // The heading the user explicitly clicked (or that a mode switch scrolled
+  // to). While set, the scroll-spy keeps its hands off the highlight, so the
+  // entry the user chose stays highlighted even when the landing geometry
+  // disagrees (e.g. a heading near the document end that cannot reach the
+  // top of the viewport). Cleared as soon as the user scrolls.
+  let explicitTocTarget = null;
+  // The scrollTop our own code last set programmatically; used by
+  // scheduleTocSync() to tell programmatic scrolls from user-initiated ones.
+  let lastProgrammaticScrollTop = -1;
+
+  function setTocActive(headingId) {
+    const toc = document.getElementById('tocSidebar');
+    if (!toc) return;
+    toc.querySelectorAll('a').forEach((a) => {
+      a.classList.toggle('toc-active', a.getAttribute('data-target') === headingId);
+    });
+  }
+
+  function markExplicitTocTarget(headingId) {
+    explicitTocTarget = headingId || null;
+    if (explicitTocTarget) setTocActive(headingId);
+  }
+
+  // Place the caret at the very start of a rendered heading. Used before
+  // focusing the contenteditable so the browser's reveal-caret scroll points
+  // at the heading instead of the document start.
+  function placeCaretAtHeading(headingId) {
+    if (!headingId) return;
+    const h = document.getElementById(headingId);
+    if (!h) return;
     const sel = window.getSelection();
+    if (!sel) return;
+    const range = document.createRange();
+    const node = h.firstChild && h.firstChild.nodeType === Node.TEXT_NODE ? h.firstChild : h;
+    range.setStart(node, 0);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
 
-    if (!sel || sel.rangeCount === 0 || !content.contains(sel.anchorNode)) {
-      textarea.setSelectionRange(0, 0);
-      textarea.focus();
-      return;
-    }
-
-    const range = sel.getRangeAt(0);
-    const hasSelection = !range.collapsed;
-
-    if (hasSelection) {
-      // Selection: find start and end positions separately using block method
-      const startPos = findRenderedPosInMarkdown(content, md, range.startContainer, range.startOffset);
-      const endPos = findRenderedPosInMarkdown(content, md, range.endContainer, range.endOffset);
-      if (startPos >= 0 && endPos >= 0 && endPos >= startPos) {
-        textarea.setSelectionRange(startPos, endPos);
-      } else if (startPos >= 0) {
-        textarea.setSelectionRange(startPos, startPos);
-      } else {
-        textarea.setSelectionRange(0, 0);
+  // Collect every heading line in a markdown source together with its slug,
+  // applying the SAME duplicate-suffix rule as applyHeadingAnchors() uses for
+  // the rendered DOM ("foo", "foo-1", "foo-2"). Without this, the source-side
+  // lookup produced the plain slug for repeated headings while the rendered
+  // heading had a -N suffix, so TOC clicks and highlight sync missed (or hit
+  // the wrong copy of) duplicate headings. Fence-aware: heading-looking lines
+  // inside ``` fenced code blocks are ignored.
+  function collectMarkdownHeadingSlugs(md) {
+    const slugs = [];
+    const used = new Map();
+    const lines = md.split('\n');
+    let inFence = false;
+    let fenceMarker = '';
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const fm = line.match(/^[ \t]*(`{3,}|~{3,})/);
+      if (fm) {
+        if (!inFence) { inFence = true; fenceMarker = fm[1][0]; }
+        else if (fm[1][0] === fenceMarker) { inFence = false; }
+        continue;
       }
+      if (inFence) continue;
+      const m = line.match(/^(#{1,6})\s+(.+)$/);
+      if (!m) continue;
+      let slug = slugifyHeading(m[2].trim().replace(/\s+#+\s*$/, ''));
+      const count = used.get(slug) || 0;
+      used.set(slug, count + 1);
+      if (count > 0) slug = slug + '-' + count;
+      slugs.push({ line: i, slug });
+    }
+    return slugs;
+  }
+
+  function findHeadingLineInMarkdown(md, headingId) {
+    if (!headingId) return -1;
+    const found = collectMarkdownHeadingSlugs(md).find((s) => s.slug === headingId);
+    return found ? found.line : -1;
+  }
+
+  // ── Source-mode geometry ──
+  // All source-mode positioning is based on the browser's ACTUAL rendered
+  // geometry of the highlight layer (Range.getClientRects), never on
+  // line-number × line-height math. The math is invalid for two reasons:
+  //  1. The rendered line pitch can differ from CSS line-height (native
+  //     text rendering / sub-pixel rounding), an error that accumulates
+  //     linearly with depth.
+  //  2. Long lines WRAP under white-space:pre-wrap, so a logical line is
+  //     several visual lines tall; a "top = lineN × pitch" formula lands
+  //     below the real heading (this is why the caret was correct — the
+  //     browser placed it at the true geometry — but the content was not at
+  //     the top of the viewport).
+
+  // Top (in the scroll-wrap's content coordinates) of the given logical line
+  // of the highlight layer — i.e. the scrollTop that puts that line at the
+  // very top of the viewport. Empty lines return null.
+  function sourceLineTop(line) {
+    const layer = document.getElementById('highlightLayer');
+    const wrap = document.querySelector('.scroll-wrap');
+    if (!layer || !wrap || !_sourceLineStarts) return null;
+    const start = _sourceLineStarts[line];
+    if (start === undefined) return null;
+    const nl = _sourceLayerText.indexOf('\n', start);
+    const end = nl === -1 ? _sourceLayerText.length : nl;
+    if (end === start) return null; // empty line
+    const range = findRangeBetween(layer, start, end);
+    if (!range) return null;
+    const rects = range.getClientRects();
+    if (!rects || !rects.length) return null;
+    const wrapRect = wrap.getBoundingClientRect();
+    return rects[0].top - wrapRect.top + wrap.scrollTop;
+  }
+
+  // Scroll the source view so that the given logical line sits `offset`
+  // pixels below the top of the viewport, using its measured real position.
+  function scrollTextareaToLine(line, offset = 12) {
+    if (line < 0) return;
+    const wrap = document.querySelector('.scroll-wrap');
+    const top = sourceLineTop(line);
+    if (top === null) return;
+    wrap.scrollTo({ top: Math.max(0, top - offset), behavior: 'auto' });
+    lastProgrammaticScrollTop = wrap.scrollTop;
+  }
+
+  function scrollToTocTarget(headingId) {
+    if (!headingId) return;
+    const target = document.getElementById(headingId);
+    if (!target) return;
+    const wrap = document.querySelector('.scroll-wrap');
+    if (wrap) {
+      // Scroll the wrap directly so the heading lands near the top — more
+      // reliable than scrollIntoView inside the embedded WebView.
+      const top = target.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - 20;
+      wrap.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+      lastProgrammaticScrollTop = wrap.scrollTop;
     } else {
-      // No selection: find block element containing cursor
-      const info = getBlockInfo(content, range);
-      if (!info || !info.text) {
-        textarea.setSelectionRange(0, 0);
-        textarea.focus();
-        return;
-      }
-
-      // Search for block text in markdown
-      const blockPos = findInMarkdown(md, info.text);
-
-      if (blockPos >= 0) {
-        // Position cursor at blockPos + offset within block
-        // Need to account for markdown syntax at the start of the block
-        const afterBlock = md.substring(blockPos);
-        const syntaxLen = countLeadingSyntax(afterBlock, info.text);
-        const cursorPos = blockPos + syntaxLen + info.offset;
-        textarea.setSelectionRange(cursorPos, cursorPos);
-      } else {
-        // Fallback: search for a snippet around cursor
-        const snipStart = Math.max(0, info.offset - 15);
-        const snipEnd = Math.min(info.text.length, info.offset + 15);
-        const snippet = info.text.substring(snipStart, snipEnd);
-        const snipPos = findInMarkdown(md, snippet);
-        if (snipPos >= 0) {
-          textarea.setSelectionRange(snipPos + (info.offset - snipStart), snipPos + (info.offset - snipStart));
-        } else {
-          textarea.setSelectionRange(0, 0);
-        }
-      }
+      target.scrollIntoView({ behavior: 'auto', block: 'start' });
     }
-
-    textarea.focus();
-    scrollToTextareaCursor(textarea, md);
   }
 
-  // Find a rendered position's corresponding markdown position
-  // Uses block element text + cursor offset within block
-  function findRenderedPosInMarkdown(root, md, node, offset) {
-    // Find block element containing this node
-    let el = node;
-    if (el.nodeType === Node.TEXT_NODE) el = el.parentElement;
-    const blockTags = 'P,H1,H2,H3,H4,H5,H6,LI,BLOCKQUOTE,PRE,TD,TH,DIV,DD,DT';
-    while (el && el !== root) {
-      if (el.matches && el.matches(blockTags)) break;
-      el = el.parentElement;
-    }
-    if (!el || el === root) return -1;
-
-    const blockText = el.textContent;
-    if (!blockText) return -1;
-
-    // Calculate offset within block's text content
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
-    let cursorInBlock = 0;
-    let found = false;
-    let tn;
-    while (tn = walker.nextNode()) {
-      if (tn === node) {
-        cursorInBlock += offset;
-        found = true;
-        break;
-      }
-      cursorInBlock += tn.textContent.length;
-    }
-    if (!found) return -1;
-
-    // Search for block text in markdown
-    const blockPos = findInMarkdown(md, blockText);
-    if (blockPos < 0) return -1;
-
-    // Count leading markdown syntax before block text
-    const afterBlock = md.substring(blockPos);
-    const syntaxLen = countLeadingSyntax(afterBlock, blockText);
-
-    return blockPos + syntaxLen + cursorInBlock;
-  }
-
-  // Get the block element and cursor offset within it
-  function getBlockInfo(root, range) {
-    let el = range.startContainer;
-    if (el.nodeType === Node.TEXT_NODE) el = el.parentElement;
-
-    // Walk up to find block-level element
-    const blockTags = 'P,H1,H2,H3,H4,H5,H6,LI,BLOCKQUOTE,PRE,TD,TH,DIV,DD,DT';
-    while (el && el !== root) {
-      if (el.matches && el.matches(blockTags)) break;
-      el = el.parentElement;
-    }
-    if (!el || el === root) return null;
-
-    // Get text content of the block
-    const blockText = el.textContent;
-    if (!blockText) return null;
-
-    // Calculate cursor offset within the block's text content
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
-    let offset = 0;
-    let found = false;
-    let tn;
-    while (tn = walker.nextNode()) {
-      if (tn === range.startContainer) {
-        offset += range.startOffset;
-        found = true;
-        break;
-      }
-      offset += tn.textContent.length;
-    }
-
-    return { text: blockText, offset: found ? offset : 0, element: el };
-  }
-
-  // Count leading markdown syntax characters before the actual text
-  function countLeadingSyntax(mdSnippet, targetText) {
-    // The md snippet starts with the block text, possibly prefixed by syntax
-    // e.g., "# Hello" → targetText is "Hello", syntax is "# " (2 chars)
-    // e.g., "- item" → targetText is "item", syntax is "- " (2 chars)
-    // e.g., "**bold**" → targetText is "bold", syntax is "**" (2 chars)
-    let i = 0;
-    while (i < mdSnippet.length && i < mdSnippet.length - targetText.length + 1) {
-      // Check if the rest of mdSnippet from position i matches targetText
-      const rest = mdSnippet.substring(i);
-      if (rest.startsWith(targetText) || textMatches(rest, targetText)) {
-        return i;
-      }
-      i++;
-    }
-    return 0;
-  }
-
-  // Check if two texts match (whitespace-normalized)
-  function textMatches(a, b) {
-    return a.replace(/\s+/g, ' ').trim().startsWith(b.replace(/\s+/g, ' ').trim());
-  }
-
-  // Search for text in markdown, trying exact then normalized match
-  function findInMarkdown(md, text) {
-    if (!text) return -1;
-    // Exact search
-    let pos = md.indexOf(text);
-    if (pos >= 0) return pos;
-    // Normalized: collapse whitespace
-    const normText = text.replace(/\s+/g, ' ').trim();
-    if (normText.length < 3) return -1;
-    // Build normalized md with position map
-    const { norm, map } = normalizeForSearch(md);
-    let npos = norm.indexOf(normText);
-    if (npos < 0) npos = norm.lastIndexOf(normText);
-    if (npos >= 0 && npos < map.length) {
-      return map[npos];
-    }
-    return -1;
-  }
-
-  function normalizeForSearch(text) {
-    let norm = '';
-    let map = [];
-    for (let i = 0; i < text.length; i++) {
-      if (/\s/.test(text[i])) {
-        if (norm.length === 0 || norm[norm.length - 1] !== ' ') {
-          norm += ' ';
-          map.push(i);
-        }
-      } else {
-        norm += text[i];
-        map.push(i);
-      }
-    }
-    return { norm, map };
-  }
-
-  // ── Cursor sync: source → rendered ──
-  // Strategy: get the line text at cursor in textarea, search for it in rendered content
-  function syncToRendered() {
-    const content = document.getElementById('content');
+  function syncPositionToSource() {
     const textarea = document.getElementById('textarea');
     const md = textarea.value;
-    const cursorPos = textarea.selectionStart;
-    const selLen = textarea.selectionEnd - textarea.selectionStart;
-
-    if (cursorPos === 0 && selLen === 0) {
-      content.focus();
-      return;
+    const headingId = getActiveTocTarget();
+    const line = findHeadingLineInMarkdown(md, headingId);
+    if (line >= 0) {
+      const lines = md.split('\n');
+      let pos = 0;
+      for (let i = 0; i < line; i++) {
+        pos += lines[i].length + 1;
+      }
+      textarea.setSelectionRange(pos, pos);
+      scrollTextareaToLine(line);
     }
+    try { textarea.focus({ preventScroll: true }); } catch (e) { textarea.focus(); }
+    updateSourceTocHighlight();
+  }
 
-    // Get the line text at cursor position in markdown
-    const lineStart = md.lastIndexOf('\n', cursorPos - 1) + 1;
-    const lineEnd = md.indexOf('\n', cursorPos);
-    const lineText = md.substring(lineStart, lineEnd >= 0 ? lineEnd : md.length);
-    const cursorInLine = cursorPos - lineStart;
+  // Called after switching to rendered mode: scroll the rendered content to
+  // the heading that was active in the TOC. The heading id is captured by the
+  // caller BEFORE re-rendering, because renderMarkdown() -> buildToc() rebuilds
+  // the TOC and clears the active class.
+  function syncPositionToRendered(headingId) {
+    const content = document.getElementById('content');
+    if (headingId === undefined) headingId = getActiveTocTarget();
+    scrollToTocTarget(headingId);
+    // Place the caret at the target heading BEFORE focusing: focusing a
+    // contenteditable reveals the caret and scrolls it into view, and with
+    // no caret at the target the browser scrolls back to the document start
+    // (observed in both WKWebView and Blink).
+    placeCaretAtHeading(headingId);
+    try { content.focus({ preventScroll: true }); } catch (e) { content.focus(); }
+    // Focus can trigger an async reveal-caret scroll; run the final
+    // positioning after it so the heading always ends up at the top.
+    scrollToTocTarget(headingId);
+    markExplicitTocTarget(headingId);
+    ensureTocActiveVisible();
+  }
 
-    // Strip markdown syntax from line text to get plain text
-    const plainLine = stripMarkdownSyntax(lineText);
-    if (!plainLine) {
-      content.focus();
-      return;
+  // ── TOC active-state tracking & auto-reveal ──
+  // In source mode the rendered headings don't exist, so the TOC highlight is
+  // derived from the markdown itself: the most recent heading whose REAL
+  // rendered position (measured from the highlight layer) is at/above the top
+  // band of the viewport. In both modes the TOC sidebar auto-scrolls to keep
+  // the active entry visible, but only when that entry has scrolled outside
+  // the TOC's visible range.
+
+  // The slug of the heading that defines "where the user is" in source mode:
+  // the heading under the caret when the caret is inside the visible viewport
+  // (so moving the caret tracks the outline), otherwise the last heading
+  // whose measured top is within TOC_SPY_BAND of the viewport top. Both
+  // cases use the highlight layer's real rendered geometry, never line math.
+  function sourceActiveHeadingSlug() {
+    const textarea = document.getElementById('textarea');
+    const wrap = document.querySelector('.scroll-wrap');
+    if (!textarea || !wrap) return null;
+    const headings = collectMarkdownHeadingSlugs(textarea.value);
+    if (headings.length === 0) return null;
+    const lastHeadingAtOrAbove = (refLine) => {
+      let active = null;
+      for (const s of headings) {
+        if (s.line > refLine) break;
+        active = s.slug;
+      }
+      return active;
+    };
+    // Caret inside the visible viewport → follow the caret's heading.
+    if (document.activeElement === textarea) {
+      const pos = textarea.selectionStart;
+      const cursorLine = (textarea.value.slice(0, pos).match(/\n/g) || []).length;
+      const cursorTop = sourceLineTop(cursorLine);
+      if (cursorTop !== null && cursorTop >= wrap.scrollTop && cursorTop <= wrap.scrollTop + wrap.clientHeight) {
+        return lastHeadingAtOrAbove(cursorLine);
+      }
     }
-
-    // Search for plainLine in rendered text content
-    const fullText = content.textContent;
-    const { norm, map } = normalizeForSearch(fullText);
-    const plainNorm = plainLine.replace(/\s+/g, ' ').trim();
-
-    let npos = norm.indexOf(plainNorm);
-    if (npos < 0) {
-      // Try last occurrence
-      npos = norm.lastIndexOf(plainNorm);
+    // Otherwise the last heading at/above the top band of the viewport.
+    const limit = wrap.scrollTop + TOC_SPY_BAND;
+    let active = null;
+    for (const s of headings) {
+      const t = sourceLineTop(s.line);
+      if (t === null) continue;
+      if (t <= limit) active = s.slug;
+      else break;
     }
-    if (npos < 0 && plainNorm.length > 5) {
-      // Try shorter
-      npos = norm.indexOf(plainNorm.slice(0, Math.floor(plainNorm.length / 2)));
-    }
+    return active;
+  }
 
-    if (npos < 0) {
-      content.focus();
-      return;
-    }
-
-    // Calculate the rendered text offset
-    const renderedOffset = map[npos] + cursorInLine;
-
-    // Find DOM range at this offset
-    let range;
-    if (selLen > 0) {
-      // Selection: find both start and end
-      const selEndInLine = cursorInLine + selLen;
-      const renderedEnd = map[npos] + selEndInLine;
-      range = findRangeBetween(content, renderedOffset, renderedEnd);
+  // Scroll the TOC panel so the active entry is visible — only when it has
+  // scrolled outside the TOC's visible range (up or down).
+  function ensureTocActiveVisible() {
+    const toc = document.getElementById('tocSidebar');
+    if (!toc || toc.classList.contains('hidden')) return;
+    const active = toc.querySelector('a.toc-active');
+    if (!active) return;
+    const tocTop = toc.getBoundingClientRect().top;
+    const style = getComputedStyle(toc);
+    const padTop = parseFloat(style.paddingTop) || 0;
+    const padBottom = parseFloat(style.paddingBottom) || 0;
+    const viewTop = tocTop + padTop;
+    const viewBottom = tocTop + toc.clientHeight - padBottom;
+    const actTop = active.getBoundingClientRect().top;
+    const actBottom = active.getBoundingClientRect().bottom;
+    if (actTop >= viewTop && actBottom <= viewBottom) return;
+    if (actTop < viewTop) {
+      toc.scrollTo({ top: Math.max(0, toc.scrollTop - (viewTop - actTop) - 4), behavior: 'smooth' });
     } else {
-      range = findRangeAtOffset(content, renderedOffset);
-    }
-
-    if (!range) {
-      // Fallback: try just the block start
-      range = findRangeAtOffset(content, map[npos]);
-    }
-
-    if (!range) { content.focus(); return; }
-
-    const newSel = window.getSelection();
-    newSel.removeAllRanges();
-    newSel.addRange(range);
-    content.focus();
-
-    // Scroll into view
-    const rect = range.getBoundingClientRect();
-    if (rect) {
-      const wrap = document.querySelector('.scroll-wrap');
-      const wrapRect = wrap.getBoundingClientRect();
-      if (rect.top < wrapRect.top + 60 || rect.bottom > wrapRect.bottom) {
-        wrap.scrollTo({ top: wrap.scrollTop + rect.top - wrapRect.top - 80, behavior: 'auto' });
-      }
+      toc.scrollTo({ top: toc.scrollTop + (actBottom - viewBottom) + 4, behavior: 'smooth' });
     }
   }
 
-  function stripMarkdownSyntax(text) {
-    return text
-      .replace(/^#{1,6}\s*/, '')
-      .replace(/^[-*+]\s+/, '')
-      .replace(/^>\s*/, '')
-      .replace(/^\d+\.\s+/, '')
-      .replace(/^\|/, '')
-      .replace(/\*\*(.+?)\*\*/g, '$1')
-      .replace(/\*(.+?)\*/g, '$1')
-      .replace(/__(.+?)__/g, '$1')
-      .replace(/_(.+?)_/g, '$1')
-      .replace(/~~(.+?)~~/g, '$1')
-      .replace(/`([^`]+)`/g, '$1')
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-      .replace(/!\[([^\]]*)\]\([^)]*\)/g, '$1')
-      .replace(/\|/g, ' ')
-      .trim();
+  function updateSourceTocHighlight() {
+    if (!isSource) return;
+    if (explicitTocTarget) return; // a click is in flight; don't clobber it
+    const toc = document.getElementById('tocSidebar');
+    if (!toc) return;
+    const slug = sourceActiveHeadingSlug();
+    let found = false;
+    toc.querySelectorAll('a').forEach(a => {
+      const on = slug !== null && a.getAttribute('data-target') === slug;
+      a.classList.toggle('toc-active', on);
+      if (on) found = true;
+    });
+    if (found) ensureTocActiveVisible();
   }
 
-  function scrollToTextareaCursor(textarea, md) {
-    const lines = md.substring(0, textarea.selectionStart).split('\n').length;
-    document.querySelector('.scroll-wrap').scrollTo({ top: Math.max(0, (lines - 1) * 25 - 100), behavior: 'auto' });
+  // Fallback: derive the target heading directly from the current source
+  // position, independent of TOC highlight state.
+  function getSourceActiveHeading() {
+    return sourceActiveHeadingSlug();
   }
 
-  // Find DOM range at a character offset in contenteditable
-  function findRangeAtOffset(root, offset) {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
-    let current = 0;
-    let node;
-    while (node = walker.nextNode()) {
-      const len = node.textContent.length;
-      if (current + len >= offset) {
-        const range = document.createRange();
-        range.setStart(node, Math.min(offset - current, len));
-        range.collapse(true);
-        return range;
-      }
-      current += len;
-    }
-    return null;
+  let sourceTocHighlightRaf = null;
+  function scheduleSourceTocHighlight() {
+    if (!isSource) return;
+    if (sourceTocHighlightRaf) return;
+    sourceTocHighlightRaf = requestAnimationFrame(() => {
+      sourceTocHighlightRaf = null;
+      updateSourceTocHighlight();
+    });
   }
 
   function findRangeBetween(root, startOff, endOff) {
@@ -1322,7 +1336,6 @@ let isSource = false;
     return range;
   }
 
-  // ── View toggle ──
   async function toggleView() {
     if (!isSource) {
       // rendered → source: capture cursor, convert, position
@@ -1338,9 +1351,14 @@ let isSource = false;
       syncHighlight();
       isSource = true;
       updateView();
-      syncToSource();
+      syncPositionToSource();
     } else {
-      // source → rendered: capture cursor, convert, position
+      // source → rendered: re-render if needed, then scroll to TOC position.
+      // Capture the active TOC target BEFORE re-rendering: renderMarkdown()
+      // → buildToc() rebuilds the TOC and clears the active class. Falls
+      // back to deriving the target from the current source position so
+      // reverse positioning works even when no TOC entry is highlighted.
+      const headingId = getActiveTocTarget() || getSourceActiveHeading();
       const md = document.getElementById('textarea').value;
       if (contentHash(md) !== lastRenderedHash) {
         await renderMarkdown(md, document.getElementById('content'));
@@ -1348,7 +1366,7 @@ let isSource = false;
       renderedDirty = false;
       isSource = false;
       updateView();
-      syncToRendered();
+      syncPositionToRendered(headingId);
     }
   }
 
@@ -1372,7 +1390,6 @@ let isSource = false;
     showModeIndicator();
   }
 
-  // ── Mode indicator (semi-transparent "Preview" / "Source" label) ──
   let _modeIndicatorTimer = null;
   function showModeIndicator() {
     const el = document.getElementById('modeIndicator');
@@ -1407,10 +1424,8 @@ let isSource = false;
           '<div class="welcome-tip">' + tips + '</div>' +
           '<div class="welcome-tip">' + toggleTip + '</div>';
         content.parentNode.appendChild(overlay);
-        // Clicking anywhere on the content area focuses the editor and dismisses overlay
         overlay.addEventListener('click', () => {
           content.focus();
-          // Place cursor at the very beginning
           const range = document.createRange();
           range.selectNodeContents(content);
           range.collapse(true);
@@ -1433,7 +1448,6 @@ let isSource = false;
     }
   }
 
-  // ── Save ──
   function getCurrentMarkdown() {
     if (isSource) return document.getElementById('textarea').value;
     if (!renderedDirty) return document.getElementById('textarea').value;
@@ -1457,7 +1471,6 @@ let isSource = false;
     }
     const markdown = getCurrentMarkdown();
     if (!filePath || filePath === 'Untitled.md') {
-      // Untitled document — show Save As dialog
       await saveAsFile();
       return;
     }
@@ -1548,7 +1561,6 @@ let isSource = false;
     }
   }
 
-  // ── Find ──
   let findState = { query: '', matches: [], currentIdx: -1, scrollTop: 0 };
 
   function openFindBar() {
@@ -1558,7 +1570,6 @@ let isSource = false;
     // Push content down so the bar doesn't overlap
     document.querySelector('.scroll-wrap').style.top = '40px';
     input.focus();
-    // Pre-fill with current selection
     const sel = window.getSelection().toString();
     if (sel) { input.value = sel; doFind(); }
     else { input.select(); }
@@ -1571,7 +1582,6 @@ let isSource = false;
     clearFindHighlights();
     document.getElementById('findCount').textContent = '';
     findState = { query: '', matches: [], currentIdx: -1, scrollTop: 0 };
-    // Return focus to editor
     if (isSource) document.getElementById('textarea').focus();
     else document.getElementById('content').focus();
   }
@@ -1618,7 +1628,6 @@ let isSource = false;
       countEl.textContent = '0/0';
       findState.currentIdx = -1;
     } else {
-      // Find the match closest to the current cursor
       const cursor = textarea.selectionStart;
       let idx = 0;
       for (let i = 0; i < matches.length; i++) {
@@ -1636,12 +1645,12 @@ let isSource = false;
     const textarea = document.getElementById('textarea');
     const start = findState.matches[idx];
     const end = start + findState.query.length;
-    textarea.focus();
+    const lines = textarea.value.substring(0, start).split('\n').length; // 1-based
+    // Scroll first (leaving ~100px of context above), then select and focus:
+    // focusing reveals the caret, and a pre-scrolled caret doesn't fight it.
+    scrollTextareaToLine(lines - 1, 100);
     textarea.setSelectionRange(start, end);
-    // Scroll into view
-    const lines = textarea.value.substring(0, start).split('\n').length;
-    const lineHeight = 25;
-    document.querySelector('.scroll-wrap').scrollTo({ top: Math.max(0, (lines - 1) * lineHeight - 100), behavior: 'auto' });
+    try { textarea.focus({ preventScroll: true }); } catch (e) { textarea.focus(); }
   }
 
   function clearFindHighlights() {
@@ -1679,7 +1688,6 @@ let isSource = false;
     } else {
       findState.currentIdx = 0;
       countEl.textContent = '1/' + matches.length;
-      // Highlight current match
       highlightCurrentMatch();
     }
     updateFindButtons();
@@ -1737,7 +1745,6 @@ let isSource = false;
     document.getElementById('findPrev').disabled = !has;
   }
 
-  // Find bar events
   document.getElementById('findInput').addEventListener('input', () => { doFind(); });
   document.getElementById('findInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? findPrev() : findNext(); }
@@ -1748,7 +1755,6 @@ let isSource = false;
   document.getElementById('findPrev').addEventListener('click', findPrev);
   document.getElementById('findClose').addEventListener('click', closeFindBar);
 
-  // ── Events ──
   document.addEventListener('keydown', (e) => {
     const cmd = e.metaKey;
     if (cmd && e.key === 's') { e.preventDefault(); e.shiftKey ? saveAsFile() : saveFile(); }
@@ -1771,7 +1777,6 @@ let isSource = false;
     return /^[a-z][a-z0-9+.-]*:/i.test(href) || href.startsWith('//');
   }
 
-  // Open external links in the default browser and support in-document anchors.
   document.addEventListener('click', (e) => {
     const a = e.target.closest('a[href]');
     if (!a) return;
@@ -1841,6 +1846,12 @@ let isSource = false;
 
   document.getElementById('content').addEventListener('input', () => { renderedDirty = true; setDirty(true); schedulePythonSync(1800); dismissWelcomeOverlay(); });
   document.getElementById('textarea').addEventListener('input', () => { setDirty(true); scheduleHighlightSync(); schedulePythonSync(700); });
+  const scrollWrapEl = document.querySelector('.scroll-wrap');
+  if (scrollWrapEl) scrollWrapEl.addEventListener('scroll', scheduleTocSync, { passive: true });
+  const sourceTextarea = document.getElementById('textarea');
+  sourceTextarea.addEventListener('click', scheduleSourceTocHighlight);
+  sourceTextarea.addEventListener('keyup', scheduleSourceTocHighlight);
+  sourceTextarea.addEventListener('input', scheduleSourceTocHighlight);
   document.addEventListener('dragover', (e) => e.preventDefault());
   document.addEventListener('drop', handleImageDrop);
   window.addEventListener('resize', handleTocResize);

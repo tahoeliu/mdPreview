@@ -2,51 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundleName</key>
-	<string>mdPreview</string>
 	<key>CFBundleDisplayName</key>
 	<string>mdPreview</string>
-	<key>CFBundleIdentifier</key>
-	<string>com.workbuddy.mdpreview</string>
-	<key>CFBundleIconFile</key>
-	<string>app_icon.icns</string>
-	<key>CFBundleVersion</key>
-	<string>1.3.1</string>
-	<key>CFBundleShortVersionString</key>
-	<string>1.3.1</string>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
-	<key>CFBundleSignature</key>
-	<string>mdvw</string>
-	<key>CFBundleExecutable</key>
-	<string>markdown_viewer</string>
-	<key>CFBundleInfoDictionaryVersion</key>
-	<string>6.0</string>
-	<key>LSMinimumSystemVersion</key>
-	<string>10.13</string>
-	<key>NSHighResolutionCapable</key>
-	<true/>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<false/>
-	</dict>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
-			<key>CFBundleTypeName</key>
-			<string>Markdown Document</string>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>CFBundleTypeIconFile</key>
-			<string>doc_icon.icns</string>
-			<key>LSHandlerRank</key>
-			<string>Default</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>net.daringfireball.markdown</string>
-				<string>com.apple.traditional-mac-plain-text</string>
-			</array>
 			<key>CFBundleTypeExtensions</key>
 			<array>
 				<string>md</string>
@@ -55,19 +15,59 @@
 				<string>mkd</string>
 				<string>mkdown</string>
 			</array>
+			<key>CFBundleTypeIconFile</key>
+			<string>doc_icon.icns</string>
+			<key>CFBundleTypeName</key>
+			<string>Markdown Document</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Default</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>net.daringfireball.markdown</string>
+				<string>com.apple.traditional-mac-plain-text</string>
+			</array>
 		</dict>
 	</array>
+	<key>CFBundleExecutable</key>
+	<string>markdown_viewer</string>
+	<key>CFBundleIconFile</key>
+	<string>app_icon.icns</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.workbuddy.mdpreview</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>mdPreview</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.3.3</string>
+	<key>CFBundleSignature</key>
+	<string>mdvw</string>
+	<key>CFBundleVersion</key>
+	<string>1.3.3</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>10.13</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<false/>
+	</dict>
+	<key>NSHighResolutionCapable</key>
+	<true/>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
-			<key>UTTypeIdentifier</key>
-			<string>com.workbuddy.markdown</string>
-			<key>UTTypeDescription</key>
-			<string>Markdown Document</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.text</string>
 			</array>
+			<key>UTTypeDescription</key>
+			<string>Markdown Document</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.workbuddy.markdown</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
