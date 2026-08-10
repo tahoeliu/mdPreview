@@ -39,7 +39,7 @@
 
 **Get mdPreview in 3 simple steps:**
 
-[📥 **Download mdPreview.dmg**](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg) *(14MB)*
+[📥 **Download mdPreview.dmg**](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg) *(15MB)*
 
 1. Click the download button above to get the `.dmg` file
 2. Open the `.dmg` → drag **mdPreview** to your **Applications** folder
@@ -111,7 +111,7 @@ Now every `.md` file will open automatically with mdPreview!
 [![Python Version](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
-[![Download](https://img.shields.io/badge/download-14MB-orange.svg)](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg)
+[![Download](https://img.shields.io/badge/download-15MB-orange.svg)](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg)
 
 **⭐ Star this repo if you find it useful!**
 
