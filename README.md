@@ -120,6 +120,11 @@ Now every `.md` file will open automatically with mdPreview!
 - **🖱️ Double-click to Open** - Associate `.md` files with mdPreview for instant rendering
 - **⚡ Real-time Rendering** - Powered by marked.js with full Markdown support (tables, code blocks, quotes, etc.)
 - **✏️ Edit Mode** - One-click toggle to edit Markdown source directly
+- **📤 Export As** - One native dialog exports your document as **PDF, Word, PNG image, Web Page, Plain Text, or Markdown**
+- **🔤 Adjustable Text Size** - `Cmd+=` / `Cmd+-` makes text bigger or smaller in both view and edit mode
+- **🗂️ Table of Contents** - A clickable outline sidebar (`⌥⌘O`) keeps long documents easy to navigate
+- **🔖 Edited Indicator** - The window title shows "`name.md - Edited`" while you have unsaved changes
+- **🛡️ Safer Auto-Update** - Updates are verified before installing and automatically roll back if anything goes wrong
 - **⌨️ Keyboard Shortcuts** - Cmd+S to save, Cmd+E to switch edit/preview modes
 - **🎨 Minimalist Interface** - Clean, focused reading and writing experience
 - **📱 macOS Integration** - Native window, menus, file association, and WKWebView-based rendering
@@ -132,13 +137,16 @@ Now every `.md` file will open automatically with mdPreview!
 |----------|--------|
 | `⌘ + N` | New file |
 | `⌘ + S` | Save file |
+| `⌘ + ⇧ + S` | Save As (choose format) |
 | `⌘ + E` | Toggle Rendered/Source mode |
 | `⌘ + F` | Find |
 | `⌘ + G` | Find next |
 | `⌘ + ⇧ + G` | Find previous |
 | `⌘ + I` | File properties |
-| `⌘ + =` | Increase page width |
-| `⌘ + -` | Decrease page width |
+| `⌘ + =` | Bigger Text |
+| `⌘ + -` | Smaller Text |
+| `⌘ + ⌥ + O` | Toggle Table of Contents |
+| `⌘ + P` | Print |
 
 ## 📝 Supported Markdown Features
 

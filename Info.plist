@@ -27,6 +27,8 @@
 			<array>
 				<string>net.daringfireball.markdown</string>
 				<string>com.apple.traditional-mac-plain-text</string>
+				<string>public.plain-text</string>
+				<string>public.text</string>
 			</array>
 		</dict>
 	</array>
@@ -43,11 +45,11 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.3.3</string>
+	<string>1.4.0</string>
 	<key>CFBundleSignature</key>
 	<string>mdvw</string>
 	<key>CFBundleVersion</key>
-	<string>1.3.3</string>
+	<string>1.4.0</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>10.13</string>
 	<key>NSAppTransportSecurity</key>
@@ -57,26 +59,33 @@
 	</dict>
 	<key>NSHighResolutionCapable</key>
 	<true/>
-	<key>UTExportedTypeDeclarations</key>
+	<key>UTImportedTypeDeclarations</key>
 	<array>
 		<dict>
 			<key>UTTypeConformsTo</key>
 			<array>
+				<string>public.plain-text</string>
 				<string>public.text</string>
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Markdown Document</string>
 			<key>UTTypeIdentifier</key>
-			<string>com.workbuddy.markdown</string>
+			<string>net.daringfireball.markdown</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
 				<array>
 					<string>md</string>
 					<string>markdown</string>
+					<string>mdown</string>
+					<string>mkd</string>
+					<string>mkdown</string>
 				</array>
 				<key>public.mime-type</key>
-				<string>text/markdown</string>
+				<array>
+					<string>text/markdown</string>
+					<string>text/x-markdown</string>
+				</array>
 			</dict>
 		</dict>
 	</array>

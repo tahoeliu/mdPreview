@@ -3,6 +3,12 @@
 from pathlib import Path
 
 VERSION = Path('VERSION').read_text(encoding='utf-8').strip()
+# Versioning rule (user): one feature cycle keeps the same 3-part feature
+# version (e.g. 1.3.4); internal builds are distinguished by a 4th segment
+# (e.g. 1.3.4.1). CFBundleShortVersionString shows the 3-part feature version;
+# CFBundleVersion carries the full 4-part build version.
+BUILD_VERSION = VERSION
+SHORT_VERSION = '.'.join(VERSION.split('.')[:3])
 block_cipher = None
 
 a = Analysis(
@@ -16,6 +22,8 @@ a = Analysis(
         ('marked.min.js', '.'),
         ('turndown.js', '.'),
         ('mermaid.min.js', '.'),
+        ('html-docx-js.js', '.'),
+        ('html2canvas.min.js', '.'),
         ('app_icon.icns', '.'),
         ('doc_icon.icns', '.'),
     ],
@@ -100,8 +108,8 @@ app = BUNDLE(
     info_plist={
         'CFBundleName': 'mdPreview',
         'CFBundleDisplayName': 'mdPreview',
-        'CFBundleVersion': VERSION,
-        'CFBundleShortVersionString': VERSION,
+        'CFBundleVersion': BUILD_VERSION,
+        'CFBundleShortVersionString': SHORT_VERSION,
         'LSMinimumSystemVersion': '10.13',
         'NSHighResolutionCapable': True,
         'NSAppTransportSecurity': {
@@ -118,11 +126,24 @@ app = BUNDLE(
                 'LSItemContentTypes': [
                     'net.daringfireball.markdown',
                     'com.apple.traditional-mac-plain-text',
+                    'public.plain-text',
+                    'public.text',
                 ],
                 'CFBundleTypeExtensions': [
                     'md', 'markdown', 'mdown', 'mkd', 'mkdown',
                 ],
             }
+        ],
+        'UTImportedTypeDeclarations': [
+            {
+                'UTTypeIdentifier': 'net.daringfireball.markdown',
+                'UTTypeDescription': 'Markdown Document',
+                'UTTypeConformsTo': ['public.plain-text', 'public.text'],
+                'UTTypeTagSpecification': {
+                    'public.filename-extension': ['md', 'markdown', 'mdown', 'mkd', 'mkdown'],
+                    'public.mime-type': ['text/markdown', 'text/x-markdown'],
+                },
+            },
         ],
     },
 )

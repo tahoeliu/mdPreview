@@ -1,43 +1,12 @@
-# Build artifacts
-dist/
-build/
-*.app
-*.dmg
-
-# Local backups (app snapshots from the dev machine)
-backups/
-
-# Python
+# Build artifacts (PyInstaller workpath/distpath) — never commit
+build-*/
+dist-*/
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-env/
-ENV/
-
-# macOS
+*.pyc
 .DS_Store
-.AppleDouble
-.LSOverride
-._*
-
-# Logs
-*.log
-/tmp/
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Temporary files
-*.tmp
-*.bak
-*.cache
-
-# Debug files
-debug.log
-mdviewer_debug.log
+node_modules/
+build/
+dist/
+backups/
+outputs/
+doc_icon_source.png

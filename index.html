@@ -31,9 +31,9 @@
   </div>
 </div>
 
-<div class="source-hint" id="sourceHint"></div>
 <div class="mode-indicator" id="modeIndicator"></div>
 <div class="status" id="status"></div>
+<div class="edit-hint-bubble" id="editHintBubble" role="status" aria-live="polite"></div>
 <div class="update-bubble" id="updateBubble" onclick="installUpdate()" role="alert">
   <span class="update-bubble-text">Update available, click to install...</span>
   <button class="update-bubble-close" onclick="dismissUpdateBubble(event)" title="Dismiss" aria-label="Dismiss">&times;</button>
@@ -42,13 +42,15 @@
 
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal-box">
-    <div class="modal-header">File Properties</div>
+    <div class="modal-header" id="modalHeader">File Properties</div>
     <div class="modal-body" id="modalBody"></div>
-    <button class="modal-close" onclick="closeModal()">Close</button>
+    <div class="modal-actions" id="modalActions">
+      <button class="modal-close" onclick="closeModal()">Close</button>
+    </div>
   </div>
 </div>
 
-<script src="marked.min.js"></script>
-<script src="app.js"></script>
+<script src="marked.min.js" defer></script>
+<script src="app.js" defer></script>
 </body>
 </html>

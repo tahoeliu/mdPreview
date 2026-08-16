@@ -26,12 +26,22 @@ const fnSource = [
 ].join('\n');
 const { highlightMarkdown } = new Function(`${fnSource}\nreturn { highlightMarkdown };`)();
 
-for (const mb of [1, 5]) {
+// Performance gate: highlighting must stay under these budgets. These are
+// intentionally generous (CI machines vary); a real regression (e.g. an
+// accidental O(n^2) in the highlighter) blows well past them.
+const GATES = { 1: 500, 5: 3000, 10: 6000 };
+let failed = false;
+
+for (const mb of [1, 5, 10]) {
   const unit = '# Heading\n\nSome **bold** text and [link](https://example.com).\n\n```js\nconst x = "**not markdown**";\n```\n\n';
   const target = mb * 1024 * 1024;
   const text = unit.repeat(Math.ceil(target / unit.length)).slice(0, target);
   const started = Date.now();
   highlightMarkdown(text);
   const elapsed = Date.now() - started;
-  console.log(`${mb}MB source highlight: ${elapsed}ms`);
+  const gate = GATES[mb];
+  const ok = elapsed <= gate;
+  if (!ok) failed = true;
+  console.log(`${mb}MB source highlight: ${elapsed}ms ${ok ? '' : 'FAIL (gate ' + gate + 'ms)'}`);
 }
+process.exit(failed ? 1 : 0);

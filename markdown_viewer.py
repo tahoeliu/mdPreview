@@ -14,6 +14,8 @@ import hashlib
 import logging
 import webview
 
+_START_T0 = time.time()  # cold-start profiling
+
 APP_SUPPORT_DIR = os.path.expanduser('~/Library/Application Support/mdPreview')
 CONFIG_FILE = os.path.join(APP_SUPPORT_DIR, 'config.json')
 LEGACY_CONFIG_FILE = os.path.expanduser('~/.mdviewer_config.json')
@@ -102,7 +104,13 @@ def _detect_text_encoding(path):
     if raw.startswith(b'\xef\xbb\xbf'):
         return raw.decode('utf-8-sig'), 'utf-8-sig'
     if raw.startswith(b'\xff\xfe') or raw.startswith(b'\xfe\xff'):
-        return raw.decode('utf-16'), 'utf-16'
+        # A UTF-16 BOM does not guarantee valid UTF-16 content (truncated or
+        # byte-corrupted files). Fall back to the generic detectors rather than
+        # crashing the viewer when a file with a UTF-16 BOM is unreadable.
+        try:
+            return raw.decode('utf-16'), 'utf-16'
+        except UnicodeDecodeError:
+            pass
     for enc in ('utf-8', 'gb18030', 'latin-1'):
         try:
             return raw.decode(enc), enc
@@ -115,19 +123,6 @@ def _safe_read_text(path):
     """Read text file with encoding detection."""
     content, _ = _detect_text_encoding(path)
     return content
-
-
-def _create_backup(path):
-    """Create a best-effort .bak next to an existing file before replacing it."""
-    if not path or not os.path.exists(path):
-        return None
-    backup_path = path + '.bak'
-    try:
-        shutil.copy2(path, backup_path)
-        return backup_path
-    except Exception:
-        log_exception('create backup failed')
-        return None
 
 
 def _draft_key(path):
@@ -179,6 +174,11 @@ def _check_draft_for_file(file_path):
     return None
 
 
+def _edited_title(name, dirty):
+    # Append the TextEdit-style Edited marker to a window title.
+    return (name or 'Untitled.md') + (' - ' + _t('Edited', '已编辑') if dirty else '')
+
+
 def _remove_draft(path):
     try:
         draft_path = os.path.join(DRAFT_DIR, _draft_key(path) + '.md')
@@ -197,6 +197,274 @@ except ImportError:
     HAS_COCOA = False
 
 
+if HAS_COCOA:
+
+    def _find_button_stack(view, depth=0):
+        """Find the NSStackView holding an NSAlert's buttons (macOS 11+).
+
+        NSAlert lays its buttons out vertically by default. macOS 11+ keeps
+        them in an NSStackView inside the alert window; flipping that stack to
+        horizontal (a public API) yields the TextEdit-style one-row button
+        layout. Returns None on older macOS or if not found.
+        """
+        try:
+            from AppKit import NSStackView, NSButton
+            if depth > 8:
+                return None
+            subs = view.subviews()
+            for i in range(subs.count()):
+                sv = subs.objectAtIndex_(i)
+                if isinstance(sv, NSStackView):
+                    arr = sv.arrangedSubviews()
+                    has_btn = any(isinstance(arr.objectAtIndex_(j), NSButton)
+                                  for j in range(arr.count()))
+                    if has_btn:
+                        return sv
+                found = _find_button_stack(sv, depth + 1)
+                if found is not None:
+                    return found
+            return None
+        except Exception:
+            return None
+
+    class _FormatPopupActions(NSObject):
+        """Action target for the save panel's format popup: switches the panel's
+        allowed file type and renames the file field's extension."""
+
+        def initWithHolder_(self, holder):
+            self = objc.super(_FormatPopupActions, self).init()
+            self._holder = holder
+            return self
+
+        def formatChanged_(self, sender):
+            try:
+                h = self._holder or {}
+                idx = sender.indexOfSelectedItem()
+                formats = h.get('formats', [])
+                if idx < 0 or idx >= len(formats):
+                    return
+                ext = formats[idx][1]
+                panel = h.get('panel')
+                if panel is not None:
+                    try:
+                        panel.setAllowedFileTypes_([ext])
+                    except Exception:
+                        pass
+                    try:
+                        nf = panel.nameField()
+                        name = nf.stringValue() or ''
+                        base = name.rsplit('.', 1)[0] if '.' in name else name
+                        nf.setStringValue_(base + '.' + ext)
+                    except Exception:
+                        pass
+            except Exception:
+                log_exception('format popup changed failed')
+
+    def _run_format_panel(holder, base_name, formats, title):
+        """Native save panel with a format popup in its accessory view.
+
+        Formats: list of (display_label, extension_key). On OK, holder gets
+        'path' + 'format' (the extension key); on cancel, 'cancelled'; on
+        failure, 'error'. Runs the panel on the main thread and polls here
+        (15s cap) — same pattern as the other native dialogs.
+        """
+        try:
+            from AppKit import (NSSavePanel, NSPopUpButton, NSView, NSTextField,
+                                NSMakeRect, NSColor, NSOKButton)
+            from PyObjCTools import AppHelper
+
+            def _do():
+                try:
+                    panel = NSSavePanel.savePanel()
+                    panel.setTitle_(title)
+                    try:
+                        # The Save/Export action button follows the dialog title
+                        # (NSSavePanel's built-in name label is system-fixed).
+                        panel.setPrompt_(title)
+                    except Exception:
+                        pass
+                    panel.setCanCreateDirectories_(True)
+                    acc = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 320, 64))
+                    label = NSTextField.labelWithString_(_t('Format:', '格式：'))
+                    label.setFrame_(NSMakeRect(0, 22, 60, 20))
+                    label.setTextColor_(NSColor.secondaryLabelColor())
+                    popup = NSPopUpButton.alloc().initWithFrame_(NSMakeRect(60, 18, 240, 25))
+                    for f in formats:
+                        popup.addItemWithTitle_(f[0])
+                    holder['formats'] = formats
+                    holder['panel'] = panel
+                    actions = _FormatPopupActions.alloc().initWithHolder_(holder)
+                    popup.setTarget_(actions)
+                    popup.setAction_('formatChanged:')
+                    acc.addSubview_(label)
+                    acc.addSubview_(popup)
+                    panel.setAccessoryView_(acc)
+                    panel.setAllowedFileTypes_([formats[0][1]])
+                    panel.setNameFieldStringValue_(base_name + '.' + formats[0][1])
+                    if panel.runModal() == NSOKButton:
+                        url = panel.URL()
+                        if url:
+                            holder['path'] = url.path()
+                            idx = popup.indexOfSelectedItem()
+                            holder['format'] = formats[idx][1] if 0 <= idx < len(formats) else formats[0][1]
+                            return
+                    holder['cancelled'] = True
+                except Exception as e:
+                    holder['error'] = str(e)
+
+            AppHelper.callAfter(_do)
+            # Poll for a RESULT key: holder is pre-populated with 'formats' and
+            # 'panel' before the modal runs, so a non-empty check is not enough.
+            for _ in range(150):
+                if 'path' in holder or 'cancelled' in holder or 'error' in holder:
+                    break
+                time.sleep(0.1)
+            if not ('path' in holder or 'cancelled' in holder or 'error' in holder):
+                holder['cancelled'] = True
+        except Exception as e:
+            holder['error'] = str(e)
+
+    class _SavePromptActions(NSObject):
+        """Action target for the custom save panel's controls.
+
+        whereChanged_ handles the Where popup (common folders or Browse…),
+        delete/cancel/saveClicked_ record the outcome and end the modal.
+        """
+
+        def initWithHolder_(self, holder):
+            self = objc.super(_SavePromptActions, self).init()
+            self._holder = holder
+            return self
+
+        def whereChanged_(self, sender):
+            try:
+                holder = self._holder or {}
+                popup = sender
+                title = popup.titleOfSelectedItem() or ''
+                if title == _t('Browse…', '浏览…'):
+                    from AppKit import NSOpenPanel, NSOKButton
+                    panel = NSOpenPanel.openPanel()
+                    panel.setTitle_(_t('Choose Folder', '选择文件夹'))
+                    panel.setCanChooseFiles_(False)
+                    panel.setCanChooseDirectories_(True)
+                    panel.setAllowsMultipleSelection_(False)
+                    panel.setCanCreateDirectories_(True)
+                    if panel.runModal() == NSOKButton:
+                        url = panel.URL()
+                        if url:
+                            directory = url.path()
+                            holder['base_dir'] = directory
+                            popup.addItemWithTitle_(os.path.basename(directory) or directory)
+                            popup.selectItemWithTitle_(os.path.basename(directory) or directory)
+                    return
+                for t, d in holder.get('dirs', []):
+                    if t == title:
+                        holder['base_dir'] = d
+                        return
+            except Exception:
+                log_exception('save panel where action failed')
+
+        def deleteClicked_(self, sender):
+            try:
+                holder = self._holder or {}
+                holder['action'] = 'delete'
+                panel = holder.get('panel')
+                if panel is not None:
+                    panel.orderOut_(None)
+                try:
+                    from AppKit import NSApp
+                    NSApp.stopModalWithCode_(2)
+                except Exception:
+                    pass
+            except Exception:
+                log_exception('save panel delete action failed')
+
+        def cancelClicked_(self, sender):
+            try:
+                holder = self._holder or {}
+                holder['action'] = 'cancel'
+                panel = holder.get('panel')
+                if panel is not None:
+                    panel.orderOut_(None)
+                try:
+                    from AppKit import NSApp
+                    NSApp.stopModalWithCode_(0)
+                except Exception:
+                    pass
+            except Exception:
+                log_exception('save panel cancel action failed')
+
+        def saveClicked_(self, sender):
+            try:
+                holder = self._holder or {}
+                name = ''
+                directory = holder.get('base_dir') or os.path.expanduser('~/Desktop')
+                field = holder.get('name_field')
+                if field is not None:
+                    name = (field.stringValue() or '').strip()
+                if not name:
+                    name = 'untitled'
+                if not name.lower().endswith('.md'):
+                    name += '.md'
+                holder['path'] = os.path.join(directory, name)
+                holder['action'] = 'save'
+                panel = holder.get('panel')
+                if panel is not None:
+                    panel.orderOut_(None)
+                try:
+                    from AppKit import NSApp
+                    NSApp.stopModalWithCode_(1)
+                except Exception:
+                    pass
+            except Exception:
+                log_exception('save panel save action failed')
+
+
+def _pdf_to_a4_longpage(src_path, dst_path):
+    """Scale a full-height PDF page down to A4 width as ONE continuous page.
+
+    No pagination: the whole document stays on a single tall page whose width
+    matches the A4 printable width, so content flows top-to-bottom without any
+    page splits (no repeated lines, no clipped mid-line text). The source is a
+    full-height page created by WKWebView's createPDF; PDF coordinates grow
+    upward from the bottom-left, so the document top sits at source y = src_h.
+    """
+    from Foundation import NSURL
+    from Quartz import (CGPDFDocumentCreateWithURL, CGPDFDocumentGetPage,
+                        CGPDFPageGetBoxRect, CGPDFContextCreateWithURL,
+                        CGContextDrawPDFPage, CGPDFContextBeginPage,
+                        CGPDFContextEndPage, CGPDFContextClose,
+                        CGContextSaveGState, CGContextRestoreGState,
+                        CGContextScaleCTM, CGContextTranslateCTM,
+                        CGRectMake, kCGPDFMediaBox)
+    A4_W = 595.28  # A4 portrait width in points
+    M = 36.0  # side margins
+    src = CGPDFDocumentCreateWithURL(NSURL.fileURLWithPath_(src_path))
+    if src is None:
+        raise ValueError('cannot open source pdf')
+    page = CGPDFDocumentGetPage(src, 1)
+    r = CGPDFPageGetBoxRect(page, kCGPDFMediaBox)
+    src_w, src_h = r.size.width, r.size.height
+    if src_w <= 0 or src_h <= 0:
+        raise ValueError('bad source page size')
+    pw = A4_W - 2 * M
+    sx = min(1.0, pw / src_w)
+    page_h = src_h * sx + 2 * M
+    media = CGRectMake(0, 0, A4_W, page_h)
+    ctx = CGPDFContextCreateWithURL(NSURL.fileURLWithPath_(dst_path), media, None)
+    if ctx is None:
+        raise ValueError('cannot create output pdf context')
+    CGPDFContextBeginPage(ctx, None)
+    CGContextSaveGState(ctx)
+    CGContextScaleCTM(ctx, sx, sx)
+    # Source top (y = src_h) must land on the target's top margin line.
+    CGContextTranslateCTM(ctx, M / sx, (page_h - M) / sx - src_h)
+    CGContextDrawPDFPage(ctx, page)
+    CGContextRestoreGState(ctx)
+    CGPDFContextEndPage(ctx)
+    CGPDFContextClose(ctx)
+
+
 class MarkdownAPI:
     def __init__(self, file_path=None):
         self.file_path = file_path
@@ -206,6 +474,26 @@ class MarkdownAPI:
         self.is_dirty = False     # JS-maintained dirty flag
         self.is_untitled = not file_path  # True for blank "New File" documents
         self.encoding = 'utf-8'    # Preserve the source file encoding on save
+        self.baseline_mtime_ns = None
+        self.baseline_size = None
+        self.close_confirmed = False  # True after the user explicitly chooses to close
+
+    def _record_baseline_stat(self, path):
+        try:
+            stat = os.stat(path)
+            self.baseline_mtime_ns = getattr(stat, 'st_mtime_ns', int(stat.st_mtime * 1_000_000_000))
+            self.baseline_size = stat.st_size
+        except Exception:
+            self.baseline_mtime_ns = None
+            self.baseline_size = None
+
+    def startup_ready(self, ms):
+        """JS calls this once the first screen has rendered (cold-start perf)."""
+        try:
+            logging.info('[startup] js first screen ready: %dms' % int(ms))
+        except Exception:
+            pass
+        return True
 
     def get_initial_content(self):
         cfg = load_config()
@@ -216,6 +504,7 @@ class MarkdownAPI:
                 content, encoding = _detect_text_encoding(self.file_path)
                 self.encoding = encoding
                 self.file_content = content
+                self._record_baseline_stat(self.file_path)
                 # Check for a newer draft (unsaved changes from a previous session)
                 draft_content = _check_draft_for_file(self.file_path)
                 if draft_content is not None:
@@ -255,79 +544,236 @@ class MarkdownAPI:
         try:
             if self.window:
                 name = os.path.basename(self.file_path) if self.file_path and not self.is_untitled else 'Untitled.md'
-                self.window.set_title(('● ' if self.is_dirty else '') + name)
+                self.window.set_title(_edited_title(name, self.is_dirty))
         except Exception:
             log_exception('set dirty title failed')
         return True
 
-    def save_file(self, path, content):
+    def reset_to_untitled(self):
+        """Turn the current window into a blank Untitled document without closing it.
+
+        Used when the user closes the last open document window but is not
+        quitting the app. The window stays alive as a blank document so Finder
+        double-click and Dock reopen can reuse/create windows without a cold
+        start.
+        """
+        try:
+            if self.file_path:
+                with _state_lock:
+                    _opened_files.discard(os.path.abspath(self.file_path))
+            self.file_path = None
+            self.is_untitled = True
+            self.is_dirty = False
+            self.cached_content = ''
+            self.file_content = ''
+            self.close_confirmed = False
+            if self.window:
+                self.window.set_title('Untitled.md')
+        except Exception:
+            log_exception('reset to untitled failed')
+        return True
+
+    def _has_external_save_conflict(self, path):
+        """Return True when the on-disk file differs from our last clean baseline."""
+        if not path or self.is_untitled:
+            return False
+        target = os.path.abspath(path)
+        current = os.path.abspath(self.file_path) if self.file_path else None
+        if not current or target != current or not os.path.exists(target):
+            return False
+        try:
+            stat = os.stat(target)
+            mtime_ns = getattr(stat, 'st_mtime_ns', int(stat.st_mtime * 1_000_000_000))
+            if self.baseline_mtime_ns == mtime_ns and self.baseline_size == stat.st_size:
+                return False
+        except Exception:
+            pass
+        disk_content, disk_encoding = _detect_text_encoding(target)
+        self.encoding = disk_encoding
+        return disk_content != self.file_content
+
+    def save_file(self, path, content, force=False):
         try:
             previous_path = self.file_path
             encoding = self.encoding or 'utf-8'
-            backup_path = _create_backup(path)
+            if not force and self._has_external_save_conflict(path):
+                return {
+                    'success': False,
+                    'conflict': True,
+                    'path': path,
+                    'message': 'The file has changed on disk since it was opened or last saved.',
+                }
             _safe_write_text(path, content, encoding=encoding)
             self.file_path = path
             self.file_content = content
             self.cached_content = content
+            self._record_baseline_stat(path)
             self.is_dirty = False
             self.is_untitled = False
             _remove_draft(previous_path or path)
             if previous_path and previous_path != path:
                 _remove_draft(path)
             add_recent_file(path)
-            return {'success': True, 'encoding': encoding, 'backup': backup_path}
+            return {'success': True, 'encoding': encoding}
         except Exception as e:
             log_exception('save file failed')
             return {'success': False, 'error': str(e)}
 
-    def save_as_dialog(self, content):
-        """Show a native macOS Save panel; return the chosen path or None."""
+    def save_as_choose(self, default_name=''):
+        """Save As with a native format popup (md/html/pdf/txt).
+
+        Returns {'success': True, 'path': ..., 'format': 'md'|'html'|'pdf'|'txt'}
+        or {'success': False, 'cancelled': True}. The caller (JS) decides the
+        content per format and writes it via export_as_write.
+        """
+        if not HAS_COCOA:
+            return {'success': False, 'error': 'Cocoa not available'}
+        if not _format_panel_lock.acquire(blocking=False):
+            # A save/export panel is already up — never stack a second modal.
+            return {'success': False, 'cancelled': True}
+        try:
+            base = os.path.splitext(os.path.basename(default_name or 'Untitled'))[0] or 'Untitled'
+            formats = [
+                (_t('Markdown (.md)', 'Markdown (.md)'), 'md'),
+                (_t('Web Page (.html)', '网页 (.html)'), 'html'),
+                (_t('PDF', 'PDF'), 'pdf'),
+                (_t('Word Document (.docx)', 'Word 文档 (.docx)'), 'docx'),
+                (_t('PNG Image (.png)', 'PNG 图片 (.png)'), 'png'),
+                (_t('Plain Text (.txt)', '纯文本 (.txt)'), 'txt'),
+            ]
+            holder = {}
+            _run_format_panel(holder, base, formats, _t('Save', '保存'))
+            if holder.get('cancelled'):
+                return {'success': False, 'cancelled': True}
+            if 'error' in holder:
+                return {'success': False, 'error': holder['error']}
+            return {'success': True, 'path': holder['path'], 'format': holder.get('format', 'md')}
+        except Exception as e:
+            log_exception('save as choose failed')
+            return {'success': False, 'error': str(e)}
+        finally:
+            _format_panel_lock.release()
+
+    def export_as_choose(self, default_name=''):
+        """Export As with a native format popup (md/html/pdf/txt/docx/png)."""
+        if not HAS_COCOA:
+            return {'success': False, 'error': 'Cocoa not available'}
+        if not _format_panel_lock.acquire(blocking=False):
+            # A save/export panel is already up — never stack a second modal.
+            return {'success': False, 'cancelled': True}
+        try:
+            base = os.path.splitext(os.path.basename(default_name or 'Untitled'))[0] or 'Untitled'
+            formats = [
+                (_t('PDF', 'PDF'), 'pdf'),
+                (_t('Web Page (.html)', '网页 (.html)'), 'html'),
+                (_t('Word Document (.docx)', 'Word 文档 (.docx)'), 'docx'),
+                (_t('PNG Image (.png)', 'PNG 图片 (.png)'), 'png'),
+                (_t('Plain Text (.txt)', '纯文本 (.txt)'), 'txt'),
+                (_t('Markdown (.md)', 'Markdown (.md)'), 'md'),
+            ]
+            holder = {}
+            _run_format_panel(holder, base, formats, _t('Export', '导出'))
+            if holder.get('cancelled'):
+                return {'success': False, 'cancelled': True}
+            if 'error' in holder:
+                return {'success': False, 'error': holder['error']}
+            return {'success': True, 'path': holder['path'], 'format': holder.get('format', 'md')}
+        except Exception as e:
+            log_exception('export as choose failed')
+            return {'success': False, 'error': str(e)}
+        finally:
+            _format_panel_lock.release()
+
+    def export_as_write(self, path, fmt, content='', page=None):
+        """Write the exported document. md/html/txt are written as text; pdf is
+        generated from the current WKWebView render (async). `page` is an
+        optional {width, height} dict (CSS px) telling createPDF how much of
+        the document to capture — without it only the visible viewport is
+        printed."""
         if not HAS_COCOA:
             return {'success': False, 'error': 'Cocoa not available'}
         try:
-            from AppKit import NSSavePanel, NSOKButton
-            from PyObjCTools import AppHelper
+            if fmt == 'pdf':
+                from PyObjCTools import AppHelper
+                from WebKit import WKPDFConfiguration
+                result_holder = {}
 
-            result_holder = {}
+                def _run_pdf():
+                    try:
+                        import webview.platforms.cocoa as cocoa_mod
+                        bv = cocoa_mod.BrowserView.instances.get(getattr(self.window, 'uid', None))
+                        webview_native = bv.webview if bv is not None else None
+                        if webview_native is None:
+                            result_holder['error'] = 'No webview available'
+                            return
+                        config = WKPDFConfiguration.alloc().init()
+                        if page:
+                            w = int(page.get('width') or 0)
+                            h = int(page.get('height') or 0)
+                            if w > 0 and h > 0:
+                                from AppKit import NSMakeRect
+                                config.setRect_(NSMakeRect(0, 0, w, h))
 
-            def _run_panel():
+                        def handler(data, error):
+                            try:
+                                if error is not None:
+                                    result_holder['error'] = str(error)
+                                    return
+                                if data is None or len(data) == 0:
+                                    result_holder['error'] = 'Empty PDF data'
+                                    return
+                                # createPDF produces one tall page covering the
+                                # whole document; slice it into standard A4
+                                # pages (scaled to the printable width).
+                                tmp_fd, tmp_path = tempfile.mkstemp(suffix='.pdf')
+                                os.close(tmp_fd)
+                                try:
+                                    with open(tmp_path, 'wb') as f:
+                                        f.write(bytes(data))
+                                    _pdf_to_a4_longpage(tmp_path, path)
+                                finally:
+                                    try:
+                                        os.remove(tmp_path)
+                                    except Exception:
+                                        pass
+                                result_holder['done'] = True
+                            except Exception as e:
+                                result_holder['error'] = str(e)
+
+                        webview_native.createPDFWithConfiguration_completionHandler_(config, handler)
+                    except Exception as e:
+                        result_holder['error'] = str(e)
+
+                AppHelper.callAfter(_run_pdf)
+                for _ in range(150):
+                    if 'done' in result_holder or 'error' in result_holder:
+                        break
+                    time.sleep(0.1)
+                if result_holder.get('done'):
+                    return {'success': True, 'path': path}
+                return {'success': False, 'error': result_holder.get('error', 'PDF generation timed out')}
+
+            if fmt in ('docx', 'png'):
+                # JS produces base64 payloads for these binary formats.
+                import base64
                 try:
-                    panel = NSSavePanel.savePanel()
-                    panel.setTitle_(_t('Save', '保存'))
-                    panel.setCanCreateDirectories_(True)
-                    desktop = os.path.expanduser('~/Desktop')
-                    panel.setDirectoryURL_(
-                        __import__('Foundation').NSURL.fileURLWithPath_(desktop)
-                    )
-                    panel.setNameFieldStringValue_('Untitled.md')
-                    panel.setAllowedFileTypes_(['md'])
-                    response = panel.runModal()
-                    if response == NSOKButton:
-                        chosen_url = panel.URL()
-                        chosen_path = chosen_url.path()
-                        result_holder['path'] = chosen_path
-                    else:
-                        result_holder['cancelled'] = True
+                    payload = content
+                    if payload.startswith('data:'):
+                        payload = payload.split(',', 1)[1]
+                    raw = base64.b64decode(payload)
                 except Exception as e:
-                    result_holder['error'] = str(e)
+                    log_exception('export base64 decode failed')
+                    return {'success': False, 'error': 'Invalid payload: %s' % str(e)}
+                if len(raw) == 0:
+                    return {'success': False, 'error': 'Empty file data'}
+                with open(path, 'wb') as f:
+                    f.write(raw)
+                return {'success': True, 'path': path}
 
-            AppHelper.callAfter(_run_panel)
-            for _ in range(600):
-                if result_holder:
-                    break
-                time.sleep(0.1)
-
-            if 'error' in result_holder:
-                return {'success': False, 'error': result_holder['error']}
-            if result_holder.get('cancelled'):
-                return {'success': False, 'cancelled': True}
-
-            chosen_path = result_holder['path']
-            result = self.save_file(chosen_path, content)
-            if result.get('success'):
-                return {'success': True, 'path': chosen_path}
-            return result
+            _safe_write_text(path, content, encoding='utf-8')
+            return {'success': True, 'path': path}
         except Exception as e:
+            log_exception('export as write failed')
             return {'success': False, 'error': str(e)}
 
     def save_page_width(self, width):
@@ -369,11 +815,13 @@ class MarkdownAPI:
 
             # NSOpenPanel must be created and run on the main thread
             AppHelper.callAfter(_run_panel)
-            # Wait for the panel to finish (max 60 seconds)
-            for _ in range(600):
+            # 15s timeout: if the panel never responds, treat it as a cancel
+            for _ in range(150):
                 if result_holder:
                     break
                 time.sleep(0.1)
+            if not result_holder:
+                result_holder['cancelled'] = True
 
             if 'error' in result_holder:
                 log_exception('open file dialog failed')
@@ -390,57 +838,159 @@ class MarkdownAPI:
             log_exception('open file dialog failed')
             return {'success': False, 'error': str(e)}
 
-    def export_document(self, default_name, content, extension):
-        if not HAS_COCOA:
-            return {'success': False, 'error': 'Cocoa not available'}
+    def close_window(self):
+        """Handle File > Close / Cmd+W (clean path — JS prompts first when dirty).
+
+        For the last real window we keep the app resident by blanking + hiding
+        it; otherwise the window is destroyed through the normal closing flow.
+        """
         try:
-            from AppKit import NSSavePanel, NSOKButton
+            window = self.window
+            if window is None:
+                return {'success': False}
+            if _is_last_window(window):
+                _hide_last_window(window, self)
+                return {'success': True}
+            if not _allow_close(window):
+                return {'success': False}
+            try:
+                window.destroy()
+            except Exception:
+                pass
+            return {'success': True}
+        except Exception:
+            log_exception('close window failed')
+            return {'success': False}
+
+    def force_close_window(self, discard=False):
+        """Force-close the window (post save-prompt / quit). discard=True drops
+        unsaved changes without prompting again."""
+        try:
+            if discard:
+                self.is_dirty = False
+                self.close_confirmed = True
+                try:
+                    self.cached_content = self.file_content or ''
+                except Exception:
+                    pass
+                try:
+                    if self.file_path:
+                        _remove_draft(self.file_path)
+                except Exception:
+                    pass
+            return self.close_window()
+        except Exception:
+            log_exception('force close window failed')
+            return {'success': False}
+
+    def native_save_prompt(self):
+        """TextEdit-style keep/save prompt, two-step flow.
+
+        Step 1: a simple native NSAlert (sheet) asking whether to save, with
+        vertical buttons Delete (red) / Save / Cancel (top to bottom).
+        Step 2: if the user chooses Save, the standard NSSavePanel opens for
+        the file name & location.
+        Returns {'action': 'save', 'path': ...}, {'action': 'delete'} or
+        {'action': 'cancel'}.
+        """
+        if not HAS_COCOA:
+            return {'action': 'cancel'}
+        try:
+            from AppKit import (NSAlert, NSSavePanel, NSColor, NSOKButton)
+            from Foundation import NSURL
             from PyObjCTools import AppHelper
 
             result_holder = {}
+            is_untitled = self.is_untitled or not self.file_path
+            if is_untitled:
+                base_name = 'untitled'
+                base_dir = os.path.expanduser('~/Desktop')
+                initial_name = 'untitled.md'
+            else:
+                base_name = os.path.splitext(os.path.basename(self.file_path or ''))[0] or 'untitled'
+                base_dir = os.path.dirname(self.file_path) or os.path.expanduser('~/Desktop')
+                initial_name = os.path.basename(self.file_path) or 'untitled.md'
 
-            def _run_panel():
+            def _run_save_panel():
                 try:
                     panel = NSSavePanel.savePanel()
-                    panel.setTitle_(_t('Export', '导出'))
+                    panel.setTitle_(_t('Save', '保存'))
                     panel.setCanCreateDirectories_(True)
-                    panel.setNameFieldStringValue_(default_name)
-                    panel.setAllowedFileTypes_([extension.lstrip('.')])
-                    response = panel.runModal()
-                    if response == NSOKButton:
-                        result_holder['path'] = panel.URL().path()
-                    else:
-                        result_holder['cancelled'] = True
+                    panel.setDirectoryURL_(NSURL.fileURLWithPath_(base_dir))
+                    panel.setNameFieldStringValue_(initial_name)
+                    panel.setAllowedFileTypes_(['md'])
+                    if panel.runModal() == NSOKButton:
+                        url = panel.URL()
+                        if url:
+                            result_holder['path'] = url.path()
+                            result_holder['action'] = 'save'
+                            return
+                    result_holder['action'] = 'cancel'
+                except Exception:
+                    log_exception('native save panel failed')
+                    result_holder['action'] = 'cancel'
+
+            def handler(code):
+                try:
+                    code = int(code)
+                    if code == 1000:  # Delete
+                        result_holder['action'] = 'delete'
+                    elif code == 1002:  # Save -> open the native save panel
+                        AppHelper.callAfter(_run_save_panel)
+                    else:  # Cancel / Esc
+                        result_holder['action'] = 'cancel'
+                except Exception:
+                    result_holder['action'] = 'cancel'
+
+            def _run():
+                try:
+                    import webview.platforms.cocoa as cocoa_mod
+                    bv = cocoa_mod.BrowserView.instances.get(getattr(self.window, 'uid', None))
+                    host = bv.window if bv is not None else None
+                    if host is None:
+                        from AppKit import NSApp
+                        host = NSApp.mainWindow()
+
+                    alert = NSAlert.alloc().init()
+                    alert.setMessageText_(
+                        _t('Do you want to save the changes you made to "%s"?' % base_name,
+                           '是否保存对"%s"所做的更改？' % base_name) if not is_untitled else
+                        _t('Do you want to keep this new document "%s"?' % base_name,
+                           '是否保留这个新文档"%s"？' % base_name))
+                    alert.setInformativeText_(
+                        _t("Your changes will be lost if you don't save them.",
+                           '若不保存，您的更改将丢失。'))
+                    # Native vertical layout (top to bottom): Delete, Save, Cancel.
+                    # Response codes: First=Delete(1000), Second=Cancel(1001),
+                    # Third=Save(1002).
+                    alert.addButtonWithTitle_(_t('Delete', '删除'))
+                    alert.addButtonWithTitle_(_t('Cancel', '取消'))
+                    alert.addButtonWithTitle_(_t('Save', '保存'))
+                    buttons = alert.buttons()
+                    try:
+                        del_btn = buttons.objectAtIndex_(0)
+                        del_btn.setHasDestructiveAction_(True)
+                        del_btn.setBezelColor_(NSColor.systemRedColor())
+                        del_btn.setKeyEquivalent_('')
+                        buttons.objectAtIndex_(2).setKeyEquivalent_('\r')  # Save
+                    except Exception:
+                        pass
+
+                    alert.beginSheetModalForWindow_completionHandler_(host, handler)
                 except Exception as e:
+                    log_exception('native save alert run failed')
+                    result_holder['action'] = 'cancel'
                     result_holder['error'] = str(e)
 
-            AppHelper.callAfter(_run_panel)
-            for _ in range(600):
+            AppHelper.callAfter(_run)
+            for _ in range(150):  # 15s timeout; fall back to cancel
                 if result_holder:
                     break
                 time.sleep(0.1)
-
-            if 'error' in result_holder:
-                return {'success': False, 'error': result_holder['error']}
-            if result_holder.get('cancelled'):
-                return {'success': False, 'cancelled': True}
-
-            path = result_holder['path']
-            _safe_write_text(path, content, encoding='utf-8')
-            return {'success': True, 'path': path}
-        except Exception as e:
-            log_exception('export document failed')
-            return {'success': False, 'error': str(e)}
-
-    def close_window(self):
-        try:
-            if self.window:
-                self.window.destroy()
-                return {'success': True}
-        except Exception as e:
-            log_exception('close window failed')
-            return {'success': False, 'error': str(e)}
-        return {'success': False, 'error': 'No window'}
+            return result_holder or {'action': 'cancel'}
+        except Exception:
+            log_exception('native save prompt failed')
+            return {'action': 'cancel'}
 
     def open_external_link(self, url):
         """Open a URL with the system default handler."""
@@ -456,27 +1006,59 @@ class MarkdownAPI:
         if not HAS_COCOA:
             return {'success': False, 'error': 'Cocoa not available'}
         try:
-            from CoreFoundation import CFStringCreateWithCString, kCFStringEncodingUTF8
-            from LaunchServices import (
-                LSSetDefaultRoleHandlerForContentType,
-                LSSetDefaultRoleHandlerForExtension,
-                kLSRolesAll, kLSRolesViewer, kLSRolesEditor,
-            )
-            import CoreFoundation
-
             bundle_id = 'com.workbuddy.mdpreview'
-
-            # Register for common Markdown extensions
             extensions = ['md', 'markdown', 'mdown', 'mkd', 'mkdown']
-            for ext in extensions:
-                LSSetDefaultRoleHandlerForExtension(ext, kLSRolesAll, bundle_id)
+            utis = [
+                'net.daringfireball.markdown',
+                'com.apple.traditional-mac-plain-text',
+                'public.plain-text',
+                'public.text',
+            ]
 
-            # Also register by UTI
-            utis = ['net.daringfireball.markdown', 'com.apple.traditional-mac-plain-text']
-            for uti in utis:
-                LSSetDefaultRoleHandlerForContentType(uti, kLSRolesAll, bundle_id)
+            try:
+                try:
+                    from LaunchServices import (
+                        LSSetDefaultRoleHandlerForContentType,
+                        LSSetDefaultRoleHandlerForExtension,
+                        kLSRolesAll,
+                    )
+                except Exception:
+                    from CoreServices import (
+                        LSSetDefaultRoleHandlerForContentType,
+                        LSSetDefaultRoleHandlerForExtension,
+                        kLSRolesAll,
+                    )
 
-            return {'success': True}
+                for ext in extensions:
+                    LSSetDefaultRoleHandlerForExtension(ext, kLSRolesAll, bundle_id)
+                for uti in utis:
+                    LSSetDefaultRoleHandlerForContentType(uti, kLSRolesAll, bundle_id)
+                return {'success': True, 'method': 'launchservices-api'}
+            except Exception as api_error:
+                # Some frozen Python environments do not ship the PyObjC
+                # LaunchServices/CoreServices bridge modules. Still force the
+                # app bundle back into the LaunchServices database so Finder and
+                # Open With see the updated CFBundleDocumentTypes metadata.
+                import subprocess
+                app_path = '/Applications/mdPreview.app'
+                lsregister = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
+                result = subprocess.run(
+                    [lsregister, '-f', app_path],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                )
+                if result.returncode != 0:
+                    return {
+                        'success': False,
+                        'error': result.stderr.strip() or str(api_error),
+                        'method': 'lsregister',
+                    }
+                return {
+                    'success': True,
+                    'method': 'lsregister',
+                    'warning': 'Registered the app bundle. If macOS still opens .md elsewhere, choose mdPreview once from Finder > Open With.',
+                }
         except Exception as e:
             log_exception('set as default failed')
             return {'success': False, 'error': str(e)}
@@ -557,25 +1139,29 @@ def load_config():
 
 
 def save_config(cfg):
-    try:
-        os.makedirs(APP_SUPPORT_DIR, exist_ok=True)
-        _safe_write_text(CONFIG_FILE, json.dumps(cfg))
-    except Exception:
-        log_exception('save config failed')
+    with _config_lock:
+        try:
+            os.makedirs(APP_SUPPORT_DIR, exist_ok=True)
+            _safe_write_text(CONFIG_FILE, json.dumps(cfg))
+        except Exception:
+            log_exception('save config failed')
 
 
 def add_recent_file(path):
     if not path:
         return
-    try:
-        path = os.path.abspath(path)
-        cfg = load_config()
-        recent = [p for p in cfg.get('recent_files', []) if p != path and os.path.exists(p)]
-        recent.insert(0, path)
-        cfg['recent_files'] = recent[:10]
-        save_config(cfg)
-    except Exception:
-        log_exception('add recent file failed')
+    # Serialize the whole read-modify-write so concurrent windows never lose
+    # each other's recent-file entries.
+    with _config_lock:
+        try:
+            path = os.path.abspath(path)
+            cfg = load_config()
+            recent = [p for p in cfg.get('recent_files', []) if p != path and os.path.exists(p)]
+            recent.insert(0, path)
+            cfg['recent_files'] = recent[:10]
+            save_config(cfg)
+        except Exception:
+            log_exception('add recent file failed')
 
 
 # --- Global state ---
@@ -592,9 +1178,50 @@ _app_menu_setup = False
 _update_menu_item = None
 _available_update_version = None
 _window_count = [0]  # list-based counter so it stays mutable inside ObjC callbacks
+# Windows that were "closed" by the user but kept alive hidden so the app can
+# stay resident without a cold start. Each entry is id(window) -> window.
+# Keeping a real (hidden) NSWindow alive is the ONLY reliable way to stay
+# resident in pywebview: destroying every window leaves webview.windows empty,
+# which makes the next create_window take the fragile 'master' path.
+_hidden_windows = {}
 WINDOW_OFFSET = 30  # px to offset each new window
 WINDOW_BASE_X = 100  # starting position
 WINDOW_BASE_Y = 80
+
+# Windows whose JS bridge is fully initialized (pywebview's window.events.loaded
+# fired after _pywebviewready). evaluate_js only works reliably after this.
+# update_main_window() waits on this instead of blind polling, so a reused
+# resident window (already ready) loads a file with ZERO artificial delay,
+# while a cold-started window is only delayed by actual page-load time.
+_windows_js_ready = set()
+WINDOW_JS_READY_TIMEOUT = 6.0  # hard cap for waiting on JS readiness
+
+# Guards for multi-window concurrency: the window-registry collections and the
+# config file are shared across threads (bridge threads + UI thread), so every
+# read-modify-write must be serialized to avoid lost updates / races.
+_state_lock = threading.RLock()
+_config_lock = threading.RLock()
+# Guards the native save/export panels: only one modal format panel may be up
+# at a time. Two overlapping runModal sessions make buttons unresponsive
+# (the second panel's clicks get eaten by the first modal session).
+_format_panel_lock = threading.Lock()
+
+
+def _mark_window_js_ready(window):
+    try:
+        with _state_lock:
+            _windows_js_ready.add(id(window))
+    except Exception:
+        pass
+
+
+def _subscribe_js_ready(window):
+    """Subscribe to pywebview's loaded event (fires when the JS bridge is up)."""
+    try:
+        window.events.loaded += (lambda: _mark_window_js_ready(window))
+    except Exception:
+        pass
+
 
 # ── Quit safety machinery ────────────────────────────────────────────────────
 # Root cause of the long-standing "freezes on quit": pywebview's cocoa
@@ -603,7 +1230,7 @@ WINDOW_BASE_Y = 80
 # result threads are NON-daemon, so Python interpreter shutdown joins them
 # forever and the process never exits. Fixes below (see patch_evaluate_js,
 # on_window_closing, _start_quit_watchdog).
-_QUIT_REQUESTED = threading.Event()  # set by every close/quit path
+_QUIT_REQUESTED = threading.Event()  # set only by true app quit paths, not normal window close
 QUIT_FORCE_EXIT_DELAY = 1.5          # seconds of "quitting" before force exit
 EVALUATE_JS_TIMEOUT = 1.0            # max seconds to wait for a JS round-trip
 
@@ -640,9 +1267,12 @@ def _get_target_window():
 
 
 def _focus_window(window):
+    """Show (or unhide) a window and remember it as the active one."""
     try:
         if not window:
             return False
+        with _state_lock:
+            _hidden_windows.pop(id(window), None)
         window.show()
         _set_active_window(window)
         return True
@@ -662,20 +1292,76 @@ def _focus_existing_file(file_path):
 def _forget_window(window):
     """Remove a closed window and its file from the app registries."""
     global _active_window_ref, _main_window_ref, _main_api_ref
-    api = _window_apis.pop(id(window), None)
-    if api and api.file_path and not api.is_untitled:
-        _opened_files.discard(os.path.abspath(api.file_path))
-    if _active_window_ref is window:
-        _active_window_ref = _main_window_ref if (_main_window_ref and id(_main_window_ref) in _window_apis) else None
-    if _main_window_ref is window:
-        _main_window_ref = None
-        _main_api_ref = None
+    with _state_lock:
+        api = _window_apis.pop(id(window), None)
+        _hidden_windows.pop(id(window), None)
+        _windows_js_ready.discard(id(window))
+        if api and api.file_path and not api.is_untitled:
+            _opened_files.discard(os.path.abspath(api.file_path))
+        if _active_window_ref is window:
+            _active_window_ref = _main_window_ref if (_main_window_ref and id(_main_window_ref) in _window_apis) else None
+        if _main_window_ref is window:
+            _main_window_ref = None
+            _main_api_ref = None
 
 
 def _allow_close(window):
     """Allow the close and perform successful-close cleanup."""
     _forget_window(window)
     return True
+
+
+def _is_last_window(window):
+    """True if this is the only real document window currently open."""
+    return len(_window_apis) == 1 and id(window) in _window_apis
+
+
+def _hide_last_window(window, api):
+    """Turn the last window into a hidden blank Untitled document.
+
+    Called when the user closes the last window but is not quitting the app.
+    Instead of destroying the window (which leaves pywebview with an empty
+    window list and fragile 'master' recreation), we blank its content and
+    HIDE it. The NSWindow stays alive, so:
+      - the app stays resident with a healthy window-manager state;
+      - the red close button / Cmd+W visibly "close" the window;
+      - Dock click or a later Finder double-click un-hides it (or reuses it).
+    """
+    try:
+        _dispatch_js_to(window, 'convertToBlankDocument()')
+    except Exception:
+        log_exception('blank window dispatch failed')
+    if api:
+        try:
+            api.reset_to_untitled()
+        except Exception:
+            log_exception('blank window reset failed')
+    try:
+        with _state_lock:
+            _hidden_windows[id(window)] = window
+        window.hide()
+        logging.info('last window hidden; app stays resident')
+    except Exception:
+        log_exception('hide last window failed')
+
+
+def _reopen_hidden_window():
+    """Show the most recently hidden blank window, if any. Returns True on success."""
+    if not _hidden_windows:
+        return False
+    # Iterate a copy; show the most recently hidden first.
+    for wid, window in list(_hidden_windows.items()):
+        if id(window) in _window_apis and api_for_window(window):
+            try:
+                _dispatch_js_to(window, 'convertToBlankDocument()')
+            except Exception:
+                pass
+            return _focus_window(window)
+    return False
+
+
+def api_for_window(window):
+    return _window_apis.get(id(window))
 
 
 def _sync_content_before_close(window, api):
@@ -693,28 +1379,48 @@ def _sync_content_before_close(window, api):
 def on_window_closing(window):
     """pywebview 'closing' event handler.
 
-    This is the single choke point for EVERY quit path:
+    This is the single choke point for window close attempts:
       - window close button  -> windowShouldClose_  -> events.closing
-      - Cmd+Q / Quit menu    -> applicationShouldTerminate_ -> events.closing
       - File > Close (Cmd+W) -> JS closeWindow() -> window.destroy() -> close
+      - app quit teardown may also close windows after applicationShouldTerminate_
 
-    It runs synchronously on the UI path, so it must stay non-blocking (no
-    modal alerts, no save panels, no synchronous JS). What we DO here:
-      1. Arm the quit watchdog (guaranteed process exit even if teardown
-         deadlocks downstream in pywebview).
-      2. Ask JS to stop all timers / pending bridge traffic so no new
+    It runs synchronously on the UI path, so it must stay non-blocking. Dirty
+    documents are intercepted and handed back to JS for an async Save / Don't
+    Save / Cancel prompt. Once the user confirms close, we:
+      1. Ask JS to stop all timers / pending bridge traffic so no new
          JS->Python calls fire during WKWebView teardown.
-      3. Persist a draft of unsaved content (cached_content is kept fresh by
+      2. Persist a draft of unsaved content (cached_content is kept fresh by
          debounced JS store_content() calls).
+      3. Remove only this window from registries; normal last-window close does
+         not mark the app as quitting.
     """
     try:
         _set_active_window(window)
-        _QUIT_REQUESTED.set()
+        api = _window_apis.get(id(window)) or _main_api_ref
+        if api and api.is_dirty and not api.close_confirmed:
+            if api.cached_content is not None:
+                try:
+                    _write_draft(api.file_path, api.cached_content)
+                except Exception:
+                    log_exception('write draft during close prompt failed')
+            try:
+                _dispatch_js_to(window, 'promptBeforeClose(true)')
+            except Exception:
+                pass
+            return False
+        # If this is the last window and the user is not explicitly quitting,
+        # keep the app alive by blanking it and HIDING it instead of closing.
+        # Hiding (rather than destroying) keeps the NSWindow/pywebview state
+        # healthy so Finder double-click and Dock reopen work reliably, and the
+        # red close button still visibly "closes" the window for the user.
+        if (not _QUIT_REQUESTED.is_set() and _is_last_window(window) and
+                not (api and api.close_confirmed)):
+            _hide_last_window(window, api)
+            return False
         try:
             _dispatch_js_to(window, 'prepareForClose()')
         except Exception:
             pass
-        api = _window_apis.get(id(window)) or _main_api_ref
         if api and api.is_dirty and api.cached_content is not None:
             try:
                 _write_draft(api.file_path, api.cached_content)
@@ -727,17 +1433,17 @@ def on_window_closing(window):
 
 
 def _is_app_quitting():
-    """True when the app has no live windows left and is expected to exit."""
-    if not _window_apis:
-        return True
+    """True only during an explicit app quit, not normal last-window close."""
+    if not _QUIT_REQUESTED.is_set():
+        return False
     try:
         import webview.platforms.cocoa as cocoa
-        if cocoa.BrowserView.instances == {}:
-            return True
         if not cocoa.BrowserView.app.isRunning():
             return True
+        if not _window_apis and cocoa.BrowserView.instances == {}:
+            return True
     except Exception:
-        pass
+        return not _window_apis
     return False
 
 
@@ -843,7 +1549,8 @@ def create_window(file_path=None, x=None, y=None):
         if file_path in _opened_files:
             _focus_existing_file(file_path)
             return
-        _opened_files.add(file_path)
+        with _state_lock:
+            _opened_files.add(file_path)
 
     # Calculate cascade offset if x,y not specified
     if x is None or y is None:
@@ -870,35 +1577,98 @@ def create_window(file_path=None, x=None, y=None):
             y=y,
         )
         api.window = win
-        _window_apis[id(win)] = api
+        with _state_lock:
+            _window_apis[id(win)] = api
         _set_active_window(win)
         if HAS_COCOA:
             win.events.closing += on_window_closing
+            _subscribe_js_ready(win)
         _window_count[0] += 1
         return win
     except Exception:
-        pass
+        # Do NOT swallow: window creation failure is exactly the kind of
+        # silent break that killed double-click-open before (NSWindow must be
+        # created on the main thread). Log it so it is diagnosable.
+        log_exception('create_window failed')
+
+
+def _create_window_safely(file_path=None, x=None, y=None):
+    """Create a window from whatever thread we are on.
+
+    pywebview's webview.create_window only instantiates the native window
+    when called from a Python thread whose name is not 'MainThread' (it
+    short-circuits and only registers the window otherwise). And on cocoa, a
+    NON-master window is created via AppHelper.callAfter(create), which hops
+    back to the AppKit main thread — which is where NSWindow must be
+    instantiated.
+
+    So this always calls create_window from a background thread. The 'master
+    uid' trap is handled by patch_window_close_behavior: it keeps exactly one
+    anchor window in webview.windows after the last window closes, so a
+    freshly created window always gets a 'child_*' uid and cocoa always uses
+    the callAfter path (never tries to build the NSWindow on our thread).
+    """
+    if threading.current_thread().name == 'MainThread':
+        threading.Thread(
+            target=create_window, args=(file_path, x, y), daemon=True
+        ).start()
+    else:
+        create_window(file_path, x, y)
 
 
 def update_main_window(main_window, main_api, file_path):
-    """Update the main window with a new file"""
+    """Update the main window with a new file (reused hidden window path)."""
     file_path = os.path.abspath(file_path)
     main_api.file_path = file_path
     main_api.is_untitled = False
-    _opened_files.add(file_path)
+    with _state_lock:
+        _opened_files.add(file_path)
+        _hidden_windows.pop(id(main_window), None)
     _set_active_window(main_window)
+    try:
+        main_window.show()
+    except Exception:
+        pass
 
     def do_update():
-        for attempt in range(20):
-            time.sleep(0.3)
-            try:
-                main_window.evaluate_js('reloadContent();')
-                main_window.set_title(os.path.basename(file_path))
+        # Event-driven readiness: for a reused resident window the JS bridge is
+        # already up (id in _windows_js_ready), so evaluate_js fires IMMEDIATELY.
+        # For a cold-started window we fast-poll (50ms) until pywebview's loaded
+        # event marks it ready, capped by WINDOW_JS_READY_TIMEOUT. The old code
+        # slept a flat 300ms per attempt regardless of state, which wasted time
+        # on every resident-window open.
+        deadline = time.time() + WINDOW_JS_READY_TIMEOUT
+        while True:
+            if id(main_window) in _windows_js_ready:
+                try:
+                    main_window.evaluate_js('reloadContent();')
+                    main_window.set_title(_edited_title(os.path.basename(file_path), main_api.is_dirty))
+                    return
+                except Exception:
+                    pass
+            if time.time() > deadline:
                 return
-            except Exception:
-                pass
+            time.sleep(0.05)
 
     threading.Thread(target=do_update, daemon=True).start()
+
+
+def _reuse_hidden_window_for_file(file_path):
+    """Reuse the hidden blank window (from a last-window close) for a new file.
+
+    Prevents leaking a hidden window: instead of creating a brand-new window
+    next to the hidden one, the hidden window is shown, loaded with the file and
+    given the file's title.
+    """
+    for wid, window in list(_hidden_windows.items()):
+        api = _window_apis.get(wid)
+        if api and api.is_untitled and not api.is_dirty and api.window:
+            try:
+                update_main_window(window, api, file_path)
+            except Exception:
+                log_exception('reuse hidden window failed')
+            return True
+    return False
 
 
 def handle_opened_file(file_path, main_window=None, main_api=None):
@@ -917,16 +1687,70 @@ def handle_opened_file(file_path, main_window=None, main_api=None):
         _focus_existing_file(file_path)
         return
 
-    if not _initial_file_handled and main_window and main_api:
+    # Prefer reusing a hidden blank window (kept alive after last-window
+    # close) over creating a brand-new one, so we never leak hidden windows.
+    if _reuse_hidden_window_for_file(file_path):
+        _initial_file_handled = True
+        return
+
+    can_reuse_main_window = (
+        not _initial_file_handled and main_window and main_api and
+        main_api.is_untitled and not main_api.is_dirty
+    )
+    if can_reuse_main_window:
         _initial_file_handled = True
         update_main_window(main_window, main_api, file_path)
     else:
         _initial_file_handled = True
-        # pywebview requires window creation from a background thread during running event loop
-        threading.Thread(target=create_window, args=(file_path,), daemon=True).start()
+        # NSWindow must be created on the main thread; _create_window_safely
+        # hops to the main thread if needed (background threads were fine on
+        # old pywebview but now raise NSInternalInconsistencyException).
+        _create_window_safely(file_path)
 
 
 if HAS_COCOA:
+
+    def _make_md_icon():
+        """16pt template image with 'md' text (Retina-sharp via drawing handler).
+
+        Measures the actual glyph size and centers it, so BOTH letters ('md')
+        always fit inside the 16x16 canvas — drawInRect was clipping the 'd'.
+        """
+        try:
+            from AppKit import (NSImage, NSFont, NSColor, NSDictionary, NSMakePoint,
+                                NSFontAttributeName, NSForegroundColorAttributeName)
+            from Foundation import NSString
+
+            text = NSString.stringWithString_('md')
+            canvas = 16
+            # Largest font size that fits the canvas (step 0.5 down until it does).
+            font_size = 12.0
+            attrs = None
+            text_size = None
+            while font_size >= 8.0:
+                attrs = NSDictionary.dictionaryWithObjects_forKeys_(
+                    [NSFont.boldSystemFontOfSize_(font_size), NSColor.labelColor()],
+                    [NSFontAttributeName, NSForegroundColorAttributeName])
+                text_size = text.sizeWithAttributes_(attrs)
+                if text_size.width <= canvas and text_size.height <= canvas:
+                    break
+                font_size -= 0.5
+
+            def draw(rect):
+                x = (rect.size.width - text_size.width) / 2.0
+                # Slightly below optical center: drawAtPoint's y is the baseline,
+                # and the glyph's visual center sits a touch high when fully
+                # centered, so nudge down 2px.
+                y = (rect.size.height - text_size.height) / 2.0 - 2.0
+                text.drawAtPoint_withAttributes_(NSMakePoint(x, y), attrs)
+                return True
+
+            img = NSImage.imageWithSize_flipped_drawingHandler_((canvas, canvas), False, draw)
+            img.setTemplate_(True)  # adapts to light/dark menu appearance
+            return img
+        except Exception:
+            log_exception('make md icon failed')
+            return None
 
     def setup_all_menus():
         """Set up all custom menu items. Called once menus are ready."""
@@ -951,11 +1775,14 @@ if HAS_COCOA:
                 if about_item:
                     about_item.setAction_('showAbout:')
                     about_item.setTarget_(_view_menu_handler)
-                pref_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Preferences…", "showPreferences:", ",")
+                # Preferences ⌘, was reassigned to Decrease Width; move
+                # Preferences to ⌘⇧, to avoid the clash.
+                pref_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Preferences…", "偏好设置…"), "showPreferences:", ",")
+                pref_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 17))  # Cmd+Shift+,
                 pref_item.setTarget_(_view_menu_handler)
                 app_menu.insertItem_atIndex_(pref_item, 1)
                 # Insert "Check for Updates…" right after Preferences
-                update_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Check for Updates…", "checkForUpdates:", "")
+                update_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Check for Updates…", "检查更新…"), "checkForUpdates:", "")
                 update_item.setTarget_(_view_menu_handler)
                 app_menu.insertItem_atIndex_(update_item, 2)
                 _update_menu_item = update_item
@@ -972,24 +1799,47 @@ if HAS_COCOA:
                         break
 
                 if view_menu:
+                    # Preview / Source toggle — the app's most important
+                    # action, so it goes FIRST in the View menu with an "md"
+                    # icon and ⌘E.
+                    toggle_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                        _t("Toggle Preview / Source", "切换预览 / 源码"), "toggleView:", "e")
+                    toggle_item.setKeyEquivalentModifierMask_(1 << 20)  # Command
+                    md_icon = _make_md_icon()
+                    if md_icon is not None:
+                        toggle_item.setImage_(md_icon)
+                    toggle_item.setTarget_(_view_menu_handler)
+                    view_menu.insertItem_atIndex_(toggle_item, 0)
+                    view_menu.insertItem_atIndex_(NSMenuItem.separatorItem(), 1)
+                    # Zoom In / Zoom Out (⌘= / ⌘-)
+                    zoom_in_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Bigger Text", "放大文字"), "zoomIn:", "=")
+                    zoom_in_item.setKeyEquivalentModifierMask_(1 << 20)
+                    view_menu.addItem_(zoom_in_item)
+                    zoom_out_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Smaller Text", "缩小文字"), "zoomOut:", "-")
+                    zoom_out_item.setKeyEquivalentModifierMask_(1 << 20)
+                    view_menu.addItem_(zoom_out_item)
                     view_menu.addItem_(NSMenuItem.separatorItem())
-                    outline_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Show/Hide Outline", "toggleOutline:", "o")
+                    outline_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Show/Hide Outline", "显示/隐藏大纲"), "toggleOutline:", "o")
                     outline_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 19))  # Cmd+Option+O
                     view_menu.addItem_(outline_item)
                     view_menu.addItem_(NSMenuItem.separatorItem())
-                    inc_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Increase Width", "increaseWidth:", "=")
+                    # Width shortcuts were moved from ⌘= / ⌘- (now Zoom) to ⌘. / ⌘,
+                    # following the same left=decrease, right=increase layout.
+                    inc_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Increase Width", "加宽"), "increaseWidth:", ".")
                     inc_item.setKeyEquivalentModifierMask_(1 << 20)
                     view_menu.addItem_(inc_item)
-                    dec_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Decrease Width", "decreaseWidth:", "-")
+                    dec_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Decrease Width", "变窄"), "decreaseWidth:", ",")
                     dec_item.setKeyEquivalentModifierMask_(1 << 20)
                     view_menu.addItem_(dec_item)
-                    reset_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Reset Width", "resetWidth:", "0")
+                    reset_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Reset Width", "重置宽度"), "resetWidth:", "0")
                     reset_item.setKeyEquivalentModifierMask_(1 << 20)
                     view_menu.addItem_(reset_item)
                     outline_item.setTarget_(_view_menu_handler)
                     inc_item.setTarget_(_view_menu_handler)
                     dec_item.setTarget_(_view_menu_handler)
                     reset_item.setTarget_(_view_menu_handler)
+                    zoom_in_item.setTarget_(_view_menu_handler)
+                    zoom_out_item.setTarget_(_view_menu_handler)
                     _view_menu_setup = True
 
             # ── File menu: Properties ──
@@ -1006,8 +1856,8 @@ if HAS_COCOA:
 
                 if not file_menu:
                     # Create File menu since it doesn't exist
-                    file_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("File", None, "")
-                    file_menu = NSMenu.alloc().initWithTitle_("File")
+                    file_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("File", "文件"), None, "")
+                    file_menu = NSMenu.alloc().initWithTitle_(_t("File", "文件"))
                     file_item.setSubmenu_(file_menu)
                     # Insert at the beginning (before the empty title item or Edit)
                     main_menu.insertItem_atIndex_(file_item, 1)
@@ -1015,11 +1865,11 @@ if HAS_COCOA:
 
                 if file_menu:
                     file_menu.addItem_(NSMenuItem.separatorItem())
-                    open_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Open File…", "openFile:", "o")
+                    open_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Open File…", "打开文件…"), "openFile:", "o")
                     open_item.setTarget_(_view_menu_handler)
                     file_menu.addItem_(open_item)
-                    recent_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Open Recent", None, "")
-                    recent_menu = NSMenu.alloc().initWithTitle_("Open Recent")
+                    recent_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Open Recent", "打开最近"), None, "")
+                    recent_menu = NSMenu.alloc().initWithTitle_(_t("Open Recent", "打开最近"))
                     for recent_path in load_config().get('recent_files', [])[:10]:
                         if not os.path.exists(recent_path):
                             continue
@@ -1030,36 +1880,42 @@ if HAS_COCOA:
                         recent_menu.addItem_(item)
                     recent_item.setSubmenu_(recent_menu)
                     file_menu.addItem_(recent_item)
-                    close_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Close", "closeWindow:", "w")
+                    close_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Close", "关闭"), "closeWindow:", "w")
                     close_item.setTarget_(_view_menu_handler)
                     file_menu.addItem_(close_item)
                     file_menu.addItem_(NSMenuItem.separatorItem())
                     # Save / Save As: native menu items are needed because macOS
                     # may consume Cmd+S before the webview keydown handler sees it.
-                    save_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Save", "saveFile:", "s")
+                    save_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Save", "保存"), "saveFile:", "s")
                     save_item.setTarget_(_view_menu_handler)
                     file_menu.addItem_(save_item)
-                    save_as_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Save As…", "saveAsFile:", "s")
+                    save_as_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Save As…", "另存为…"), "saveAsFile:", "s")
                     save_as_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 17))  # Cmd+Shift+S
                     save_as_item.setTarget_(_view_menu_handler)
                     file_menu.addItem_(save_as_item)
                     file_menu.addItem_(NSMenuItem.separatorItem())
-                    export_html_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Export HTML…", "exportHTML:", "")
-                    export_html_item.setTarget_(_view_menu_handler)
-                    file_menu.addItem_(export_html_item)
-                    export_text_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Export Text…", "exportText:", "")
-                    export_text_item.setTarget_(_view_menu_handler)
-                    file_menu.addItem_(export_text_item)
-                    print_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Print…", "printDocument:", "p")
+                    export_as_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                        _t("Export As…", "导出为…"), "exportAs:", "")
+                    export_as_item.setTarget_(_view_menu_handler)
+                    try:
+                        from AppKit import NSImage
+                        icon = NSImage.imageWithSystemSymbolName_accessibilityDescription_(
+                            'square.and.arrow.up', '')
+                        if icon is not None:
+                            export_as_item.setImage_(icon)
+                    except Exception:
+                        pass
+                    file_menu.addItem_(export_as_item)
+                    print_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Print…", "打印…"), "printDocument:", "p")
                     print_item.setTarget_(_view_menu_handler)
                     file_menu.addItem_(print_item)
                     file_menu.addItem_(NSMenuItem.separatorItem())
                     # New File
-                    new_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("New", "newFile:", "n")
+                    new_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("New", "新建"), "newFile:", "n")
                     new_item.setTarget_(_view_menu_handler)
                     file_menu.addItem_(new_item)
                     # Properties
-                    props_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Properties", "showProperties:", "i")
+                    props_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Properties", "属性"), "showProperties:", "i")
                     props_item.setKeyEquivalentModifierMask_(1 << 20)
                     file_menu.addItem_(props_item)
                     props_item.setTarget_(_view_menu_handler)
@@ -1077,13 +1933,13 @@ if HAS_COCOA:
 
                 if edit_menu and not getattr(_view_menu_handler, '_edit_menu_setup', False):
                     edit_menu.addItem_(NSMenuItem.separatorItem())
-                    find_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Find", "findAction:", "f")
+                    find_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Find", "查找"), "findAction:", "f")
                     find_item.setTarget_(_view_menu_handler)
                     edit_menu.addItem_(find_item)
-                    find_next_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Find Next", "findNextAction:", "g")
+                    find_next_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Find Next", "查找下一个"), "findNextAction:", "g")
                     find_next_item.setTarget_(_view_menu_handler)
                     edit_menu.addItem_(find_next_item)
-                    find_prev_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_("Find Previous", "findPrevAction:", "g")
+                    find_prev_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Find Previous", "查找上一个"), "findPrevAction:", "g")
                     find_prev_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 17))  # Cmd+Shift+G
                     find_prev_item.setTarget_(_view_menu_handler)
                     edit_menu.addItem_(find_prev_item)
@@ -1141,6 +1997,9 @@ if HAS_COCOA:
     from Foundation import NSObject
 
     class ViewMenuHandler(NSObject):
+        def toggleView_(self, sender):
+            _dispatch_js('toggleView()')
+
         def increaseWidth_(self, sender):
             _dispatch_js('adjustPageWidth(40)')
 
@@ -1149,6 +2008,12 @@ if HAS_COCOA:
 
         def resetWidth_(self, sender):
             _dispatch_js('resetPageWidth()')
+
+        def zoomIn_(self, sender):
+            _dispatch_js('zoomIn()')
+
+        def zoomOut_(self, sender):
+            _dispatch_js('zoomOut()')
 
         def toggleOutline_(self, sender):
             _dispatch_js('toggleToc()')
@@ -1178,18 +2043,15 @@ if HAS_COCOA:
         def showPreferences_(self, sender):
             _dispatch_js('showPreferences()')
 
-        def exportHTML_(self, sender):
-            _dispatch_js('exportHTML()')
-
-        def exportText_(self, sender):
-            _dispatch_js('exportText()')
+        def exportAs_(self, sender):
+            _dispatch_js('exportAs()')
 
         def printDocument_(self, sender):
             _dispatch_js('printDocument()')
 
         def newFile_(self, sender):
-            # Open a new blank window
-            threading.Thread(target=create_window, args=(None,), daemon=True).start()
+            # Open a new blank window (main-thread safe).
+            _create_window_safely(None)
 
         def findAction_(self, sender):
             _dispatch_js('openFindBar()')
@@ -1238,32 +2100,140 @@ if HAS_COCOA:
             import webview.platforms.cocoa as cocoa
             AppDelegateClass = cocoa.BrowserView.AppDelegate
 
-            if AppDelegateClass.instancesRespondToSelector_(b'application:openFiles:'):
-                return
+            def applicationShouldTerminateAfterLastWindowClosed_(self, application):
+                return False
+
+            def applicationShouldTerminate_(self, application):
+                _QUIT_REQUESTED.set()
+                return 1  # NSTerminateNow; dirty windows are handled by close events.
+
+            def applicationShouldHandleReopen_hasVisibleWindows_(self, application, flag):
+                """Dock icon click.
+
+                Standard macOS document-app behavior: clicking the Dock icon
+                must NOT spawn a new document when windows already exist. It
+                only un-hides a hidden blank window (from a previous
+                close-last-window) or, as a defensive fallback when the app has
+                no windows at all, creates one.
+                """
+                try:
+                    if _reopen_hidden_window():
+                        return True
+                    if _window_apis:
+                        # Windows exist (visible or hidden); app activation
+                        # already brings them forward — do not create a new one.
+                        return True
+                    _create_window_safely(None)
+                    return True
+                except Exception:
+                    log_exception('handle reopen failed')
+                    return True
 
             def application_openFiles_(self, application, filenames):
                 global _initial_file_handled
                 count = filenames.count()
+                logging.info('openFiles received: %d file(s)', count)
                 for i in range(count):
-                    path = filenames.objectAtIndex_(i)
+                    path = str(filenames.objectAtIndex_(i))
                     handle_opened_file(path, _main_window_ref, _main_api_ref)
                 application.replyToOpenOrPrint_(0)
 
-            objc.classAddMethod(
-                AppDelegateClass,
-                b'application:openFiles:',
-                application_openFiles_,
-            )
+            # NOTE: do NOT use objc.classAddMethod here. pywebview's AppDelegate
+            # already defines applicationShouldTerminate_ (signature I@:@), and
+            # classAddMethod raises BadPrototypeError for existing selectors,
+            # which previously aborted the whole patch and left
+            # application:openFiles: unregistered — breaking Finder double-click
+            # open ("cannot open files in the Markdown Document format").
+            # Class-attribute assignment via objc.selector both adds new methods
+            # and overrides existing ones, with explicit ObjC signatures.
+            def _install(py_name, sel_name, func, signature):
+                wrapped = objc.selector(func, selector=sel_name, signature=signature)
+                setattr(AppDelegateClass, py_name, wrapped)
+                if not AppDelegateClass.instancesRespondToSelector_(sel_name):
+                    raise RuntimeError('selector not installed: %r' % sel_name)
+
+            installs = [
+                ('applicationShouldTerminateAfterLastWindowClosed_',
+                 b'applicationShouldTerminateAfterLastWindowClosed:',
+                 applicationShouldTerminateAfterLastWindowClosed_, b'c@:@'),
+                ('applicationShouldTerminate_',
+                 b'applicationShouldTerminate:',
+                 applicationShouldTerminate_, b'I@:@'),
+                ('applicationShouldHandleReopen_hasVisibleWindows_',
+                 b'applicationShouldHandleReopen:hasVisibleWindows:',
+                 applicationShouldHandleReopen_hasVisibleWindows_, b'c@:@c'),
+                ('application_openFiles_',
+                 b'application:openFiles:',
+                 application_openFiles_, b'v@:@@'),
+            ]
+            for py_name, sel_name, func, signature in installs:
+                try:
+                    _install(py_name, sel_name, func, signature)
+                except Exception:
+                    log_exception('install delegate method failed: %r' % sel_name)
         except Exception:
             log_exception('patch app delegate failed')
+
+    def patch_window_close_behavior():
+        """Override windowWillClose_ to keep per-window teardown correct.
+
+        pywebview's WindowDelegate.windowWillClose_ stops the NSApp runloop when
+        the last window closes, which exits webview.start() and lets main() hit
+        os._exit(0). With the blank-Untitled behavior in on_window_closing(), a
+        clean last-window close is intercepted before it reaches here, so the
+        app normally stays alive with a valid Untitled window. For the rare case
+        where the last window really does close (e.g. the user forced close of a
+        dirty document), we mirror pywebview's own cleanup and stop the runloop so
+        the process exits cleanly instead of leaving a dead anchor window that
+        breaks subsequent window creation.
+        """
+        try:
+            import webview.platforms.cocoa as cocoa
+            WD = cocoa.BrowserView.WindowDelegate
+
+            def windowWillClose_(self, notification):
+                i = cocoa.BrowserView.get_instance('window', notification.object())
+                if i is None:
+                    return
+                # Per-window teardown (mirrors pywebview's own cleanup).
+                i.webview.setNavigationDelegate_(None)
+                i.webview.setUIDelegate_(None)
+                del cocoa.BrowserView.instances[i.uid]
+                if i.pywebview_window in webview.windows:
+                    webview.windows.remove(i.pywebview_window)
+                i.webview.loadHTMLString_baseURL_('', None)
+                i.webview.removeFromSuperview()
+                i.webview = None
+                i.closed.set()
+                if cocoa.BrowserView.instances == {}:
+                    cocoa.BrowserView.app.setDelegate_(None)
+                    cocoa.BrowserView._shared_app_delegate = None
+                    cocoa.BrowserView.app.stop_(self)
+                    cocoa.BrowserView.app.abortModal()
+
+            WD.windowWillClose_ = objc.selector(
+                windowWillClose_, selector=b'windowWillClose:', signature=b'v@:@')
+            if not WD.instancesRespondToSelector_(b'windowWillClose:'):
+                raise RuntimeError('windowWillClose: not installed')
+        except Exception:
+            log_exception('patch window close behavior failed')
+
+
+def _start_log(stage):
+    try:
+        logging.info('[startup] %s: %.0fms' % (stage, (time.time() - _START_T0) * 1000))
+    except Exception:
+        pass
 
 
 def main():
     global _initial_file_handled
     global _main_window_ref, _main_api_ref, _active_window_ref
 
+    _start_log('main entered')
     if HAS_COCOA:
         patch_app_delegate()
+        patch_window_close_behavior()
         patch_evaluate_js()
 
     file_paths = []
@@ -1281,6 +2251,7 @@ def main():
     html_path = get_resource_path('index.html')
     title = os.path.basename(file_path) if file_path else 'Untitled.md'
 
+    _start_log('before create_window')
     main_window = webview.create_window(
         title=title,
         url=html_path,
@@ -1291,6 +2262,7 @@ def main():
         text_select=True,
         confirm_close=False,
     )
+    _start_log('after create_window')
     main_api.window = main_window
     _window_apis[id(main_window)] = main_api
     _main_window_ref = main_window
@@ -1305,6 +2277,7 @@ def main():
         # Official pywebview mechanism: subscribe to the 'closing' event.
         # Returning False from the handler cancels the close.
         main_window.events.closing += on_window_closing
+        _subscribe_js_ready(main_window)
         setup_view_menu()
         setup_file_menu()
 
@@ -1323,11 +2296,22 @@ def main():
                 pass
         threading.Thread(target=_post_startup, daemon=True).start()
         _schedule_startup_update_check()
+        # Clear leftover staging files from an interrupted update (only when no
+        # update is pending — a pending install must keep its staged app).
+        try:
+            cfg0 = load_config()
+            if not cfg0.get('pending_update_version'):
+                if os.path.isdir(UPDATE_STAGING_DIR):
+                    shutil.rmtree(UPDATE_STAGING_DIR, ignore_errors=True)
+        except Exception:
+            pass
 
     _start_quit_watchdog()
     _maybe_run_selftest(main_window)
 
+    _start_log('before webview.start')
     webview.start(debug=False)
+    _start_log('after webview.start')
 
     # ── Instant exit ──
     # At this point webview.start() has returned, meaning all windows are
@@ -1449,7 +2433,7 @@ def _set_update_available(remote_version):
         def _update_menu():
             try:
                 if _update_menu_item:
-                    _update_menu_item.setTitle_(f'Update Available: {remote_version}...')
+                    _update_menu_item.setTitle_(_t(f'Update Available: {remote_version}...', f'有可用更新：{remote_version}…'))
             except Exception:
                 pass
         AppHelper.callAfter(_update_menu)
@@ -1474,7 +2458,7 @@ def _clear_update_available():
         def _update_menu():
             try:
                 if _update_menu_item:
-                    _update_menu_item.setTitle_('Check for Updates…')
+                    _update_menu_item.setTitle_(_t('Check for Updates…', '检查更新…'))
             except Exception:
                 pass
         AppHelper.callAfter(_update_menu)
@@ -1492,10 +2476,10 @@ def _show_update_alert(remote_version):
     try:
         local = _get_current_version()
         alert = NSAlert.alloc().init()
-        alert.setMessageText_(f'mdPreview {remote_version} is available!')
-        alert.setInformativeText_(f'You have version {local}. Would you like to download the update?')
-        alert.addButtonWithTitle_('Download')
-        alert.addButtonWithTitle_('Later')
+        alert.setMessageText_(_t(f'mdPreview {remote_version} is available!', f'mdPreview {remote_version} 已可用！'))
+        alert.setInformativeText_(_t(f'You have version {local}. Would you like to download the update?', f'当前版本为 {local}。是否下载更新？'))
+        alert.addButtonWithTitle_(_t('Download', '下载'))
+        alert.addButtonWithTitle_(_t('Later', '稍后'))
         response = alert.runModal()
         if response == 1000:  # Download
             # Auto-download and extract to staging, then show bubble
@@ -1515,9 +2499,15 @@ def _show_update_alert(remote_version):
 
 
 def _download_and_extract(version):
-    """Download DMG to hidden staging dir, extract .app, return staging path."""
+    """Download DMG to hidden staging dir, extract .app, return staging path.
+
+    Hardened: the extracted app's version is verified against the expected
+    release version, and the DMG is always detached (even on failure) so no
+    dangling mount is left behind.
+    """
     import urllib.request
     import subprocess
+    mount_dir = None
     try:
         os.makedirs(UPDATE_STAGING_DIR, exist_ok=True)
         dmg_path = os.path.join(UPDATE_STAGING_DIR, 'mdPreview.dmg')
@@ -1544,13 +2534,32 @@ def _download_and_extract(version):
         if os.path.exists(staging_app):
             shutil.rmtree(staging_app)
         shutil.copytree(src_app, staging_app)
-        subprocess.run(['hdiutil', 'detach', mount_dir], capture_output=True)
-        os.remove(dmg_path)
-        shutil.rmtree(mount_dir, ignore_errors=True)
+        # Integrity check: the staged app must carry the expected version.
+        plist = os.path.join(staging_app, 'Contents', 'Info.plist')
+        staged_version = None
+        try:
+            import plistlib
+            with open(plist, 'rb') as pf:
+                staged_version = plistlib.load(pf).get('CFBundleVersion')
+        except Exception:
+            pass
+        if not staged_version or (version and _is_newer(version, staged_version)):
+            log_exception('staged update failed version check: got %r want %r' % (staged_version, version))
+            shutil.rmtree(staging_app, ignore_errors=True)
+            return None
         return staging_app
     except Exception:
         log_exception('auto download and extract failed')
         return None
+    finally:
+        if mount_dir and os.path.exists(mount_dir):
+            subprocess.run(['hdiutil', 'detach', mount_dir], capture_output=True)
+            shutil.rmtree(mount_dir, ignore_errors=True)
+        try:
+            if os.path.exists(dmg_path):
+                os.remove(dmg_path)
+        except Exception:
+            pass
 
 
 def _schedule_startup_update_check():
@@ -1593,9 +2602,9 @@ def _manual_check_up_to_date():
     try:
         local = _get_current_version()
         alert = NSAlert.alloc().init()
-        alert.setMessageText_("You're up to date!")
-        alert.setInformativeText_(f'mdPreview {local} is the latest version.')
-        alert.addButtonWithTitle_('OK')
+        alert.setMessageText_(_t("You're up to date!", "已是最新版本！"))
+        alert.setInformativeText_(_t(f'mdPreview {local} is the latest version.', f'mdPreview {local} 已是最新版本。'))
+        alert.addButtonWithTitle_(_t('OK', '好'))
         alert.runModal()
     except Exception:
         pass
@@ -1607,8 +2616,8 @@ def _manual_check_error():
         return
     try:
         alert = NSAlert.alloc().init()
-        alert.setMessageText_('Could not check for updates.')
-        alert.setInformativeText_('Please check your internet connection and try again later.')
+        alert.setMessageText_(_t('Could not check for updates.', '无法检查更新。'))
+        alert.setInformativeText_(_t('Please check your internet connection and try again later.', '请检查网络连接后重试。'))
         alert.addButtonWithTitle_('OK')
         alert.runModal()
     except Exception:
@@ -1655,7 +2664,7 @@ def _check_pending_install():
             if _update_menu_item:
                 def _update_menu():
                     try:
-                        _update_menu_item.setTitle_(f'Update Available: {version}...')
+                        _update_menu_item.setTitle_(_t(f'Update Available: {version}...', f'有可用更新：{version}…'))
                     except Exception:
                         pass
                 AppHelper.callAfter(_update_menu)
@@ -1671,8 +2680,39 @@ def _check_pending_install():
         pass
 
 
+def _smoke_test_app(app_path, timeout=5):
+    """Launch an .app, verify its process stays alive, then quit it.
+
+    Used before replacing the installed app so a broken update never lands on
+    the user's machine. Only the smoke-test process (matched by app_path) is
+    killed — the running old app is never touched.
+    """
+    import subprocess
+    try:
+        subprocess.run(['open', '-a', app_path], capture_output=True, timeout=5)
+        marker = os.path.join(app_path, 'Contents', 'MacOS')
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            r = subprocess.run(['pgrep', '-f', marker], capture_output=True)
+            if r.returncode == 0:
+                subprocess.run(['pkill', '-f', marker], capture_output=True)
+                return True
+            time.sleep(0.3)
+        # Didn't survive: kill anything left from the smoke run
+        subprocess.run(['pkill', '-f', marker], capture_output=True)
+        return False
+    except Exception:
+        log_exception('smoke test failed')
+        return False
+
+
 def _perform_auto_install():
-    """Execute auto-install: write helper script, quit app, let script replace + restart."""
+    """Execute auto-install: write helper script, quit app, let script replace + restart.
+
+    Hardened: the staged app is smoke-tested BEFORE any replacement; the helper
+    script keeps the old app until the new one has launched successfully, and
+    rolls back on failure.
+    """
     import subprocess
     try:
         cfg = load_config()
@@ -1681,21 +2721,42 @@ def _perform_auto_install():
         if not staging_app or not os.path.exists(staging_app):
             return {'success': False, 'error': 'No staged update found'}
 
-        # Write helper script that runs after app exits
+        # Smoke-test the staged app first: never replace a working install
+        # with a package that fails to launch.
+        if not _smoke_test_app(staging_app):
+            shutil.rmtree(staging_app, ignore_errors=True)
+            cfg.pop('pending_staging_app', None)
+            cfg.pop('pending_update_version', None)
+            save_config(cfg)
+            return {'success': False, 'error': 'Staged update failed launch test'}
+
+        # Write helper script that runs after app exits. It keeps the old app
+        # until the new one has been verified running (launch + pgrep), and
+        # rolls back if the new app dies.
         script = (
             '#!/bin/bash\n'
             'sleep 2\n'
-            f'mv /Applications/mdPreview.app /Applications/mdPreview.app.old 2>/dev/null\n'
-            f'cp -R "{staging_app}" /Applications/mdPreview.app\n'
+            f'APP=/Applications/mdPreview.app\n'
+            f'OLD=/Applications/mdPreview.app.old\n'
+            f'STAGING="{staging_app}"\n'
+            'mv "$APP" "$OLD" 2>/dev/null\n'
+            'cp -R "$STAGING" "$APP"\n'
             'if [ $? -eq 0 ]; then\n'
-            '  rm -rf /Applications/mdPreview.app.old\n'
-            '  xattr -cr /Applications/mdPreview.app\n'
-            '  open /Applications/mdPreview.app\n'
-            f'  rm -rf "{staging_app}"\n'
+            '  xattr -cr "$APP"\n'
+            '  open "$APP"\n'
+            '  sleep 3\n'
+            '  if pgrep -f "$APP/Contents/MacOS" >/dev/null 2>&1; then\n'
+            '    echo "mdPreview update OK"\n'
+            '    rm -rf "$OLD"\n'
+            '  else\n'
+            '    echo "mdPreview update FAILED to launch - rolling back"\n'
+            '    rm -rf "$APP"\n'
+            '    mv "$OLD" "$APP" 2>/dev/null\n'
+            '  fi\n'
             'else\n'
-            '  mv /Applications/mdPreview.app.old /Applications/mdPreview.app 2>/dev/null\n'
+            '  mv "$OLD" "$APP" 2>/dev/null\n'
             'fi\n'
-            f'rm -rf "{staging_app}"\n'
+            'rm -rf "$STAGING"\n'
         )
         script_path = os.path.join(UPDATE_STAGING_DIR, 'install_update.sh')
         os.makedirs(UPDATE_STAGING_DIR, exist_ok=True)

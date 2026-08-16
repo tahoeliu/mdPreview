@@ -8,20 +8,51 @@ let isSource = false;
   let renderedDirty = false;
   const mermaidSvgCache = new Map();
   let highlightTimer = null;
+  let highlightRaf = null;      // pending rAF for the source highlight layer
+  let _highlightHeavy = false; // true once a sync pass takes >24ms (big docs)
   let lastPushedHash = '';
   let lastRenderedHash = '';
   // Set by prepareForClose() when the window is closing: stops all timers and
   // pending JS->Python bridge traffic so teardown never deadlocks.
   let closing = false;
   let keepAliveTimer = null;
+  let closePromptVisible = false;
   let isZh = false;
+  let renderJobId = 0;
+  let deferredRenderTimer = null;
+  const FIRST_SCREEN_MARKDOWN_CHARS = 18000;
+  // Centralized tuning knobs (kept together so they are easy to find/adjust).
+  const TOC_AUTO_HIDE_WIDTH = 800;   // below this window width the TOC auto-hides
+  const FONT_MIN = 12;
+  const FONT_MAX = 24;
+  const FONT_STEP = 1;
+  const PYTHON_SYNC_DEBOUNCE_MS = 1800;  // debounce for pushing content to Python
+  const STATUS_HIDE_MS = 8000;           // error status auto-hide delay
+
+  // Bilingual helper: returns the Chinese string when the app UI is in
+  // Chinese (isZh is set from the backend's locale detection), English otherwise.
+  function t(en, zh) {
+    return isZh ? zh : en;
+  }
 
   if (typeof marked !== 'undefined') marked.setOptions({ breaks: true, gfm: true });
+
+  const _jsT0 = performance.now();  // cold-start profiling
 
   // These are loaded on-demand to speed up cold start by ~300-500ms.
   let _turndownLoaded = false;
   let _mermaidLoaded = false;
   let _mermaidLoadingPromise = null;
+
+  function ensureLib(src, globalName) {
+    // Load a vendored library on demand; resolves when its global is present.
+    if (window[globalName] !== undefined) return Promise.resolve();
+    return _loadScript(src).then(() => {
+      if (window[globalName] === undefined) {
+        throw new Error(globalName + ' failed to load');
+      }
+    });
+  }
 
   function _loadScript(src) {
     return new Promise((resolve, reject) => {
@@ -112,7 +143,7 @@ let isSource = false;
     mermaid.initialize({
       startOnLoad: false,
       theme: getMermaidTheme(),
-      securityLevel: 'loose',
+      securityLevel: 'strict',
       flowchart: { useMaxWidth: true, htmlLabels: true },
       sequence: { useMaxWidth: true },
     });
@@ -133,6 +164,33 @@ let isSource = false;
         renderMermaidDiagrams(document.getElementById('content'));
       }
     });
+  }
+
+  function sanitizeMermaidSvg(svg) {
+    // Belt-and-braces: even with mermaid's strict security level, strip any
+    // script elements and event/javascript: attributes before inserting SVG.
+    try {
+      const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+      const root = doc.documentElement;
+      const els = Array.from(root.getElementsByTagName('*'));
+      for (const el of els) {
+        if (el.tagName.toLowerCase() === 'script') {
+          el.remove();
+          continue;
+        }
+        for (const attr of Array.from(el.attributes)) {
+          const name = attr.name.toLowerCase();
+          const value = (attr.value || '').trim().toLowerCase();
+          if (name.startsWith('on') ||
+              ((name === 'href' || name === 'xlink:href') && value.startsWith('javascript:'))) {
+            el.removeAttribute(attr.name);
+          }
+        }
+      }
+      return new XMLSerializer().serializeToString(root);
+    } catch (e) {
+      return svg;
+    }
   }
 
   async function renderMermaidDiagrams(root) {
@@ -157,7 +215,7 @@ let isSource = false;
         wrapper.className = 'mermaid-diagram';
         wrapper.setAttribute('data-source', source);
         wrapper.setAttribute('contenteditable', 'false');
-        wrapper.innerHTML = svg;
+        wrapper.innerHTML = sanitizeMermaidSvg(svg);
         pre.parentNode.replaceChild(wrapper, pre);
       } catch (e) {
         const error = document.createElement('div');
@@ -216,19 +274,85 @@ let isSource = false;
     root.appendChild(section);
   }
 
-  async function renderMarkdown(content, container) {
-    // Extract YAML frontmatter (--- at start, ending with ---) before marked.parse
-    // so it doesn't get mangled into <hr> tags
+  function splitMarkdownForFirstScreen(markdown) {
+    if (!markdown || markdown.length <= FIRST_SCREEN_MARKDOWN_CHARS) {
+      return { first: markdown || '', rest: '', staged: false };
+    }
+    let cut = markdown.lastIndexOf('\n\n', FIRST_SCREEN_MARKDOWN_CHARS);
+    if (cut < FIRST_SCREEN_MARKDOWN_CHARS * 0.55) cut = markdown.lastIndexOf('\n#', FIRST_SCREEN_MARKDOWN_CHARS);
+    if (cut < FIRST_SCREEN_MARKDOWN_CHARS * 0.55) cut = markdown.lastIndexOf('\n', FIRST_SCREEN_MARKDOWN_CHARS);
+    if (cut < FIRST_SCREEN_MARKDOWN_CHARS * 0.55) cut = FIRST_SCREEN_MARKDOWN_CHARS;
+    return { first: markdown.slice(0, cut), rest: markdown.slice(cut), staged: true };
+  }
+
+  function containsMermaidFence(markdown) {
+    return /(^|\n)\s*(```+|~~~+)\s*mermaid(?:\s|$)/i.test(markdown || '');
+  }
+
+  function hasRenderableMermaid(root) {
+    return !!(root && root.querySelector && root.querySelector('code.language-mermaid'));
+  }
+
+  // ── Render-time HTML sanitizer (stored-XSS defense) ────────────────────────
+  // Markdown may contain raw HTML and marked() passes it through verbatim. A
+  // hostile document could otherwise inject event handlers (<img onerror>),
+  // active elements (<iframe>/<embed>/<link>), or javascript: URLs that run in
+  // the WKWebView and reach the Python bridge (save_file, open_external_link,
+  // perform_auto_install, ...). That is a P0 stored-XSS vector for an app that
+  // opens untrusted files, so rendered HTML is sanitized TWICE:
+  //   1. string-level BEFORE innerHTML (otherwise <img onerror> already fires
+  //      while the parser sets innerHTML and no DOM pass can undo it);
+  //   2. DOM-level AFTER parsing (defense in depth for parser-normalized forms).
+  function sanitizeHtmlString(html) {
+    const blockedTags = 'script|iframe|object|embed|link|meta|base|style|svg|math|video|audio|source|track|frame|frameset|applet|param|noscript|form';
+    const tagRe = new RegExp('<(?:' + blockedTags + ')\\b[^>]*>[\\s\\S]*?<\\/\\s*(?:' + blockedTags + ')\\s*>|<(?:' + blockedTags + ')\\b[^>]*\\/?>', 'gi');
+    const onAttrRe = /\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
+    const dangerousUrl = '(?:javascript:|vbscript:|data:(?!image\\/)|file:)';
+    const hrefRe = new RegExp('(href|poster)\\s*=\\s*(?:"|\')?\\s*' + dangerousUrl + '[^\\s"\'>]*', 'gi');
+    const srcRe = new RegExp('\\ssrc\\s*=\\s*(?:"|\')?\\s*' + dangerousUrl + '[^\\s"\'>]*', 'gi');
+    // style="background:url(javascript:...)" is inert in modern browsers but we
+    // still strip it for defense in depth.
+    const styleRe = /\sstyle\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
+    return (html || '')
+      .replace(tagRe, '')
+      .replace(onAttrRe, '')
+      .replace(hrefRe, '$1="#"')
+      .replace(srcRe, '')
+      .replace(styleRe, (m) => /url\s*\(\s*['"]?\s*(?:javascript|vbscript|data:text\/html)/i.test(m) ? '' : m);
+  }
+
+  function sanitizeRenderedDOM(root) {
+    try {
+      root.querySelectorAll('script,iframe,object,embed,link,meta,base,style,svg,math,video,audio,source,track,frame,frameset,applet,param,noscript,form').forEach((el) => el.remove());
+      root.querySelectorAll('*').forEach((el) => {
+        for (const attr of Array.from(el.attributes || [])) {
+          const name = attr.name.toLowerCase();
+          if (name.startsWith('on')) { el.removeAttribute(attr.name); continue; }
+          if (name === 'href' || name === 'src' || name === 'xlink:href' || name === 'poster') {
+            if (/^\s*(?:javascript:|vbscript:|data:(?!image\/)|file:)/i.test((attr.value || '').trim())) {
+              el.removeAttribute(attr.name);
+            }
+          }
+        }
+      });
+    } catch (e) {
+      // Sanitizer must never break rendering.
+    }
+  }
+
+  function appendParsedMarkdown(markdown, container, options = {}) {
+    const keepExisting = !!options.keepExisting;
     let frontmatter = '';
-    let body = content;
-    const fmMatch = content.match(/^\s*---\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)\r?\n?/);
+    let body = markdown || '';
+    const fmMatch = body.match(/^\s*---\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)\r?\n?/);
     if (fmMatch) {
       frontmatter = fmMatch[1];
-      body = content.substring(fmMatch[0].length);
+      body = body.substring(fmMatch[0].length);
     }
 
     const extensions = preprocessMarkdownExtensions(body);
     body = extensions.body;
+    const fragment = document.createDocumentFragment();
 
     if (frontmatter) {
       const fmDiv = document.createElement('div');
@@ -236,41 +360,86 @@ let isSource = false;
       fmDiv.setAttribute('contenteditable', 'false');
       fmDiv.setAttribute('data-frontmatter', 'true');
       fmDiv.setAttribute('data-raw', '---\n' + frontmatter + '\n---');
-      fmDiv.innerHTML = '<button class="frontmatter-toggle" onclick="toggleFrontmatter(this)">Collapse</button>' + renderFrontmatter(frontmatter);
-      container.innerHTML = '';
-      container.appendChild(fmDiv);
-      const bodyDiv = document.createElement('div');
-      bodyDiv.innerHTML = marked.parse(body);
-      while (bodyDiv.firstChild) {
-        container.appendChild(bodyDiv.firstChild);
-      }
-    } else {
-      container.innerHTML = marked.parse(body);
+      fmDiv.innerHTML = '<button class="frontmatter-toggle" onclick="toggleFrontmatter(this)">' + t('Collapse', '折叠') + '</button>' + renderFrontmatter(frontmatter);
+      fragment.appendChild(fmDiv);
     }
-    renderMathPlaceholders(container, extensions.mathBlocks);
-    renderFootnotes(container, extensions.footnotes);
+
+    const bodyDiv = document.createElement('div');
+    bodyDiv.innerHTML = sanitizeHtmlString(marked.parse(body));
+    sanitizeRenderedDOM(bodyDiv);
+    while (bodyDiv.firstChild) fragment.appendChild(bodyDiv.firstChild);
+
+    const work = document.createElement('div');
+    work.appendChild(fragment);
+    renderMathPlaceholders(work, extensions.mathBlocks);
+    renderFootnotes(work, extensions.footnotes);
+
+    if (!keepExisting) container.innerHTML = '';
+    while (work.firstChild) container.appendChild(work.firstChild);
+  }
+
+  function finalizeRenderedMarkdown(container, content) {
     applyHeadingAnchors(container);
     rewriteRelativeImages(container);
-    buildToc(container);
-    const tables = container.querySelectorAll('table');
+    const tables = container.querySelectorAll('table:not(.table-wrap table)');
     for (const table of tables) {
+      if (table.parentElement && table.parentElement.classList.contains('table-wrap')) continue;
       const wrap = document.createElement('div');
       wrap.className = 'table-wrap';
       wrap.setAttribute('contenteditable', 'false');
       table.parentNode.insertBefore(wrap, table);
       wrap.appendChild(table);
     }
-    await renderMermaidDiagrams(container);
     protectComplexBlocks(container);
     balanceTableColumns(container);
     lastRenderedHash = contentHash(content);
+  }
+
+  function scheduleDeferredEnhancements(container, content, jobId) {
+    clearTimeout(deferredRenderTimer);
+    deferredRenderTimer = setTimeout(async () => {
+      if (jobId !== renderJobId || closing) return;
+      buildToc(container);
+      if (hasRenderableMermaid(container)) {
+        await renderMermaidDiagrams(container);
+        if (jobId !== renderJobId || closing) return;
+        protectComplexBlocks(container);
+        balanceTableColumns(container);
+        requestAnimationFrame(() => { if (!isSource) updateScrollSpy(); });
+      }
+    }, 80);
+  }
+
+  async function renderMarkdown(content, container) {
+    const jobId = ++renderJobId;
+    clearTimeout(deferredRenderTimer);
+    const split = splitMarkdownForFirstScreen(content);
+    appendParsedMarkdown(split.first, container, { keepExisting: false });
+    finalizeRenderedMarkdown(container, content);
+    scheduleDeferredEnhancements(container, content, jobId);
+
+    if (split.staged) {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          if (jobId !== renderJobId || closing) return;
+          // Re-render the full document in the deferred pass instead of
+          // appending only the tail. Markdown constructs can legally span the
+          // split boundary (fences, reference links, definitions), so the final
+          // DOM must come from a complete parse even though the first paint is
+          // intentionally partial.
+          appendParsedMarkdown(content, container, { keepExisting: false });
+          finalizeRenderedMarkdown(container, content);
+          scheduleDeferredEnhancements(container, content, jobId);
+        }, 0);
+      });
+    }
   }
 
   function toggleFrontmatter(btn) {
     const box = btn.closest('.frontmatter');
     if (!box) return;
     const collapsed = box.classList.toggle('collapsed');
-    btn.textContent = collapsed ? 'Expand' : 'Collapse';
+    btn.textContent = collapsed ? t('Expand', '展开') : t('Collapse', '折叠');
   }
 
   function rewriteRelativeImages(container) {
@@ -293,7 +462,6 @@ let isSource = false;
     toggle.setAttribute('title', hidden ? 'Show outline' : 'Hide outline');
   }
 
-  const TOC_AUTO_HIDE_WIDTH = 800;
   let tocHasContent = false;
   let tocManualOverride = null;
 
@@ -621,6 +789,7 @@ let isSource = false;
   let _sourceLineStarts = null;
 
   function syncHighlight() {
+    const t0 = performance.now();
     const layer = document.getElementById('highlightLayer');
     layer.innerHTML = highlightMarkdown(document.getElementById('textarea').value) + '\n';
     _sourceLayerText = layer.textContent;
@@ -629,11 +798,25 @@ let isSource = false;
       if (_sourceLayerText[i] === '\n') starts.push(i + 1);
     }
     _sourceLineStarts = starts;
+    // Adaptive sync strategy: light documents re-highlight on the next frame so
+    // fast typing never shows transparent text (the textarea's own text is
+    // transparent; the highlight layer below provides the visible colors). Heavy
+    // documents fall back to debouncing so keystrokes never block on a long pass.
+    _highlightHeavy = (performance.now() - t0) > 24;
   }
 
   function scheduleHighlightSync() {
     clearTimeout(highlightTimer);
-    highlightTimer = setTimeout(syncHighlight, 120);
+    if (_highlightHeavy) {
+      highlightTimer = setTimeout(syncHighlight, 120);
+      return;
+    }
+    if (highlightRaf === null) {
+      highlightRaf = requestAnimationFrame(() => {
+        highlightRaf = null;
+        syncHighlight();
+      });
+    }
   }
 
   function setPageWidth(w) {
@@ -652,16 +835,38 @@ let isSource = false;
   function resetPageWidth() {
     setPageWidth(720);
     if (window.pywebview && window.pywebview.api) window.pywebview.api.save_page_width(720);
-    showStatus('Width reset');
+    showStatus(t('Width reset', '宽度已重置'));
+  }
+  // ── Font size (View menu: ⌘= / ⌘-) ──
+  // Adjusts the content font size (±1px) for BOTH the source editor and the
+  // rendered markdown, so every visible text element scales together (headings
+  // keep their relative ratios via the --content-font-size CSS variable).
+  // In-memory only (not persisted), clamped to a sane range.
+  let contentFontSize = 16;
+  function applyFontSize() {
+    document.documentElement.style.setProperty('--content-font-size', contentFontSize + 'px');
+  }
+  function zoomIn() {
+    contentFontSize = Math.min(FONT_MAX, contentFontSize + FONT_STEP);
+    applyFontSize();
+    showStatus(t('Font ' + contentFontSize + 'px', '字号 ' + contentFontSize + 'px'));
+  }
+  function zoomOut() {
+    contentFontSize = Math.max(FONT_MIN, contentFontSize - FONT_STEP);
+    applyFontSize();
+    showStatus(t('Font ' + contentFontSize + 'px', '字号 ' + contentFontSize + 'px'));
   }
   function openFile() {
     if (window.pywebview && window.pywebview.api) window.pywebview.api.open_file_dialog();
   }
-  function closeWindow() {
+  async function closeWindow() {
+    if (isDirty) {
+      promptBeforeClose();
+      return;
+    }
     if (window.pywebview && window.pywebview.api) window.pywebview.api.close_window();
   }
   async function showPreferences() {
-    const body = document.getElementById('modalBody');
     let version = '—';
     try {
       if (window.pywebview && window.pywebview.api) {
@@ -669,16 +874,15 @@ let isSource = false;
         if (info && info.version) version = info.version;
       }
     } catch (e) {}
-    body.innerHTML =
-      '<div class="modal-row"><span class="modal-label">App</span><span class="modal-value">mdPreview</span></div>' +
-      '<div class="modal-row"><span class="modal-label">Version</span><span class="modal-value">' + version + '</span></div>' +
-      '<div class="modal-row"><span class="modal-label">Shortcuts</span><span class="modal-value" style="font-size:12px;line-height:1.6">' +
-      '⌘O Open &nbsp; ⌘S Save &nbsp; ⌘E Toggle Source<br>' +
-      '⌘F Find &nbsp; ⌘W Close &nbsp; ⌘+ Zoom In<br>' +
-      '⌘− Zoom Out &nbsp; ⌘0 Reset Width<br>' +
-      '⌘N New &nbsp; Drag images to insert</span></div>';
-    document.getElementById('modalOverlay').classList.add('visible');
-    document.querySelector('.modal-header').textContent = 'About mdPreview';
+    const bodyHtml =
+      '<div class="modal-row"><span class="modal-label">' + t('App', '应用') + '</span><span class="modal-value">mdPreview</span></div>' +
+      '<div class="modal-row"><span class="modal-label">' + t('Version', '版本') + '</span><span class="modal-value">' + version + '</span></div>' +
+      '<div class="modal-row"><span class="modal-label">' + t('Shortcuts', '快捷键') + '</span><span class="modal-value" style="font-size:12px;line-height:1.6">' +
+      '⌘O ' + t('Open', '打开') + ' &nbsp; ⌘S ' + t('Save', '保存') + ' &nbsp; ⌘E ' + t('Toggle Source', '切换源码') + '<br>' +
+      '⌘F ' + t('Find', '查找') + ' &nbsp; ⌘W ' + t('Close', '关闭') + ' &nbsp; ⌘= ' + t('Zoom In', '放大') + '<br>' +
+      '⌘− ' + t('Zoom Out', '缩小') + ' &nbsp; ⌘. ' + t('Width +', '加宽') + ' &nbsp; ⌘, ' + t('Width −', '变窄') + '<br>' +
+      '⌘N ' + t('New', '新建') + ' &nbsp; ' + t('Drag images to insert', '拖拽图片插入') + '</span></div>';
+    setModal(t('About mdPreview', '关于 mdPreview'), bodyHtml, '<button class="modal-close" onclick="closeModal()">' + t('Close', '关闭') + '</button>');
   }
   function insertMarkdownSnippet(snippet) {
     const textarea = document.getElementById('textarea');
@@ -710,8 +914,12 @@ let isSource = false;
       });
     }
   }
-  function exportHTML() {
-    const title = filePath && filePath !== 'Untitled.md' ? filePath.split('/').pop().replace(/\.[^.]+$/, '') : 'Untitled';
+  function currentDocTitle() {
+    return filePath && filePath !== 'Untitled.md' ? filePath.split('/').pop().replace(/\.[^.]+$/, '') : 'Untitled';
+  }
+
+  function buildHtml() {
+    const title = currentDocTitle();
     const clone = document.getElementById('content').cloneNode(true);
     clone.querySelectorAll('.frontmatter-toggle, .colgroup, colgroup').forEach(el => el.remove());
     clone.querySelectorAll('*').forEach(el => {
@@ -738,11 +946,221 @@ let isSource = false;
       '.frontmatter { font-family: "SF Mono", Menlo, monospace; font-size: 13px; background: #f5f5f7; border-radius: 8px; padding: 14px 18px; white-space: pre-wrap; }\n' +
       '.mermaid-diagram { text-align: center; }\n' +
       '</style>\n</head>\n<body>\n' + clone.innerHTML + '\n</body>\n</html>';
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.export_document(title + '.html', html, 'html');
+    return html;
   }
-  function exportText() {
-    const title = filePath && filePath !== 'Untitled.md' ? filePath.split('/').pop().replace(/\.[^.]+$/, '') : 'Untitled';
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.export_document(title + '.txt', getCurrentMarkdown(), 'txt');
+
+  // Word (.docx) via html-docx-js 0.3.1: its API is asBlob(html, opts) which
+  // returns a Blob; we read it back as a base64 data URL for the native write.
+  async function buildDocx() {
+    try {
+      if (typeof htmlDocx === 'undefined') {
+        showStatus(t('Word export is not ready yet', 'Word 导出功能尚未就绪'), true);
+        return null;
+      }
+      const html = buildHtml();
+      const blob = htmlDocx.asBlob(html, {
+        margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+      });
+      return await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
+        reader.readAsDataURL(blob);
+      });
+    } catch (err) {
+      showStatus(t('Word export failed: ', 'Word 导出失败：') + (err && err.message ? err.message : err), true);
+      return null;
+    }
+  }
+
+  // html2canvas 1.4.1 cannot parse modern CSS color() functions (e.g.
+  // `color(display-p3 ...)` produced when a CSS variable expands into a color
+  // value). Before rendering we normalize every color property in the clone
+  // back to rgb/rgba so export never fails on it.
+  function convertColorFunction(v) {
+    const m = v.match(/color\(\s*([a-z0-9-]+)\s+([\d.]+%?)\s+([\d.]+%?)\s+([\d.]+%?)(?:\s*\/\s*([\d.]+%?))?\s*\)/);
+    if (!m) return '#000000';
+    const toFrac = (s) => s.endsWith('%') ? parseFloat(s) / 100 : parseFloat(s);
+    const r = Math.max(0, Math.min(255, Math.round(toFrac(m[2]) * 255)));
+    const g = Math.max(0, Math.min(255, Math.round(toFrac(m[3]) * 255)));
+    const b = Math.max(0, Math.min(255, Math.round(toFrac(m[4]) * 255)));
+    const a = m[5] !== undefined ? toFrac(m[5]) : 1;
+    return a >= 1 ? 'rgb(' + r + ',' + g + ',' + b + ')' : 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
+  }
+
+  function sanitizeCloneColors(doc) {
+    const props = [
+      'color', 'backgroundColor', 'borderTopColor', 'borderRightColor',
+      'borderBottomColor', 'borderLeftColor', 'borderBlockStartColor',
+      'borderBlockEndColor', 'borderInlineStartColor', 'borderInlineEndColor',
+      'outlineColor', 'textDecorationColor', 'caretColor', 'columnRuleColor',
+      'textEmphasisColor', 'WebkitTextFillColor', 'WebkitTextStrokeColor',
+      'boxShadow', 'textShadow',
+    ];
+    doc.querySelectorAll('*').forEach(el => {
+      const cs = getComputedStyle(el);
+      for (const p of props) {
+        const v = cs.getPropertyValue(p);
+        if (v && v.indexOf('color(') >= 0) {
+          el.style.setProperty(p, convertColorFunction(v));
+        }
+      }
+    });
+  }
+
+  // PNG long image via html2canvas: render the whole content area to a bitmap.
+  async function buildPng() {
+    try {
+      if (typeof html2canvas === 'undefined') {
+        showStatus(t('PNG export is not ready yet', 'PNG 导出功能尚未就绪'), true);
+        return null;
+      }
+      const contentEl = document.getElementById('content');
+      if (!contentEl) return null;
+      showStatus(t('Rendering image…', '正在渲染图片…'));
+      const canvas = await html2canvas(contentEl, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        onclone: sanitizeCloneColors,
+      });
+      return canvas.toDataURL('image/png');
+    } catch (err) {
+      showStatus(t('PNG export failed: ', 'PNG 导出失败：') + (err && err.message ? err.message : err), true);
+      return null;
+    }
+  }
+
+  // ── Export As (File menu): one native panel with a format popup ──
+  async function exportAs() {
+    if (!window.pywebview || !window.pywebview.api) {
+      showStatus(t('Export is not ready yet', '导出功能尚未就绪'), true);
+      return;
+    }
+    try {
+      const res = await window.pywebview.api.export_as_choose(currentDocTitle() + '.md');
+      if (!res || !res.success) return;
+      const writeRes = await exportAsWrite(res.path, res.format);
+      if (writeRes && writeRes.success) {
+        showStatus(t('Exported', '已导出'));
+      } else {
+        showStatus(t('Export failed: ', '导出失败：') + ((writeRes && writeRes.error) || ''), true);
+      }
+    } catch (err) {
+      showStatus(t('Export failed: ', '导出失败：') + (err && err.message ? err.message : err), true);
+    }
+  }
+
+  // Build the payload for a chosen export format and write it through the
+  // native bridge. Shared by Export As and Save As (non-Markdown formats).
+  // PDF/PNG capture the rendered DOM: in Source mode the textarea is only
+  // viewport-tall and #content is hidden, so a capture would yield just the
+  // visible area (or an empty image). We temporarily switch to Preview and
+  // restore the UI after the write completes.
+  async function exportAsWrite(path, format) {
+    const needPreview = isSource && (format === 'pdf' || format === 'png');
+    if (needPreview) await showPreviewForCapture();
+    // PDFs must not contain the fixed-position TOC sidebar. Hide it (and drop
+    // the has-toc layout class so the page goes back to full-width centering)
+    // for the duration of the write, then restore.
+    const toc = document.querySelector('.toc-sidebar');
+    const hideToc = format === 'pdf' && !!toc;
+    const tocPrevDisplay = hideToc ? toc.style.display : null;
+    const wasHasToc = hideToc && document.body.classList.contains('has-toc');
+    if (hideToc) {
+      toc.style.display = 'none';
+      document.body.classList.remove('has-toc');
+    }
+    // WKWebView only paints what the document actually contains: body is
+    // height:100vh with the scrolling happening inside .scroll-wrap, so
+    // createPDF would capture just one viewport (the rest of the PDF comes
+    // out blank). Temporarily un-clamp the document to its full content
+    // height for the duration of the write, then restore the layout.
+    const savedLayout = [];
+    const stash = (el, p) => savedLayout.push([el, p, el.style.getPropertyValue(p)]);
+    const body = document.body;
+    const sw = document.querySelector('.scroll-wrap');
+    if (format === 'pdf') {
+      stash(body, 'height');
+      stash(body, 'overflow');
+      if (sw) { stash(sw, 'position'); stash(sw, 'height'); stash(sw, 'overflow'); }
+      body.style.height = 'auto';
+      body.style.overflow = 'visible';
+      if (sw) {
+        sw.style.position = 'static';
+        sw.style.height = 'auto';
+        sw.style.overflow = 'visible';
+      }
+      void body.offsetHeight;  // force reflow before measuring
+    }
+    try {
+      let content = '';
+      if (format === 'md' || format === 'txt') content = getCurrentMarkdown();
+      else if (format === 'html') content = buildHtml();
+      else if (format === 'docx') {
+        await ensureLib('html-docx-js.js', 'htmlDocx');
+        content = await buildDocx();
+      } else if (format === 'png') {
+        await ensureLib('html2canvas.min.js', 'html2canvas');
+        content = await buildPng();
+      }
+      if (content === null) return { success: false, error: 'conversion-failed' };
+      let pageSize = null;
+      if (format === 'pdf') {
+        // createPDF defaults to the visible viewport; pass the full document
+        // size so everything is captured. +100px keeps the last line off the
+        // page edge. `breaks` lists the top edge of every block element so the
+        // A4 slicing lands on element boundaries instead of mid-line.
+        pageSize = {
+          width: Math.max(document.body.scrollWidth, window.innerWidth),
+          height: document.body.scrollHeight + 100,
+        };
+      }
+      return await window.pywebview.api.export_as_write(path, format, content, pageSize);
+    } finally {
+      savedLayout.forEach(([el, p, v]) => {
+        if (v) el.style.setProperty(p, v);
+        else el.style.removeProperty(p);
+      });
+      if (hideToc) {
+        toc.style.display = tocPrevDisplay;
+        if (wasHasToc) document.body.classList.add('has-toc');
+      }
+      if (needPreview) restoreSourceMode();
+    }
+  }
+
+  // Temporarily render the Preview DOM for a capture while staying logically
+  // in Source mode; restoreSourceMode() puts the UI back afterwards.
+  async function showPreviewForCapture() {
+    const content = document.getElementById('content');
+    const source = document.getElementById('source');
+    const page = document.getElementById('page');
+    const textarea = document.getElementById('textarea');
+    const md = textarea ? textarea.value : '';
+    if (contentHash(md) !== lastRenderedHash) {
+      await renderMarkdown(md, content);
+    }
+    renderedDirty = false;
+    content.classList.remove('hidden');
+    source.classList.remove('visible');
+    page.classList.remove('full-width');
+    isSource = false;
+    updateEmptyState();
+    await new Promise(res => requestAnimationFrame(res));
+  }
+
+  function restoreSourceMode() {
+    const content = document.getElementById('content');
+    const source = document.getElementById('source');
+    const page = document.getElementById('page');
+    content.classList.add('hidden');
+    source.classList.add('visible');
+    page.classList.add('full-width');
+    isSource = true;
+    updateEmptyState();
+    syncPositionToSource();
   }
   function printDocument() { window.print(); }
 
@@ -771,30 +1189,40 @@ let isSource = false;
     }
   }
 
+  function setModal(title, bodyHtml, actionsHtml) {
+    const header = document.getElementById('modalHeader');
+    const body = document.getElementById('modalBody');
+    const actions = document.getElementById('modalActions');
+    if (header) header.textContent = title;
+    if (body) body.innerHTML = bodyHtml;
+    if (actions) actions.innerHTML = actionsHtml || '<button class="modal-close" onclick="closeModal()">' + t('Close', '关闭') + '</button>';
+    document.getElementById('modalOverlay').classList.add('visible');
+  }
+
   async function showFileProperties() {
     if (!window.pywebview || !window.pywebview.api) return;
     const props = await window.pywebview.api.get_file_properties();
-    const body = document.getElementById('modalBody');
     const rows = [
-      { label: 'Name', value: props.name },
-      { label: 'Location', value: props.location || '-', copyable: !!props.location },
-      { label: 'Size', value: props.sizeFormatted + ' (' + (props.size || 0) + ' bytes)' },
-      { label: 'Encoding', value: props.encoding || '-' },
-      { label: 'Modified', value: props.modified || '-' },
-      { label: 'Created', value: props.created || '-' },
+      { label: t('Name', '名称'), value: props.name },
+      { label: t('Location', '位置'), value: props.location || '-', copyable: !!props.location },
+      { label: t('Size', '大小'), value: props.sizeFormatted + ' (' + (props.size || 0) + ' ' + t('bytes', '字节') + ')' },
+      { label: t('Encoding', '编码'), value: props.encoding || '-' },
+      { label: t('Modified', '修改时间'), value: props.modified || '-' },
+      { label: t('Created', '创建时间'), value: props.created || '-' },
     ];
-    body.innerHTML = rows.map(r => {
-      const copyButton = r.copyable ? '<button class="modal-copy" type="button" data-copy="location" title="Copy location">Copy</button>' : '';
+    const bodyHtml = rows.map(r => {
+      const copyButton = r.copyable ? '<button class="modal-copy" type="button" data-copy="location" title="' + t('Copy location', '复制位置') + '">' + t('Copy', '复制') + '</button>' : '';
       return `<div class="modal-row"><div class="modal-label">${r.label}</div><div class="modal-value">${escHtml(r.value)}</div>${copyButton}</div>`;
     }).join('');
+    setModal(t('File Properties', '文件属性'), bodyHtml, '<button class="modal-close" onclick="closeModal()">' + t('Close', '关闭') + '</button>');
+    const body = document.getElementById('modalBody');
     const copyLocation = body.querySelector('[data-copy="location"]');
     if (copyLocation) {
       copyLocation.addEventListener('click', async () => {
         const ok = await copyTextToClipboard(props.location || '');
-        showStatus(ok ? 'Location copied' : 'Copy failed', !ok);
+        showStatus(ok ? t('Location copied', '位置已复制') : t('Copy failed', '复制失败'), !ok);
       });
     }
-    document.getElementById('modalOverlay').classList.add('visible');
   }
   function closeModal() {
     document.getElementById('modalOverlay').classList.remove('visible');
@@ -807,10 +1235,23 @@ let isSource = false;
   });
   document.getElementById('content').addEventListener('click', (e) => {
     const img = e.target.closest('img');
-    if (!img) return;
-    e.preventDefault();
-    document.getElementById('imageLightboxImg').src = img.src;
-    document.getElementById('imageLightbox').classList.add('visible');
+    if (img) {
+      e.preventDefault();
+      document.getElementById('imageLightboxImg').src = img.src;
+      document.getElementById('imageLightbox').classList.add('visible');
+      return;
+    }
+    // Non-editable rendered content (frontmatter, code blocks, math, Mermaid,
+    // protected blocks, ...): show a transient hint pointing the user to the
+    // Source view instead of silently doing nothing.
+    // NOTE: do NOT exclude [contenteditable="true"] here — closest() walks up
+    // to #content (which IS contenteditable="true") and would always match,
+    // silently disabling the hint. Editable-vs-not is decided by
+    // findNonEditableAncestor() below.
+    if (!isSource && !e.target.closest('button, a, input, select, label, [role="button"]')) {
+      const ne = findNonEditableAncestor(e.target);
+      if (ne) showEditHint(ne);
+    }
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeModal();
@@ -968,8 +1409,17 @@ let isSource = false;
   }
   async function loadContent(path, content, pageWidth, draftRecovered, zh) {
     filePath = path;
+    try {
+      if (window.pywebview && window.pywebview.api && window.pywebview.api.startup_ready) {
+        window.pywebview.api.startup_ready(Math.round(performance.now() - _jsT0));
+      }
+    } catch (e) {}
+    
     if (pageWidth) setPageWidth(pageWidth);
-    if (zh !== undefined) isZh = zh;
+    if (zh !== undefined) {
+      isZh = zh;
+      applyStaticUiLanguage();
+    }
     await renderMarkdown(content, document.getElementById('content'));
     document.getElementById('textarea').value = content;
     syncHighlight();
@@ -977,13 +1427,25 @@ let isSource = false;
     isDirty = false;
     renderedDirty = false;
     if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(false);
-    isSource = false;
+    // Opening an EXISTING document (double-click, Cmd+O, Finder, reopen) shows
+    // the rendered Preview by default. Only a brand-new blank document (path
+    // still 'Untitled.md') starts in Source mode so the user can type right in.
+    isSource = (!path || path === 'Untitled.md');
     updateView();
+    // A brand-new blank document gets the caret automatically placed in the
+    // source area — no click needed. The hint stays until typing begins.
+    if (isSource) {
+      const ta = document.getElementById('textarea');
+      if (ta) {
+        ta.focus();
+        ta.setSelectionRange(0, 0);
+      }
+    }
     if (draftRecovered) showDraftRecoveredBanner();
     // Preload turndown.js in background (non-blocking) so it's ready
     // when the user first toggles to source mode.
     ensureTurndown();
-    if (content.includes('```mermaid') || content.includes('graph ') || content.includes('sequenceDiagram')) {
+    if (containsMermaidFence(content)) {
       ensureMermaid();
     }
   }
@@ -1012,7 +1474,7 @@ let isSource = false;
       remove();
     });
     dismiss.addEventListener('click', (e) => { e.preventDefault(); remove(); });
-    setTimeout(remove, 8000);
+    setTimeout(remove, STATUS_HIDE_MS);
   }
 
   function reloadContent() {
@@ -1373,17 +1835,14 @@ let isSource = false;
   function updateView() {
     const content = document.getElementById('content');
     const source = document.getElementById('source');
-    const hint = document.getElementById('sourceHint');
     const page = document.getElementById('page');
     if (isSource) {
       content.classList.add('hidden');
       source.classList.add('visible');
-      hint.classList.add('visible');
       page.classList.add('full-width');
     } else {
       content.classList.remove('hidden');
       source.classList.remove('visible');
-      hint.classList.remove('visible');
       page.classList.remove('full-width');
     }
     updateEmptyState();
@@ -1397,16 +1856,19 @@ let isSource = false;
     el.textContent = isSource ? 'mdSource' : 'mdPreview';
     el.classList.add('visible');
     if (_modeIndicatorTimer) clearTimeout(_modeIndicatorTimer);
-    _modeIndicatorTimer = setTimeout(() => { el.classList.remove('visible'); }, 1500);
+    _modeIndicatorTimer = setTimeout(() => { el.classList.remove('visible'); }, 2000);
   }
 
   function updateEmptyState() {
     const content = document.getElementById('content');
-    // Show welcome overlay only when content is truly empty (no text, no child elements)
-    const isEmpty = !isSource && content.textContent.trim() === '' && content.children.length === 0;
+    const textarea = document.getElementById('textarea');
+    // The welcome hint shows only in SOURCE mode on a truly empty document
+    // (the textarea is the source of truth while in source mode). In Preview
+    // mode we never show the hint — only the normally rendered content.
+    const isEmpty = isSource && (textarea ? textarea.value.trim() === '' : false);
     if (isEmpty) {
-      // Build a non-editable overlay that sits on top of the empty contenteditable.
-      // The contenteditable itself stays empty so the cursor lands at position 0.
+      // Build a non-editable overlay that sits on top of the empty source area.
+      // The textarea itself stays empty so the cursor lands at position 0.
       let overlay = document.getElementById('welcomeOverlay');
       if (!overlay) {
         overlay = document.createElement('div');
@@ -1416,8 +1878,8 @@ let isSource = false;
           ? '拖拽 <strong>.md</strong> 文件到此处，或双击打开'
           : 'or double click a <strong>.md</strong> file to open';
         const toggleTip = isZh
-          ? '<kbd>⌘</kbd><kbd>E</kbd> 切换源码 / 预览'
-          : '<kbd>⌘</kbd><kbd>E</kbd> to toggle source / preview';
+          ? '<kbd>⌘</kbd><kbd>E</kbd> 预览'
+          : '<kbd>⌘</kbd><kbd>E</kbd> to preview';
         const title = isZh ? '开始书写' : 'Start writing';
         overlay.innerHTML = '<div class="welcome-icon">&#9998;</div>' +
           '<div class="welcome-title">' + title + '</div>' +
@@ -1425,14 +1887,22 @@ let isSource = false;
           '<div class="welcome-tip">' + toggleTip + '</div>';
         content.parentNode.appendChild(overlay);
         overlay.addEventListener('click', () => {
-          content.focus();
-          const range = document.createRange();
-          range.selectNodeContents(content);
-          range.collapse(true);
-          const sel = window.getSelection();
-          sel.removeAllRanges();
-          sel.addRange(range);
-          dismissWelcomeOverlay();
+          // Focus the editor without dismissing the hint — it stays visible
+          // until the user actually starts typing (input hides it), so a
+          // newly created document always has the caret ready in the source
+          // area with the hint still explaining what to do.
+          const ta = document.getElementById('textarea');
+          if (isSource && ta) {
+            ta.focus();
+          } else {
+            content.focus();
+            const range = document.createRange();
+            range.selectNodeContents(content);
+            range.collapse(true);
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
         });
       }
     } else {
@@ -1464,46 +1934,190 @@ let isSource = false;
     syncHighlight();
   }
 
-  async function saveFile() {
-    if (!window.pywebview || !window.pywebview.api) {
-      showStatus('Save is not ready yet', true);
-      return;
-    }
-    const markdown = getCurrentMarkdown();
-    if (!filePath || filePath === 'Untitled.md') {
-      await saveAsFile();
-      return;
-    }
-    try {
-      const result = await window.pywebview.api.save_file(filePath, markdown);
-      if (result.success) {
-        markSaved(markdown);
-        showStatus('Saved');
-      } else {
-        showStatus(result.error ? 'Save failed: ' + result.error : 'Save failed', true);
-      }
-    } catch (err) {
-      showStatus('Save failed: ' + (err && err.message ? err.message : err), true);
+  function forceCloseWindow(discard = false) {
+    closePromptVisible = false;
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.force_close_window(!!discard);
     }
   }
 
-  async function saveAsFile() {
-    if (!window.pywebview || !window.pywebview.api) {
-      showStatus('Save is not ready yet', true);
+  // Called by Python when the user closes the last document window but is not
+  // quitting the app. Instead of terminating, the window becomes a blank Untitled
+  // document so the app stays alive and Finder double-click / Dock reopen keep
+  // working without a cold start.
+  function convertToBlankDocument() {
+    filePath = null;
+    markSaved('');
+    document.getElementById('content').innerHTML = '';
+    // Reset the outline too, otherwise the previous document's TOC lingers on
+    // the blank Untitled window (visible when reopened from the Dock).
+    tocHasContent = false;
+    tocManualOverride = null;
+    const toc = document.getElementById('tocSidebar');
+    if (toc) toc.innerHTML = '';
+    const toggle = document.getElementById('tocToggle');
+    if (toggle) toggle.style.display = 'none';
+    setTocVisible(false);
+    // Blank documents default to Source mode (with the empty-document hint),
+    // matching the default mode of freshly opened documents.
+    isSource = true;
+    updateView();
+    // Put the caret in the source area immediately; the hint disappears only
+    // once the user starts typing.
+    const ta = document.getElementById('textarea');
+    if (ta) {
+      ta.focus();
+      ta.setSelectionRange(0, 0);
+    }
+    if (window.pywebview && window.pywebview.api) {
+      window.pywebview.api.reset_to_untitled();
+    }
+  }
+
+  function promptBeforeClose(force = false) {
+    if (!force && !isDirty) {
+      forceCloseWindow();
       return;
     }
-    const markdown = getCurrentMarkdown();
+    if (closePromptVisible) return;
+    closePromptVisible = true;
+    // Native TextEdit-style dialog (keep question + name/location + red
+    // Delete / gray Cancel / blue Save) shown from the Python side. The
+    // in-page modal below is only a fallback for non-Cocoa environments.
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.native_save_prompt) {
+      window.pywebview.api.native_save_prompt()
+        .then(async (res) => {
+          closePromptVisible = false;
+          if (!res || !res.action) return;
+          if (res.action === 'save') {
+            if (res.path && res.path !== filePath) filePath = res.path;
+            const result = await saveFile(false, null, { closeOnSuccess: true });
+            if (result && result.saved) {
+              await forceCloseWindow();
+            } else {
+              closePromptVisible = false;
+            }
+          } else if (res.action === 'delete') {
+            await forceCloseWindow(true);
+          }
+          // cancel: keep the window open and do nothing
+        })
+        .catch(() => { closePromptVisible = false; });
+      return;
+    }
+    const name = filePath && filePath !== 'Untitled.md' ? filePath.split('/').pop() : 'Untitled.md';
+    const bodyHtml = '<p>' + t('Do you want to save the changes you made to', '是否保存对') + ' <strong>' + escHtml(name) + '</strong> ' + t('?', '所做的更改？') + '</p>' +
+      '<p style="color:#666;margin-bottom:0;">' + t('Your changes will be lost if you do not save them.', '若不保存，更改将丢失。') + '</p>';
+    const actionsHtml = '<button class="modal-button secondary" id="closeCancel">' + t('Cancel', '取消') + '</button>' +
+      '<button class="modal-button danger" id="closeDiscard">' + t("Don't Save", '不保存') + '</button>' +
+      '<button class="modal-button" id="closeSave">' + t('Save', '保存') + '</button>';
+    setModal(t('Save Changes?', '保存更改？'), bodyHtml, actionsHtml);
+    document.getElementById('closeCancel').addEventListener('click', () => {
+      closePromptVisible = false;
+      closeModal();
+    });
+    document.getElementById('closeDiscard').addEventListener('click', async () => {
+      closeModal();
+      await forceCloseWindow(true);
+    });
+    document.getElementById('closeSave').addEventListener('click', async () => {
+      closeModal();
+      closePromptVisible = false;
+      const result = await saveFile(false, null, { closeOnSuccess: true });
+      if (result && result.saved) await forceCloseWindow();
+    });
+  }
+
+  function showSaveConflictDialog(path, markdown, options = {}) {
+    const name = path ? path.split('/').pop() : t('this file', '此文件');
+    const bodyHtml = '<p>' + t('The file', '文件') + ' <strong>' + escHtml(name) + '</strong> ' + t('has changed on disk since it was opened or last saved.', '自打开或上次保存以来已在磁盘上发生变化。') + '</p>' +
+      '<p>' + t('Choose how to continue:', '请选择如何继续：') + '</p>' +
+      '<ul style="margin:8px 0 0 18px;padding:0;color:#555;line-height:1.5;">' +
+      '<li><strong>' + t('Save As', '另存为') + '</strong> ' + t('keeps the changed file untouched and saves this document to a new path.', '保持磁盘文件不变，将本文档保存到新路径。') + '</li>' +
+      '<li><strong>' + t('Save Current', '保存当前') + '</strong> ' + t('overwrites the file on disk with the content in this window.', '用当前窗口内容覆盖磁盘文件。') + '</li>' +
+      '<li><strong>' + t('Cancel', '取消') + '</strong> ' + t('stops saving.', '停止保存。') + '</li>' +
+      '</ul>';
+    const actionsHtml = '<button class="modal-button secondary" id="conflictCancel">' + t('Cancel', '取消') + '</button>' +
+      '<button class="modal-button" id="conflictSaveAs">' + t('Save As...', '另存为…') + '</button>' +
+      '<button class="modal-button danger" id="conflictOverwrite">' + t('Save Current', '保存当前') + '</button>';
+    setModal(t('Save Conflict', '保存冲突'), bodyHtml, actionsHtml);
+    document.getElementById('conflictCancel').addEventListener('click', () => {
+      closeModal();
+      showStatus(t('Save cancelled', '已取消保存'));
+      if (options.closeOnCancel) promptBeforeClose();
+    });
+    document.getElementById('conflictSaveAs').addEventListener('click', async () => {
+      closeModal();
+      const result = await saveAsFile(markdown);
+      if (options.closeOnSuccess && result && result.saved) await forceCloseWindow();
+    });
+    document.getElementById('conflictOverwrite').addEventListener('click', async () => {
+      closeModal();
+      const result = await saveFile(true, markdown);
+      if (options.closeOnSuccess && result && result.saved) await forceCloseWindow();
+    });
+  }
+
+  async function saveFile(force = false, suppliedMarkdown = null, options = {}) {
+    if (!window.pywebview || !window.pywebview.api) {
+      showStatus(t('Save is not ready yet', '保存功能尚未就绪'), true);
+      return { saved: false, error: 'not-ready' };
+    }
+    const markdown = suppliedMarkdown !== null ? suppliedMarkdown : getCurrentMarkdown();
+    if (!filePath || filePath === 'Untitled.md') {
+      return await saveAsFile(markdown);
+    }
     try {
-      const result = await window.pywebview.api.save_as_dialog(markdown);
+      const result = await window.pywebview.api.save_file(filePath, markdown, !!force);
       if (result.success) {
-        filePath = result.path;
         markSaved(markdown);
-        showStatus('Saved');
-      } else if (!result.cancelled) {
-        showStatus(result.error ? 'Save failed: ' + result.error : 'Save failed', true);
+        showStatus(force ? t('Saved current version', '已保存当前版本') : t('Saved', '已保存'));
+        return { saved: true };
+      } else if (result.conflict) {
+        showSaveConflictDialog(result.path || filePath, markdown, options);
+        return { saved: false, conflict: true };
+      } else {
+        showStatus(result.error ? t('Save failed: ', '保存失败：') + result.error : t('Save failed', '保存失败'), true);
+        return { saved: false, error: result.error || 'save-failed' };
       }
     } catch (err) {
-      showStatus('Save failed: ' + (err && err.message ? err.message : err), true);
+      showStatus(t('Save failed: ', '保存失败：') + (err && err.message ? err.message : err), true);
+      return { saved: false, error: err };
+    }
+  }
+
+  async function saveAsFile(suppliedMarkdown = null) {
+    if (!window.pywebview || !window.pywebview.api) {
+      showStatus(t('Save is not ready yet', '保存功能尚未就绪'), true);
+      return { saved: false, error: 'not-ready' };
+    }
+    const markdown = suppliedMarkdown !== null ? suppliedMarkdown : getCurrentMarkdown();
+    try {
+      const result = await window.pywebview.api.save_as_choose(currentDocTitle() + '.md');
+      if (result && result.success) {
+        const { path, format } = result;
+        if (format === 'md') {
+          filePath = path;
+          markSaved(markdown);
+          showStatus(t('Saved', '已保存'));
+          return { saved: true };
+        }
+        // Saved as another format: export only, keep the working file untouched.
+        const writeRes = await exportAsWrite(path, format);
+        if (writeRes && writeRes.success) {
+          showStatus(t('Saved', '已保存'));
+          return { saved: true, exported: true, path };
+        }
+        showStatus(t('Save failed: ', '保存失败：') + ((writeRes && writeRes.error) || ''), true);
+        return { saved: false, error: (writeRes && writeRes.error) || 'save-failed' };
+      } else if (result && !result.cancelled) {
+        showStatus(result.error ? t('Save failed: ', '保存失败：') + result.error : t('Save failed', '保存失败'), true);
+        return { saved: false, error: result.error || 'save-failed' };
+      }
+      return { saved: false, cancelled: true };
+    } catch (err) {
+      showStatus(t('Save failed: ', '保存失败：') + (err && err.message ? err.message : err), true);
+      return { saved: false, error: err };
     }
   }
 
@@ -1515,6 +2129,66 @@ let isSource = false;
     el.classList.add('visible');
     clearTimeout(statusTimer);
     statusTimer = setTimeout(() => el.classList.remove('visible'), isError ? 5000 : 1500);
+  }
+
+  // ── Non-editable content hint bubble ──
+  // The rendered view is contenteditable, but some blocks are marked
+  // contenteditable="false" (frontmatter, fenced code blocks, math, Mermaid
+  // diagrams, protected blocks). Clicking one of those does nothing visually,
+  // so show a short-lived translucent bubble suggesting the Source view.
+  let editHintTimer = null;
+
+  function findNonEditableAncestor(target) {
+    const contentEl = document.getElementById('content');
+    let el = target && target.nodeType === 1 ? target : (target ? target.parentNode : null);
+    while (el && el !== contentEl && el !== document.body) {
+      if (el.getAttribute && el.getAttribute('contenteditable') === 'false') return el;
+      el = el.parentNode;
+    }
+    return null;
+  }
+
+  function showEditHint(anchor) {
+    const bubble = document.getElementById('editHintBubble');
+    if (!bubble) return;
+    // ⌘E-first copy: the shortcut is the anchor, the verb follows. Kept as
+    // constant strings (no user input) so innerHTML is safe.
+    bubble.innerHTML = '<span class="edit-hint-key">⌘E</span><span>' + t('to edit in Source', '使用源码模式编辑') + '</span>';
+    bubble.classList.add('visible');
+    clearTimeout(editHintTimer);
+    editHintTimer = setTimeout(() => bubble.classList.remove('visible'), 1600);
+  }
+
+  // Apply bilingual text to static UI elements declared in index.html.
+  // Called whenever isZh is (re)set, i.e. after each loadContent().
+  function applyStaticUiLanguage() {
+    const findInput = document.getElementById('findInput');
+    if (findInput) findInput.placeholder = t('Find', '查找');
+    const findPrev = document.getElementById('findPrev');
+    if (findPrev) findPrev.title = t('Previous (Shift+Cmd+G)', '上一个 (Shift+Cmd+G)');
+    const findNext = document.getElementById('findNext');
+    if (findNext) findNext.title = t('Next (Cmd+G)', '下一个 (Cmd+G)');
+    const findClose = document.getElementById('findClose');
+    if (findClose) findClose.title = t('Close (Esc)', '关闭 (Esc)');
+    const tocToggle = document.getElementById('tocToggle');
+    if (tocToggle) {
+      const label = t('Show outline', '显示大纲');
+      tocToggle.title = label;
+      tocToggle.setAttribute('aria-label', label);
+    }
+    const ub = document.getElementById('updateBubble');
+    if (ub) {
+      const txt = ub.querySelector('.update-bubble-text');
+      if (txt && !ub.classList.contains('installing')) {
+        txt.textContent = t('Update available, click to install...', '有新版本可用，点击安装…');
+      }
+      const closeBtn = ub.querySelector('.update-bubble-close');
+      if (closeBtn) {
+        const dismiss = t('Dismiss', '忽略');
+        closeBtn.title = dismiss;
+        closeBtn.setAttribute('aria-label', dismiss);
+      }
+    }
   }
 
   let _updateBubbleDismissed = false;
@@ -1536,25 +2210,25 @@ let isSource = false;
     const el = document.getElementById('updateBubble');
     if (el && el.classList.contains('installing')) return;
     if (el) {
-      el.querySelector('.update-bubble-text').textContent = 'Installing...';
+      el.querySelector('.update-bubble-text').textContent = t('Installing...', '正在安装…');
       el.classList.add('installing');
     }
-    showStatus('Installing update...');
+    showStatus(t('Installing update...', '正在安装更新…'));
     if (window.pywebview && window.pywebview.api) {
       window.pywebview.api.perform_auto_install().then(function(result) {
         if (result && result.success) {
-          showStatus('Update installed. Restarting...');
+          showStatus(t('Update installed. Restarting...', '更新已安装，正在重启…'));
         } else {
-          showStatus('Update failed: ' + (result ? result.error : 'unknown'), true);
+          showStatus(t('Update failed: ', '更新失败：') + (result ? result.error : t('unknown', '未知')), true);
           if (el) {
-            el.querySelector('.update-bubble-text').textContent = 'Update available, click to install...';
+            el.querySelector('.update-bubble-text').textContent = t('Update available, click to install...', '有新版本可用，点击安装…');
             el.classList.remove('installing');
           }
         }
       }).catch(function(err) {
-        showStatus('Update failed: ' + err, true);
+        showStatus(t('Update failed: ', '更新失败：') + err, true);
         if (el) {
-          el.querySelector('.update-bubble-text').textContent = 'Update available, click to install...';
+          el.querySelector('.update-bubble-text').textContent = t('Update available, click to install...', '有新版本可用，点击安装…');
           el.classList.remove('installing');
         }
       });
@@ -1762,7 +2436,14 @@ let isSource = false;
     if (cmd && e.key === 'o') { e.preventDefault(); openFile(); }
     if (cmd && e.key === 'w') { e.preventDefault(); closeWindow(); }
     if (cmd && e.key === '0') { e.preventDefault(); resetPageWidth(); }
-    if (cmd && e.key === ',') { e.preventDefault(); showPreferences(); }
+    // Zoom: ⌘= / ⌘- (View menu). WebKit may not forward ⌘= to JS when the
+    // menu item handles it, so this is a JS-level fallback as well.
+    if (cmd && e.key === '=') { e.preventDefault(); zoomIn(); }
+    if (cmd && e.key === '-') { e.preventDefault(); zoomOut(); }
+    // Width: ⌘. / ⌘, (moved off ⌘= / ⌘- which are now Zoom). ⌘, was
+    // Preferences; Preferences moved to ⌘⇧, in the app menu.
+    if (cmd && e.key === '.') { e.preventDefault(); adjustPageWidth(40); }
+    if (cmd && e.key === ',') { e.preventDefault(); adjustPageWidth(-40); }
     if (cmd && e.key === 'e') { e.preventDefault(); toggleView(); }
     if (cmd && e.key === 'i') { e.preventDefault(); showFileProperties(); }
     if (cmd && e.key === 'f') { e.preventDefault(); openFindBar(); }
@@ -1815,7 +2496,9 @@ let isSource = false;
     closing = true;
     clearTimeout(pythonSyncTimer);
     clearTimeout(highlightTimer);
+    if (highlightRaf !== null) { cancelAnimationFrame(highlightRaf); highlightRaf = null; }
     clearTimeout(statusTimer);
+    clearTimeout(deferredRenderTimer);
     if (keepAliveTimer) { clearInterval(keepAliveTimer); keepAliveTimer = null; }
   }
 
@@ -1844,8 +2527,8 @@ let isSource = false;
     if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(dirty);
   }
 
-  document.getElementById('content').addEventListener('input', () => { renderedDirty = true; setDirty(true); schedulePythonSync(1800); dismissWelcomeOverlay(); });
-  document.getElementById('textarea').addEventListener('input', () => { setDirty(true); scheduleHighlightSync(); schedulePythonSync(700); });
+  document.getElementById('content').addEventListener('input', () => { renderedDirty = true; setDirty(true); schedulePythonSync(PYTHON_SYNC_DEBOUNCE_MS); dismissWelcomeOverlay(); });
+  document.getElementById('textarea').addEventListener('input', () => { setDirty(true); scheduleHighlightSync(); schedulePythonSync(700); updateEmptyState(); });
   const scrollWrapEl = document.querySelector('.scroll-wrap');
   if (scrollWrapEl) scrollWrapEl.addEventListener('scroll', scheduleTocSync, { passive: true });
   const sourceTextarea = document.getElementById('textarea');

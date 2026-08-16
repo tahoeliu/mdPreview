@@ -1,0 +1,11 @@
+# mdPreview runtime dependencies (locked)
+
+Backend (Python, used at build/runtime via PyInstaller):
+
+pywebview==6.2.1
+pyobjc-core==12.2.1
+pyobjc-framework-Cocoa==12.2.1
+
+Note: install with `pip install -r requirements.txt` before running
+`pyinstaller mdPreview.spec`. The frontend JS libraries are vendored in the
+repo root; their provenance is recorded in vendor/README.md.
