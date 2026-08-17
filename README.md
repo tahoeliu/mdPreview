@@ -1,321 +1,337 @@
-# mdPreview - macOS Markdown Viewer & Editor
+# mdPreview — A Minimal Markdown Viewer & Editor for macOS
 
 <div align="center">
 
-**Simple, fast, and free Markdown viewer for macOS** - Perfect for AI-natives and anyone who works with `.md` files.
+**Open, read, edit, and export Markdown files on Mac — with a clean, distraction-free interface.**
+
+[Download mdPreview for macOS](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg) · [View Releases](https://github.com/tahoeliu/mdPreview/releases) · [Report an Issue](https://github.com/tahoeliu/mdPreview/issues)
 
 </div>
 
-> **mdPreview is a free, open-source Markdown viewer and editor for macOS** that opens, previews, and edits `.md` files with native live rendering — no account, no internet connection, and zero configuration required.
+---
 
-## 🎯 The Simplest Markdown Viewer for macOS
+## The easiest way to open `.md` files on Mac
 
-**Stop struggling with Markdown files in plain text editors!** mdPreview gives you instant, beautiful Markdown rendering with one simple double-click.
+Markdown files are everywhere now: AI chat exports, product notes, README files, technical docs, meeting summaries, research notes, and personal knowledge bases.
+
+But for many people, opening a `.md` file still feels unnecessarily technical.
+
+**mdPreview makes Markdown feel simple.**
+
+Double-click a Markdown file and read it in a beautiful native macOS window — no browser, no account, no setup, no heavy editor.
 
 <div align="center">
-  <img src="images/screenshot.png" alt="mdPreview screenshot" width="70%">
+  <img src="images/screenshot.png" alt="mdPreview screenshot" width="80%">
 </div>
 
-<br>
+---
 
-<table width="100%">
-  <tr>
-    <td align="center" width="33%" valign="top">
-      <h3>🚀 Instant Preview</h3>
-      <p>Double-click any <code>.md</code> file → beautiful, live rendering in a clean, native macOS window. No waiting, no web browser, no clutter.</p>
-    </td>
-    <td align="center" width="33%" valign="top">
-      <h3>✏️ Easy Editing</h3>
-      <p>Switch between view and edit with one click. Tables, code blocks, lists — everything round-trips cleanly between preview and source.</p>
-    </td>
-    <td align="center" width="33%" valign="top">
-      <h3>🆓 Completely Free</h3>
-      <p>No ads. No tracking. No hidden costs. Open source on GitHub — the code is yours to inspect, fork, or improve.</p>
-    </td>
-  </tr>
-</table>
+## Why mdPreview?
 
-## 📥 Download & Install
+### Minimal by design
 
-**Get mdPreview in 3 simple steps:**
+mdPreview is built around one idea:
 
-[📥 **Download mdPreview.dmg**](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg) *(15MB)*
+> Your document should be the focus, not the app.
 
-1. Click the download button above to get the `.dmg` file
-2. Open the `.dmg` → drag **mdPreview** to your **Applications** folder
-3. **Right-click** mdPreview in Applications → select **"Open"** → click **"Open"** in the dialog (first time only)
+The interface stays quiet and clean. No side panels unless you need them. No workspace setup. No project management. No account login. No visual clutter.
 
-**That's it!** Now double-click any Markdown file and watch it render beautifully.
+Just open a Markdown file and read.
 
-> The DMG also includes a **安装指引.txt** (installation guide) with step-by-step instructions for bypassing the macOS security prompt.
+### Made for non-technical users
 
-### ⚠️ "mdPreview cannot be opened" / "Cannot verify the developer"?
+You do not need to understand Markdown syntax to use mdPreview.
 
-macOS Gatekeeper blocks apps that aren't signed with an Apple Developer certificate. This is normal for free, open-source apps. Pick one method:
+If someone sends you a `.md` file, or if you export a response from ChatGPT, Claude, Gemini, or another AI tool, mdPreview lets you open it like a normal document.
 
-<details>
-<summary><b>Method 1 — Right-click → Open (recommended)</b></summary>
+### Useful when you need more
 
-1. In Finder, go to **Applications**
-2. **Right-click** (or Control-click) **mdPreview**
-3. Select **"Open"** from the context menu
-4. A dialog appears: click **"Open"** again
+When reading is not enough, mdPreview also lets you edit, search, navigate long documents, and export your file into formats that are easier to share.
 
-This permanently trusts the app on your Mac. You only need to do this once.
+---
 
-</details>
+## What you can do with mdPreview
 
-<details>
-<summary><b>Method 2 — Terminal command</b></summary>
+| Need | What mdPreview does |
+|---|---|
+| Open a `.md` file | Double-click and read it instantly |
+| Read long documents | Use the built-in outline / table of contents |
+| Edit content | Switch between preview and source editing |
+| Share with others | Export to PDF, Word, PNG, HTML, plain text, or Markdown |
+| Read AI-generated Markdown | Open ChatGPT / Claude-style Markdown exports cleanly |
+| Work offline | No internet connection required |
+| Keep things private | No login, no tracking, no cloud upload |
 
-```bash
-xattr -cr /Applications/mdPreview.app
-```
+---
 
-This removes the quarantine attribute. After that, double-click mdPreview normally.
+## Highlights in the latest version
 
-</details>
+mdPreview has recently become more useful, safer, and more comfortable for everyday writing and reading.
 
-<details>
-<summary><b>Method 3 — System Settings (macOS Sequoia+)</b></summary>
+### Cleaner reading experience
 
-1. Open **System Settings → Privacy & Security**
-2. Scroll down to the **Security** section
-3. You should see "mdPreview was blocked" — click **"Open Anyway"**
-4. Enter your password if prompted
+- Minimal macOS-style interface
+- Better typography for long-form reading
+- Dark Mode support
+- Adjustable text size with keyboard shortcuts
+- A collapsible outline for long documents
 
-</details>
+### Better editing workflow
 
-### Make mdPreview Your Default Markdown Viewer
+- One-click switch between rendered preview and Markdown source
+- Unsaved-change indicator in the window title
+- Autosaved drafts to help recover work after unexpected quits
+- Safer save behavior designed to avoid accidental data loss
 
-After installation:
+### More export options
+
+Export your Markdown document as:
+
+- PDF
+- Word document
+- PNG image
+- Web page
+- Plain text
+- Markdown
+
+This makes mdPreview useful not only for reading Markdown, but also for sharing documents with people who do not use Markdown.
+
+### Better support for modern Markdown
+
+mdPreview supports common Markdown features including:
+
+- Headings
+- Lists
+- Tables
+- Links and images
+- Code blocks
+- Blockquotes
+- Mermaid diagrams
+- Footnotes
+- Inline and block-style math text
+- Front matter
+
+### Safer rendering
+
+Markdown files can contain HTML and diagrams. mdPreview includes safer rendering behavior for risky content, including additional cleanup around embedded HTML and Mermaid output.
+
+The goal is simple: open Markdown files with less worry.
+
+---
+
+## Download & install
+
+### 1. Download
+
+[Download mdPreview.dmg](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg)
+
+### 2. Install
+
+Open the `.dmg` file and drag **mdPreview** into your **Applications** folder.
+
+### 3. Open it the first time
+
+Because mdPreview is an open-source app and may not be signed with an Apple Developer certificate, macOS may show a security warning the first time you open it.
+
+To open it:
+
+1. Go to **Applications**
+2. Right-click **mdPreview**
+3. Choose **Open**
+4. Click **Open** again in the dialog
+
+You only need to do this once.
+
+---
+
+## Make mdPreview the default app for Markdown files
+
+If you want every `.md` file to open with mdPreview:
 
 1. Find any `.md` file in Finder
-2. Right-click → **Get Info**
-3. Click the arrow next to "Open with"
-4. Select **mdPreview** from the dropdown
-5. Click **"Change All..."** button
+2. Right-click it and choose **Get Info**
+3. Find **Open with**
+4. Select **mdPreview**
+5. Click **Change All...**
 
-Now every `.md` file will open automatically with mdPreview!
-
----
-
-<div align="center">
-
-**For the curious minds who refuse to accept the default.**
-
-</div>
+Now Markdown files will open in mdPreview by default.
 
 ---
 
-[![Python Version](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS-lightgrey.svg)]()
-[![Download](https://img.shields.io/badge/download-15MB-orange.svg)](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg)
-
-**⭐ Star this repo if you find it useful!**
-
-## ✨ Features
-
-- **🖱️ Double-click to Open** - Associate `.md` files with mdPreview for instant rendering
-- **⚡ Real-time Rendering** - Powered by marked.js with full Markdown support (tables, code blocks, quotes, etc.)
-- **✏️ Edit Mode** - One-click toggle to edit Markdown source directly
-- **📤 Export As** - One native dialog exports your document as **PDF, Word, PNG image, Web Page, Plain Text, or Markdown**
-- **🔤 Adjustable Text Size** - `Cmd+=` / `Cmd+-` makes text bigger or smaller in both view and edit mode
-- **🗂️ Table of Contents** - A clickable outline sidebar (`⌥⌘O`) keeps long documents easy to navigate
-- **🔖 Edited Indicator** - The window title shows "`name.md - Edited`" while you have unsaved changes
-- **🛡️ Safer Auto-Update** - Updates are verified before installing and automatically roll back if anything goes wrong
-- **⌨️ Keyboard Shortcuts** - Cmd+S to save, Cmd+E to switch edit/preview modes
-- **🎨 Minimalist Interface** - Clean, focused reading and writing experience
-- **📱 macOS Integration** - Native window, menus, file association, and WKWebView-based rendering
-- **🌙 Dark Mode Support** - Respects your macOS appearance preferences
-- **🔍 Search Functionality** - Quickly find content in your Markdown files
-
-## ⌨️ Keyboard Shortcuts
+## Keyboard shortcuts
 
 | Shortcut | Action |
-|----------|--------|
-| `⌘ + N` | New file |
-| `⌘ + S` | Save file |
-| `⌘ + ⇧ + S` | Save As (choose format) |
-| `⌘ + E` | Toggle Rendered/Source mode |
-| `⌘ + F` | Find |
-| `⌘ + G` | Find next |
-| `⌘ + ⇧ + G` | Find previous |
-| `⌘ + I` | File properties |
-| `⌘ + =` | Bigger Text |
-| `⌘ + -` | Smaller Text |
-| `⌘ + ⌥ + O` | Toggle Table of Contents |
-| `⌘ + P` | Print |
+|---|---|
+| `⌘ N` | New file |
+| `⌘ S` | Save |
+| `⌘ ⇧ S` | Save As / Export |
+| `⌘ E` | Switch between preview and source |
+| `⌘ F` | Find |
+| `⌘ G` | Find next |
+| `⌘ ⇧ G` | Find previous |
+| `⌘ =` | Increase text size |
+| `⌘ -` | Decrease text size |
+| `⌘ ⌥ O` | Toggle outline |
+| `⌘ P` | Print |
 
-## 📝 Supported Markdown Features
+---
 
-mdPreview supports standard Markdown syntax including:
+## Who is mdPreview for?
 
-- ✅ Headers (H1-H6)
-- ✅ Bold and italic text
-- ✅ Lists (ordered and unordered)
-- ✅ Links and images
-- ✅ Code blocks with syntax highlighting
-- ✅ Tables
-- ✅ Blockquotes
-- ✅ Horizontal rules
-- ✅ HTML content
-- ✅ Mermaid diagrams
+mdPreview is a good fit if you:
 
-## 🛠️ Tech Stack
+- Receive Markdown files but do not want to open a code editor
+- Save AI-generated answers as `.md` files
+- Want a lightweight Typora or MacDown alternative
+- Need a simple Markdown reader for macOS
+- Prefer offline tools
+- Like clean, minimal interfaces
+- Want a free and open-source app
 
-- **Python 3.13+** - Core application logic
-- **pywebview** - Native macOS window wrapper around WKWebView
-- **marked.js** - Markdown rendering engine
-- **AppKit integrations** - Native menus, dialogs, file open events, and packaging metadata
+It is intentionally not a full writing studio, project manager, or IDE.
 
-## 🔧 Development
+It is a focused Markdown viewer and editor.
 
-### Build from Source
+---
+
+## mdPreview vs other Markdown apps
+
+| Feature | mdPreview | Typora | MacDown | Bear | VS Code |
+|---|:---:|:---:|:---:|:---:|:---:|
+| Free | Yes | No | Yes | Limited | Yes |
+| Open source | Yes | No | Yes | No | Yes |
+| Minimal UI | Yes | Yes | Partial | Yes | No |
+| Double-click `.md` files | Yes | Yes | Yes | Yes | Requires setup |
+| Works offline | Yes | Yes | Yes | Partial | Yes |
+| No account required | Yes | Yes | Yes | No | Yes |
+| Lightweight | Yes | Partial | Yes | Yes | No |
+| Edit and preview | Yes | Yes | Yes | Yes | Requires extensions |
+| Mermaid support | Yes | Partial | No | No | Requires extensions |
+| Export options | Yes | Yes | Limited | Limited | Requires extensions |
+
+---
+
+## Privacy
+
+mdPreview runs locally on your Mac.
+
+- No account
+- No ads
+- No telemetry
+- No cloud sync
+- No document upload
+- No internet required for normal use
+
+Your Markdown files stay on your computer.
+
+---
+
+## FAQ
+
+### What is mdPreview?
+
+mdPreview is a free, open-source Markdown viewer and editor for macOS. It lets you open, read, edit, and export `.md` files in a clean native Mac interface.
+
+### Do I need to know Markdown?
+
+No. You can use mdPreview simply as a reader. If you want to edit the source text, you can switch to edit mode anytime.
+
+### Is mdPreview free?
+
+Yes. mdPreview is free and open source under the MIT License.
+
+### Does it work offline?
+
+Yes. mdPreview works offline and does not require an account.
+
+### Why does macOS say the app cannot be opened?
+
+macOS may warn you because the app is open source and may not be signed with an Apple Developer certificate. Right-click the app, choose **Open**, then confirm. You only need to do this once.
+
+### Can I export Markdown to PDF or Word?
+
+Yes. mdPreview supports exporting Markdown documents to PDF, Word, PNG, HTML, plain text, and Markdown.
+
+### Is this a replacement for VS Code?
+
+Not exactly. VS Code is a full development environment. mdPreview is for people who want a simple, focused way to read and edit Markdown files.
+
+---
+
+## For developers
+
+mdPreview is built with:
+
+- Python 3.13+
+- pywebview
+- WKWebView on macOS
+- marked.js
+- Mermaid
+- Native macOS menus and file dialogs
+
+### Build from source
 
 ```bash
-# Install dependencies
 pip install pywebview
-
-# Build the app
 ./build.sh
-
-# Install to Applications
 ./install.sh
 ```
 
-### Prerequisites
+### Project structure
 
-- Python 3.13 or higher
-- pywebview (`pip install pywebview`)
-- macOS 10.13 or later
-
-## 📁 Project Structure
-
-```
+```text
 MarkdownViewer/
 ├── markdown_viewer.py    # Python app, window, menu, and file APIs
-├── index.html           # WebView shell
-├── styles.css           # App styles
-├── app.js               # Frontend editor, rendering, search, and bridge logic
-├── marked.min.js        # Markdown renderer
-├── turndown.js          # HTML to Markdown converter
-├── mermaid.min.js       # Diagram support
-├── app_icon.icns        # Application icon
-├── Info.plist          # macOS app metadata
-├── VERSION             # Single source of truth for app version
-├── build.sh            # PyInstaller build script
-├── install.sh          # Local installation script
-└── README.md           # This file
+├── index.html            # WebView shell
+├── styles.css            # App styles
+├── app.js                # Editor, rendering, search, export, and bridge logic
+├── marked.min.js         # Markdown renderer
+├── turndown.js           # HTML to Markdown converter
+├── mermaid.min.js        # Mermaid diagram support
+├── app_icon.icns         # Application icon
+├── Info.plist            # macOS app metadata
+├── VERSION               # App version
+├── build.sh              # Build script
+├── install.sh            # Local install script
+└── README.md
 ```
 
-## 🌟 Why Choose mdPreview?
+---
 
-**Compared to other Markdown viewers:**
+## Contributing
 
-| Feature | mdPreview | Text Editors | Online Tools |
-|---------|-----------|--------------|--------------|
-| macOS-integrated desktop experience | ✅ | ❌ | ❌ |
-| Offline Use | ✅ | ✅ | ❌ |
-| File Association | ✅ | ❌ | ❌ |
-| Zero Configuration | ✅ | ❌ | ❌ |
-| No Internet Required | ✅ | ✅ | ❌ |
-| Lightweight | ✅ | ✅ | ✅ |
-| Beautiful Rendering | ✅ | ❌ | ✅ |
+Contributions are welcome.
 
-## 🆚 mdPreview vs Other Markdown Apps for Mac
+You can help by:
 
-Looking for a **free Markdown editor for Mac**, a **Typora alternative**, or a lightweight **MacDown replacement**? Here's how mdPreview compares:
+- Reporting bugs
+- Suggesting improvements
+- Improving documentation
+- Testing new releases
+- Opening pull requests
 
-| Feature | **mdPreview** | Typora | MacDown | Bear | VS Code |
-|---------|:---:|:---:|:---:|:---:|:---:|
-| Free & open-source (MIT) | ✅ | ❌ (paid) | ✅ | ❌ (subscription) | ✅ |
-| Native window + macOS menus | ✅ | ✅ | ✅ | ✅ | ❌ (Electron) |
-| Double-click `.md` to open | ✅ | ✅ | ✅ | ✅ | ❌ |
-| Offline / no account | ✅ | ✅ | ✅ | ❌ | ✅ |
-| Lightweight (<20 MB) | ✅ | ⚠️ | ✅ | ✅ | ❌ |
-| Mermaid diagram support | ✅ | ⚠️ | ❌ | ❌ | ⚠️ |
-| Live edit + preview | ✅ | ✅ | ✅ | ✅ | ⚠️ (extension) |
-
-**Best for:** anyone who wants a simple, fast, and completely free way to **view and edit Markdown on Mac** — without subscriptions or a heavy IDE.
+Please use [GitHub Issues](https://github.com/tahoeliu/mdPreview/issues) for bug reports and feature requests.
 
 ---
 
-## 🤝 Contributing
+## License
 
-Contributions are welcome! Feel free to:
+mdPreview is released under the MIT License.
 
-- 🐛 Report bugs via [GitHub Issues](https://github.com/tahoeliu/mdPreview/issues)
-- 💡 Suggest new features
-- 🔧 Submit pull requests
-- 📖 Improve documentation
-
-## ❓ Frequently Asked Questions
-
-**What is mdPreview?**  
-mdPreview is a free, open-source Markdown viewer and editor for macOS. It renders `.md` files with live preview, supports editing, dark mode, in-file search, and Mermaid diagrams, and runs fully offline.
-
-**Is mdPreview free?**  
-Yes. mdPreview is MIT-licensed and completely free — no ads, no tracking, no subscription.
-
-**Why does macOS say "mdPreview cannot be opened" or "cannot verify the developer"?**  
-mdPreview is open-source and not signed with an Apple Developer certificate ($99/year). macOS Gatekeeper blocks unsigned apps by default. To open it: right-click mdPreview in Finder → select "Open" → click "Open" in the dialog. You only need to do this once. See the [troubleshooting section](#-mdpreview-cannot-be-opened--cannot-verify-the-developer) above for more methods.
-
-**Which macOS versions are supported?**  
-macOS 10.13 (High Sierra) and later.
-
-**How do I set mdPreview as the default Markdown viewer on Mac?**  
-Right-click any `.md` file → *Get Info* → *Open with* → select **mdPreview** → click *Change All…*.
-
-**Does mdPreview work offline?**  
-Yes. mdPreview requires no internet connection and sends no data externally.
-
-**What Markdown features are supported?**  
-Headers, bold/italic, lists, links, images, fenced code with syntax highlighting, tables, blockquotes, inline HTML, and Mermaid diagrams.
-
-**How is mdPreview built?**  
-It uses Python 3.13+, pywebview (native WKWebView), and marked.js for rendering.
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [marked.js](https://marked.js.org/) - Markdown parsing library
-- [pywebview](https://pywebview.flowrl.com/) - Native window wrapper
-- [Mermaid](https://mermaid.js.org/) - Diagram generation library
-
-## 📢 Share mdPreview
-
-If you find mdPreview useful, please consider:
-
-- ⭐ **Star this repository** on GitHub
-- 🔗 **Share it** with friends and colleagues
-- 🐦 **Tweet** about it on social media
-- 📝 **Write a review** if you publish about it
-
-## 🔗 Related Projects
-
-- [Typora](https://typora.io/) - Professional Markdown editor
-- [MacDown](https://macdown.uranusjr.com/) - Open source Markdown editor for macOS
-- [VS Code](https://code.visualstudio.com/) - Code editor with Markdown support
+See [LICENSE](LICENSE) for details.
 
 ---
 
 <div align="center">
 
-**For a world worth debugging.**
+**A minimal Markdown app for people who just want to read the file.**
 
-[⬆ Back to Top](#mdpreview---macos-markdown-viewer--editor)
+Made by [Tahoe Liu](https://github.com/tahoeliu)
+
+[Download mdPreview](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg) · [Back to top](#mdpreview--a-minimal-markdown-viewer--editor-for-macos)
 
 </div>
 
 ---
 
-**Keywords:** macOS Markdown viewer, Markdown reader, Markdown editor, Markdown app, Markdown preview, Markdown rendering, free Markdown editor for Mac, open source Markdown, Typora alternative, MacDown replacement, minimalist Markdown tool, Tahoe Liu
-
-*Author: [Tahoe Liu](https://github.com/tahoeliu) · License: MIT*
+**Keywords:** macOS Markdown viewer, Markdown reader for Mac, free Markdown editor for Mac, minimal Markdown app, open .md files on Mac, AI Markdown viewer, ChatGPT Markdown viewer, Claude Markdown export, Typora alternative, MacDown alternative, open source Markdown viewer, Mermaid Markdown viewer
