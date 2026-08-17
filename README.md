@@ -20,9 +20,14 @@ But for many people, opening a `.md` file still feels unnecessarily technical.
 
 Double-click a Markdown file and read it in a beautiful native macOS window — no browser, no account, no setup, no heavy editor.
 
-<div align="center">
-  <img src="images/screenshot.png" alt="mdPreview screenshot" width="80%">
-</div>
+<p align="center">
+  <img src="images/screenshot-reading.png" alt="Clean reading view with outline" width="49%">
+  &nbsp;
+  <img src="images/screenshot-mermaid.png" alt="Mermaid diagrams and math rendering" width="49%">
+</p>
+<p align="center">
+  <em>Left: clean reading view with outline &nbsp;•&nbsp; Right: Mermaid diagrams & math rendering</em>
+</p>
 
 ---
 
