@@ -10,3 +10,6 @@ dist/
 backups/
 outputs/
 doc_icon_source.png
+
+# CI workflow — token lacks workflow scope, never push
+.github/
