@@ -4,7 +4,7 @@
 
 **Open, read, edit, and export Markdown files on Mac — with a clean, distraction-free interface.**
 
-[Download mdPreview for macOS](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg) · [View Releases](https://github.com/tahoeliu/mdPreview/releases) · [Report an Issue](https://github.com/tahoeliu/mdPreview/issues)
+[Download mdPreview for macOS](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg)
 
 </div>
 
