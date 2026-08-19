@@ -59,11 +59,11 @@ When reading is not enough, mdPreview also lets you edit, search, navigate long 
 
 | Need | What mdPreview does |
 |---|---|
-| Open a `.md` file | Double-click and read it instantly |
+| Read AI-generated content | Open ChatGPT / Claude Markdown exports cleanly |
 | Read long documents | Use the built-in outline / table of contents |
 | Edit content | Switch between preview and source editing |
+| Paste formatted content | Paste rich text from web pages, docs, or AI chats and convert it cleanly into Markdown |
 | Share with others | Export to PDF, Word, PNG, HTML, plain text, or Markdown |
-| Read AI-generated Markdown | Open ChatGPT / Claude-style Markdown exports cleanly |
 | Work offline | No internet connection required |
 | Keep things private | No login, no tracking, no cloud upload |
 
