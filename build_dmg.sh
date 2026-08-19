@@ -33,7 +33,7 @@ hdiutil attach "$RAW" -mountpoint "$MNT"
 # Standard layout: app + Applications shortcut + installation guide
 cp -R dist/mdPreview.app "$MNT/"
 ln -s /Applications "$MNT/Applications"
-cp "安装指引.txt" "$MNT/"
+cp "INSTALL.txt" "$MNT/"
 hdiutil detach "$MNT"
 hdiutil convert "$RAW" -format UDZO -o "dist/mdPreview-${VERSION}.dmg"
 rm -f "$RAW"

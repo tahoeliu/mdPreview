@@ -285,8 +285,8 @@ pip install pywebview
 ### Project structure
 
 ```text
-MarkdownViewer/
-├── markdown_viewer.py    # Python app, window, menu, and file APIs
+mdPreview/
+├── mdPreview.py    # Python app, window, menu, and file APIs
 ├── index.html            # WebView shell
 ├── styles.css            # App styles
 ├── app.js                # Editor, rendering, search, export, and bridge logic

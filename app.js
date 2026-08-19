@@ -87,6 +87,28 @@ let isSource = false;
         return source ? '```mermaid\n' + source.trim() + '\n```' : '';
       }
     });
+    turndownService.addRule('listItem', {
+      filter: 'li',
+      replacement: function (content, node, options) {
+        // Same shape as the bundled turndown listItem rule, but with a single
+        // space after the marker ("- item" / "1. item") instead of the
+        // hardcoded 3-space padding, so pasted lists match the app's style.
+        content = content
+          .replace(/^\n+/, '')
+          .replace(/\n+$/, '\n')
+          .replace(/\n/gm, '\n    ');
+        var parent = node.parentNode;
+        var prefix;
+        if (parent && parent.nodeName === 'OL') {
+          var start = parent.getAttribute('start');
+          var index = Array.prototype.indexOf.call(parent.children, node);
+          prefix = (start ? Number(start) + index : index + 1) + '. ';
+        } else {
+          prefix = options.bulletListMarker + ' ';
+        }
+        return prefix + content + (node.nextSibling && !/\n$/.test(content) ? '\n' : '');
+      }
+    });
     turndownService.addRule('table', {
       filter: function (node) {
         return node.nodeName === 'TABLE';
@@ -732,7 +754,11 @@ let isSource = false;
     h = h.replace(/^(#{1,6})(\s)/, '<span class="syn-heading">$1</span>$2');
     h = h.replace(/(\*\*|__)(.+?)\1/g, '<span class="syn-bold">$1</span>$2<span class="syn-bold">$1</span>');
     h = h.replace(/(^|[^\*])(\*)([^\s\*][^\*]*?)\*(?!\*)/g, '$1<span class="syn-italic">$2</span>$3<span class="syn-italic">$2</span>');
+    h = h.replace(/(~~)([^~]+?)(~~)/g, '<span class="syn-strike">$1</span>$2<span class="syn-strike">$1</span>');
     h = h.replace(/`([^`]+)`/g, '<span class="syn-code">`</span>$1<span class="syn-code">`</span>');
+    // Image marker "!" gets its own color; the [alt](url) is colored by the
+    // link rule that follows.
+    h = h.replace(/!\[/g, '<span class="syn-image">!</span>[');
     h = h.replace(/\[([^\]]*)\]\(([^)]*)\)/g, '<span class="syn-link">[</span>$1<span class="syn-link">]</span><span class="syn-link">(</span>$2<span class="syn-link">)</span>');
     h = h.replace(/^(\s*)((?:(?:\* ?){2,}\*)|(?:(?:- ?){2,}-))\s*$/, '$1<span class="syn-hr">$2</span>');
     h = h.replace(/^(\s*)([-*+])(\s)/, '$1<span class="syn-list">$2</span>$3');
@@ -761,7 +787,9 @@ let isSource = false;
       const fence = line.match(/^\s*(```+|~~~+)/);
       if (fence) {
         const marker = fence[1][0];
-        const highlighted = escHtml(line).replace(/(```+|~~~+)/, '<span class="syn-codeblock">$1</span>');
+        // Color the fence markers AND the language tag (e.g. "text" in
+        // ```text) so every part of the fence line is highlighted.
+        const highlighted = escHtml(line).replace(/^(```+|~~~+)([^\s`]*)/, '<span class="syn-codeblock">$1</span><span class="syn-lang">$2</span>');
         out.push(highlighted);
         if (!inFence) {
           inFence = true;
@@ -773,7 +801,9 @@ let isSource = false;
         continue;
       }
       if (inFence) {
-        out.push(escHtml(line));
+        // Code content inside a fence: give it a code color so a fenced block
+        // is visibly distinct from body text in the source view.
+        out.push('<span class="syn-codeblock">' + escHtml(line) + '</span>');
         continue;
       }
       out.push(highlightInlineMarkdown(line));
@@ -819,22 +849,40 @@ let isSource = false;
     }
   }
 
-  function setPageWidth(w) {
+  // Page width is expressed as a percentage of the base reading-column width.
+  // 100% = the default column (720px); each step is ±10% (⌘. / ⌘,), clamped to
+  // 50%–280%. The px value stored/used by CSS is derived from this percentage.
+  const BASE_WIDTH = 720;
+  const WIDTH_STEP = 10;
+  const WIDTH_MIN = 50;   // 50%  → 360px
+  const WIDTH_MAX = 280;  // 280% → 2016px
+  let pageWidthPct = 100;
+
+  function setPageWidth(px) {
     const page = document.getElementById('page');
-    page.style.setProperty('--page-width', w + 'px');
+    page.style.setProperty('--page-width', Math.round(px) + 'px');
   }
-  function adjustPageWidth(delta) {
+  function applyPageWidth() {
+    setPageWidth(BASE_WIDTH * pageWidthPct / 100);
+  }
+  function getPageWidth() {
     const page = document.getElementById('page');
-    const current = parseInt(getComputedStyle(page).getPropertyValue('--page-width').trim()) || 720;
-    let next = current + delta;
-    if (next < 360) next = 360;
-    if (next > 2000) next = 2000;
-    setPageWidth(next);
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.save_page_width(next);
+    return parseInt(getComputedStyle(page).getPropertyValue('--page-width').trim()) || 720;
+  }
+  function normalizePageWidthPct(value) {
+    return Math.max(WIDTH_MIN, Math.min(WIDTH_MAX, Math.round(value / WIDTH_STEP) * WIDTH_STEP));
+  }
+  function adjustPageWidth(deltaPct) {
+    pageWidthPct = normalizePageWidthPct(pageWidthPct + deltaPct);
+    applyPageWidth();
+    showSizeHint('width');
+    if (window.pywebview && window.pywebview.api) window.pywebview.api.save_page_width(BASE_WIDTH * pageWidthPct / 100);
   }
   function resetPageWidth() {
-    setPageWidth(720);
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.save_page_width(720);
+    pageWidthPct = 100;
+    applyPageWidth();
+    showSizeHint('width');
+    if (window.pywebview && window.pywebview.api) window.pywebview.api.save_page_width(BASE_WIDTH);
     showStatus(t('Width reset', '宽度已重置'));
   }
   // ── Font size (View menu: ⌘= / ⌘-) ──
@@ -849,12 +897,12 @@ let isSource = false;
   function zoomIn() {
     contentFontSize = Math.min(FONT_MAX, contentFontSize + FONT_STEP);
     applyFontSize();
-    showStatus(t('Font ' + contentFontSize + 'px', '字号 ' + contentFontSize + 'px'));
+    showSizeHint('font');
   }
   function zoomOut() {
     contentFontSize = Math.max(FONT_MIN, contentFontSize - FONT_STEP);
     applyFontSize();
-    showStatus(t('Font ' + contentFontSize + 'px', '字号 ' + contentFontSize + 'px'));
+    showSizeHint('font');
   }
   function openFile() {
     if (window.pywebview && window.pywebview.api) window.pywebview.api.open_file_dialog();
@@ -865,24 +913,6 @@ let isSource = false;
       return;
     }
     if (window.pywebview && window.pywebview.api) window.pywebview.api.close_window();
-  }
-  async function showPreferences() {
-    let version = '—';
-    try {
-      if (window.pywebview && window.pywebview.api) {
-        const info = await window.pywebview.api.get_app_info();
-        if (info && info.version) version = info.version;
-      }
-    } catch (e) {}
-    const bodyHtml =
-      '<div class="modal-row"><span class="modal-label">' + t('App', '应用') + '</span><span class="modal-value">mdPreview</span></div>' +
-      '<div class="modal-row"><span class="modal-label">' + t('Version', '版本') + '</span><span class="modal-value">' + version + '</span></div>' +
-      '<div class="modal-row"><span class="modal-label">' + t('Shortcuts', '快捷键') + '</span><span class="modal-value" style="font-size:12px;line-height:1.6">' +
-      '⌘O ' + t('Open', '打开') + ' &nbsp; ⌘S ' + t('Save', '保存') + ' &nbsp; ⌘E ' + t('Toggle Source', '切换源码') + '<br>' +
-      '⌘F ' + t('Find', '查找') + ' &nbsp; ⌘W ' + t('Close', '关闭') + ' &nbsp; ⌘= ' + t('Zoom In', '放大') + '<br>' +
-      '⌘− ' + t('Zoom Out', '缩小') + ' &nbsp; ⌘. ' + t('Width +', '加宽') + ' &nbsp; ⌘, ' + t('Width −', '变窄') + '<br>' +
-      '⌘N ' + t('New', '新建') + ' &nbsp; ' + t('Drag images to insert', '拖拽图片插入') + '</span></div>';
-    setModal(t('About mdPreview', '关于 mdPreview'), bodyHtml, '<button class="modal-close" onclick="closeModal()">' + t('Close', '关闭') + '</button>');
   }
   function insertMarkdownSnippet(snippet) {
     const textarea = document.getElementById('textarea');
@@ -898,6 +928,9 @@ let isSource = false;
     setDirty(true);
     syncHighlight();
     pushContentToPython(true);
+    // Programmatic value assignment fires no input event, so dismiss the
+    // empty-document welcome overlay explicitly (e.g. after ⌘⇧V paste).
+    updateEmptyState();
   }
   function handleImageDrop(e) {
     e.preventDefault();
@@ -914,6 +947,331 @@ let isSource = false;
       });
     }
   }
+  // ── Paste as Markdown ──
+  // The pasteboard carries several flavors of the same copy at once; we pick
+  // the best one (text/markdown > HTML > plain text) and convert HTML to
+  // Markdown via turndown. Images are unsupported in v1 (dropped) and
+  // Office/Word HTML is not optimized for, so messy sources get a warning.
+  // Behavior by mode:
+  //   source  : Cmd+V stays native plain-text paste; if the clipboard is
+  //             rich, a bubble reminds the user to press Cmd+Shift+V.
+  //   preview : Cmd+V / Cmd+Shift+V / menu all convert to Markdown and insert
+  //             into the source, then re-render.
+  function normalizeWhitespace(s) {
+    return String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
+  }
+
+  function showPasteHint() {
+    const bubble = document.getElementById('editHintBubble');
+    if (!bubble) return;
+    const sizeBubble = document.getElementById('sizeHintBubble');
+    if (sizeBubble) sizeBubble.classList.remove('visible');
+    clearTimeout(sizeHintTimer);
+    // Each key (⌘ / ⇧ / V) gets its own keycap frame.
+    bubble.innerHTML = '<span class="edit-hint-keys">' +
+      '<span class="edit-hint-key">⌘</span><span class="edit-hint-key">⇧</span><span class="edit-hint-key">V</span>' +
+      '</span><span>' + t('to paste as Markdown', '粘贴为 Markdown') + '</span>';
+    bubble.classList.add('visible');
+    clearTimeout(editHintTimer);
+    // Longer dwell than the edit hint so the reminder is not missed.
+    editHintTimer = setTimeout(() => bubble.classList.remove('visible'), 4000);
+  }
+
+  // Preview-mode feedback: after a rich paste is converted to Markdown, show a
+  // short confirmation bubble so the user knows the conversion happened.
+  function showPastedAsMarkdownHint() {
+    const bubble = document.getElementById('editHintBubble');
+    if (!bubble) return;
+    const sizeBubble = document.getElementById('sizeHintBubble');
+    if (sizeBubble) sizeBubble.classList.remove('visible');
+    clearTimeout(sizeHintTimer);
+    bubble.innerHTML = '<span>' + t('Pasted as Markdown', '已粘贴为 Markdown') + '</span>';
+    bubble.classList.add('visible');
+    clearTimeout(editHintTimer);
+    editHintTimer = setTimeout(() => bubble.classList.remove('visible'), 2000);
+  }
+
+  function readClipboardBest() {
+    if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.read_clipboard === 'function') {
+      return window.pywebview.api.read_clipboard();
+    }
+    return Promise.resolve({ format: 'none', content: '' });
+  }
+
+  function unwrapElement(el) {
+    if (!el || !el.parentNode) return;
+    const frag = el.ownerDocument.createDocumentFragment();
+    while (el.firstChild) frag.appendChild(el.firstChild);
+    el.parentNode.replaceChild(frag, el);
+  }
+
+  // Strip Office/Word cruft, unsupported elements (images, math, media) and
+  // normalize code blocks before handing the HTML to turndown.
+  function normalizePastedHtml(html) {
+    if (!html || !html.trim()) return '';
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    // Remove comments (Word conditional comments, Safari StartFragment markers).
+    const commentWalker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_COMMENT, null, false);
+    const comments = [];
+    let cnode;
+    while ((cnode = commentWalker.nextNode())) comments.push(cnode);
+    comments.forEach(c => c.parentNode && c.parentNode.removeChild(c));
+    // Remove media/interactive/unsupported elements outright.
+    doc.querySelectorAll('script, style, link, meta, title, head, iframe, object, embed, video, audio, canvas, svg, form, button, input, select, textarea, math, .katex, [class*="MathJax"], [class*="katex"]').forEach(el => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+    // Word/Outlook namespaced tags (o:p, v:*, w:*, m:*) and mso cruft: unwrap,
+    // keeping their text content.
+    doc.querySelectorAll('*').forEach(el => {
+      const tag = (el.tagName || '').toLowerCase();
+      const cls = (el.getAttribute && (el.getAttribute('class') || '')) || '';
+      const name = (el.getAttribute && (el.getAttribute('name') || '')) || '';
+      if (/^(o|v|w|l|m):/.test(tag) || /mso/i.test(cls) || /^_?mso/i.test(name)) unwrapElement(el);
+    });
+    // Drop all images (unsupported in v1).
+    doc.querySelectorAll('img').forEach(el => {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    });
+    // Code blocks: ChatGPT/Claude wrap each line in spans/divs — reduce any
+    // <pre> to <pre><code>textContent</code></pre> so turndown emits a fence.
+    // textContent alone loses line breaks between block children (a <div> per
+    // line yields no whitespace), so rebuild the text with explicit newlines
+    // at every block boundary and <br>.
+    doc.querySelectorAll('pre').forEach(pre => {
+      const lines = [];
+      let current = '';
+      const collect = (node) => {
+        for (const child of node.childNodes) {
+          if (child.nodeType === 3) {
+            current += child.textContent;
+          } else if (child.nodeType === 1) {
+            const tag = child.tagName.toLowerCase();
+            if (tag === 'br') { lines.push(current); current = ''; }
+            else if (tag === 'div' || tag === 'p' || tag === 'tr' || tag === 'table' || tag === 'pre') {
+              collect(child);
+              lines.push(current);
+              current = '';
+            } else {
+              collect(child);
+            }
+          }
+        }
+      };
+      collect(pre);
+      if (current) lines.push(current);
+      const text = lines.join('\n');
+      pre.innerHTML = '';
+      const code = doc.createElement('code');
+      code.textContent = text;
+      pre.appendChild(code);
+    });
+    // Unwrap pointless font/span wrappers (keep their content).
+    doc.querySelectorAll('font, span').forEach(el => unwrapElement(el));
+    // Remove empty paragraphs.
+    doc.querySelectorAll('p').forEach(p => {
+      if (!p.textContent || !p.textContent.trim()) p.parentNode && p.parentNode.removeChild(p);
+    });
+    return doc.body.innerHTML;
+  }
+
+  // Heuristic quality gate: warn when the source converts poorly (Office
+  // HTML, images, math) or the conversion lost almost everything.
+  function checkPasteQuality(html, md) {
+    if (!html) return null;
+    if (/<img\b/i.test(html) || /cid:/i.test(html)) return 'image';
+    if (/mso-|<!--\[if|<\/(o|v|w|m):[a-z]/i.test(html)) return 'office';
+    if (/katex|MathJax|class="[^"]*math/i.test(html)) return 'math';
+    const textLen = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().length;
+    if (textLen > 20 && (md || '').trim().length < 2) return 'lost';
+    return null;
+  }
+
+  function showPasteQualityWarning() {
+    setModal(
+      t('Paste as Markdown', '粘贴为 Markdown'),
+      '<p style="margin:0 0 8px;">' + t('The source formatting is messy and the conversion may be inaccurate.', '来源格式混乱，转换可能出错。') + '</p>' +
+      '<p style="margin:0;color:#888;font-size:12px;">' + t('Content was still inserted; check it in the Source view.', '内容已插入，请在源码视图检查效果。') + '</p>'
+    );
+  }
+
+  function blockifyForInsert(md) {
+    const s = String(md || '').trim();
+    if (!s) return '';
+    return s.indexOf('\n') !== -1 ? '\n' + s + '\n' : s;
+  }
+
+  function insertMdAtSourceCaret(md) {
+    insertMarkdownSnippet(blockifyForInsert(md));
+  }
+
+  // Map a caret inside the rendered view back to an offset in the markdown
+  // source using a whitespace-normalized text anchor (the containing block's
+  // text) plus occurrence counting so repeated paragraphs still resolve.
+  // Returns -1 when no anchor matches (caller appends at the end).
+  function mapRenderedCaretToSourceOffset(md, content, caretNode, caretOffset) {
+    let node = caretNode;
+    let blockEl = null;
+    if (node) {
+      if (node.nodeType === 3) node = node.parentElement;
+      if (node && node.nodeType === 1) {
+        blockEl = node.closest('p, h1, h2, h3, h4, h5, h6, li, pre, blockquote, td, th, div');
+      }
+    }
+    let anchor = '';
+    let nth = 0;
+    if (blockEl) {
+      const full = normalizeWhitespace(blockEl.textContent);
+      if (full.length >= 2) {
+        anchor = full.slice(0, 120);
+        const blocks = content.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, pre, blockquote, td, th, div');
+        let count = 0;
+        for (const b of blocks) {
+          if (b === blockEl) break;
+          if (normalizeWhitespace(b.textContent) === full) count++;
+        }
+        nth = count;
+      }
+    }
+    if (!anchor && caretNode && caretNode.nodeType === 3) {
+      anchor = normalizeWhitespace(caretNode.textContent).slice(0, 120);
+      nth = 0;
+    }
+    if (!anchor || anchor.length < 2) return -1;
+    return findNthOccurrenceSourceOffset(md, anchor, nth);
+  }
+
+  function findNthOccurrenceSourceOffset(md, needle, nth) {
+    const norm = [];
+    const orig = [];
+    for (let k = 0; k < md.length; k++) {
+      const ch = md[k];
+      if (/\s/.test(ch)) {
+        if (norm.length && norm[norm.length - 1] !== ' ') { norm.push(' '); orig.push(k); }
+      } else {
+        norm.push(ch); orig.push(k);
+      }
+    }
+    const nstr = norm.join('');
+    let from = 0;
+    let occ = 0;
+    let idx = nstr.indexOf(needle, from);
+    while (idx !== -1) {
+      if (occ === nth) {
+        const endIdx = idx + needle.length - 1;
+        return (endIdx < orig.length) ? orig[endIdx] + 1 : -1;
+      }
+      occ++;
+      from = idx + 1;
+      idx = nstr.indexOf(needle, from);
+    }
+    return -1;
+  }
+
+  function firstMeaningfulLine(md) {
+    const lines = String(md || '').split('\n');
+    for (const line of lines) {
+      const text = line
+        .replace(/^(#{1,6}\s+|\s*[-*+]\s+|\s*\d+\.\s+|\s*>\s+|```+|~~~+|\*\*+|__+|[*_])/, '')
+        .trim();
+      if (text) return text.slice(0, 40);
+    }
+    return '';
+  }
+
+  function placeCaretNearRenderedText(content, anchorText) {
+    const sel = window.getSelection();
+    if (!anchorText) {
+      sel.removeAllRanges();
+      return;
+    }
+    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, null, false);
+    let node;
+    while ((node = walker.nextNode())) {
+      const idx = node.textContent.indexOf(anchorText);
+      if (idx >= 0) {
+        const range = document.createRange();
+        range.setStart(node, idx);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+        return;
+      }
+    }
+    const range = document.createRange();
+    range.selectNodeContents(content);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  // Preview mode: insert converted markdown into the source at the position
+  // matching the rendered caret, then re-render and restore the caret.
+  async function insertMdInPreview(pastedMd) {
+    const content = document.getElementById('content');
+    const textarea = document.getElementById('textarea');
+    const sel = window.getSelection();
+    const caretNode = sel && sel.rangeCount ? sel.getRangeAt(0).startContainer : null;
+    const caretOffset = sel && sel.rangeCount ? sel.getRangeAt(0).startOffset : 0;
+    // Use the real current source: if the user edited the rendered view,
+    // textarea.value is stale (getCurrentMarkdown round-trips via turndown).
+    const src = getCurrentMarkdown();
+    let pos = mapRenderedCaretToSourceOffset(src, content, caretNode, caretOffset);
+    if (pos < 0) pos = src.length;
+    const s = String(pastedMd || '').trim();
+    if (!s) return;
+    const block = s.indexOf('\n') !== -1 ? '\n\n' + s + '\n\n' : s;
+    textarea.value = src.slice(0, pos) + block + src.slice(pos);
+    const caretSource = pos + block.length;
+    textarea.setSelectionRange(caretSource, caretSource);
+    await renderMarkdown(textarea.value, content);
+    renderedDirty = false;
+    setDirty(true);
+    syncHighlight();
+    schedulePythonSync(700);
+    placeCaretNearRenderedText(content, firstMeaningfulLine(s));
+    try { content.focus({ preventScroll: true }); } catch (e) { content.focus(); }
+  }
+
+  // Entry point for the "Paste as Markdown" menu item, Cmd+Shift+V, and
+  // preview-mode Cmd+V. Reads the best clipboard flavor, converts, inserts.
+  async function pasteAsMarkdown() {
+    if (closing) return;
+    await ensureTurndown();
+    let clip = null;
+    try {
+      clip = await readClipboardBest();
+    } catch (e) {
+      clip = null;
+    }
+    if (!clip || clip.format === 'none') {
+      showStatus(t('Clipboard is empty or unreadable', '剪贴板为空或无法读取'), true);
+      return;
+    }
+    let md;
+    let quality = null;
+    if (clip.format === 'markdown') {
+      md = clip.content;
+    } else if (clip.format === 'html') {
+      const cleaned = normalizePastedHtml(clip.content);
+      md = turndownService ? turndownService.turndown(cleaned) : cleaned;
+      quality = checkPasteQuality(clip.content, md);
+    } else {
+      md = clip.content;
+    }
+    if (!md || !md.trim()) {
+      showStatus(t('Nothing to paste', '没有可粘贴的内容'), true);
+      return;
+    }
+    if (quality) showPasteQualityWarning();
+    if (isSource) {
+      insertMdAtSourceCaret(md);
+    } else {
+      await insertMdInPreview(md);
+      // Preview mode: confirm the conversion happened for rich pastes.
+      if (clip.format === 'html' || clip.format === 'markdown') showPastedAsMarkdownHint();
+    }
+  }
+
   function currentDocTitle() {
     return filePath && filePath !== 'Untitled.md' ? filePath.split('/').pop().replace(/\.[^.]+$/, '') : 'Untitled';
   }
@@ -1157,7 +1515,7 @@ let isSource = false;
     const page = document.getElementById('page');
     content.classList.add('hidden');
     source.classList.add('visible');
-    page.classList.add('full-width');
+    page.classList.remove('full-width');
     isSource = true;
     updateEmptyState();
     syncPositionToSource();
@@ -1199,31 +1557,6 @@ let isSource = false;
     document.getElementById('modalOverlay').classList.add('visible');
   }
 
-  async function showFileProperties() {
-    if (!window.pywebview || !window.pywebview.api) return;
-    const props = await window.pywebview.api.get_file_properties();
-    const rows = [
-      { label: t('Name', '名称'), value: props.name },
-      { label: t('Location', '位置'), value: props.location || '-', copyable: !!props.location },
-      { label: t('Size', '大小'), value: props.sizeFormatted + ' (' + (props.size || 0) + ' ' + t('bytes', '字节') + ')' },
-      { label: t('Encoding', '编码'), value: props.encoding || '-' },
-      { label: t('Modified', '修改时间'), value: props.modified || '-' },
-      { label: t('Created', '创建时间'), value: props.created || '-' },
-    ];
-    const bodyHtml = rows.map(r => {
-      const copyButton = r.copyable ? '<button class="modal-copy" type="button" data-copy="location" title="' + t('Copy location', '复制位置') + '">' + t('Copy', '复制') + '</button>' : '';
-      return `<div class="modal-row"><div class="modal-label">${r.label}</div><div class="modal-value">${escHtml(r.value)}</div>${copyButton}</div>`;
-    }).join('');
-    setModal(t('File Properties', '文件属性'), bodyHtml, '<button class="modal-close" onclick="closeModal()">' + t('Close', '关闭') + '</button>');
-    const body = document.getElementById('modalBody');
-    const copyLocation = body.querySelector('[data-copy="location"]');
-    if (copyLocation) {
-      copyLocation.addEventListener('click', async () => {
-        const ok = await copyTextToClipboard(props.location || '');
-        showStatus(ok ? t('Location copied', '位置已复制') : t('Copy failed', '复制失败'), !ok);
-      });
-    }
-  }
   function closeModal() {
     document.getElementById('modalOverlay').classList.remove('visible');
   }
@@ -1415,7 +1748,10 @@ let isSource = false;
       }
     } catch (e) {}
     
-    if (pageWidth) setPageWidth(pageWidth);
+    if (pageWidth) {
+      pageWidthPct = normalizePageWidthPct(pageWidth / BASE_WIDTH * 100);
+      applyPageWidth();
+    }
     if (zh !== undefined) {
       isZh = zh;
       applyStaticUiLanguage();
@@ -1836,14 +2172,13 @@ let isSource = false;
     const content = document.getElementById('content');
     const source = document.getElementById('source');
     const page = document.getElementById('page');
+    page.classList.remove('full-width');
     if (isSource) {
       content.classList.add('hidden');
       source.classList.add('visible');
-      page.classList.add('full-width');
     } else {
       content.classList.remove('hidden');
       source.classList.remove('visible');
-      page.classList.remove('full-width');
     }
     updateEmptyState();
     showModeIndicator();
@@ -2029,6 +2364,31 @@ let isSource = false;
   }
 
   function showSaveConflictDialog(path, markdown, options = {}) {
+    const finishOverwrite = async () => {
+      const result = await saveFile(true, markdown);
+      if (options.closeOnSuccess && result && result.saved) await forceCloseWindow();
+    };
+    const finishSaveAs = async () => {
+      const result = await saveAsFile(markdown);
+      if (options.closeOnSuccess && result && result.saved) await forceCloseWindow();
+    };
+    const finishCancel = () => {
+      showStatus(t('Save cancelled', '已取消保存'));
+      if (options.closeOnCancel) promptBeforeClose();
+    };
+    // Native macOS sheet (Save Current / Save As / Cancel); the HTML modal
+    // below stays as a fallback for non-Cocoa environments.
+    if (window.pywebview && window.pywebview.api && window.pywebview.api.native_conflict_prompt) {
+      window.pywebview.api.native_conflict_prompt(path)
+        .then((res) => {
+          if (!res || !res.action) return finishCancel();
+          if (res.action === 'overwrite') return finishOverwrite();
+          if (res.action === 'save_as') return finishSaveAs();
+          return finishCancel();
+        })
+        .catch(() => finishCancel());
+      return;
+    }
     const name = path ? path.split('/').pop() : t('this file', '此文件');
     const bodyHtml = '<p>' + t('The file', '文件') + ' <strong>' + escHtml(name) + '</strong> ' + t('has changed on disk since it was opened or last saved.', '自打开或上次保存以来已在磁盘上发生变化。') + '</p>' +
       '<p>' + t('Choose how to continue:', '请选择如何继续：') + '</p>' +
@@ -2043,18 +2403,15 @@ let isSource = false;
     setModal(t('Save Conflict', '保存冲突'), bodyHtml, actionsHtml);
     document.getElementById('conflictCancel').addEventListener('click', () => {
       closeModal();
-      showStatus(t('Save cancelled', '已取消保存'));
-      if (options.closeOnCancel) promptBeforeClose();
+      finishCancel();
     });
-    document.getElementById('conflictSaveAs').addEventListener('click', async () => {
+    document.getElementById('conflictSaveAs').addEventListener('click', () => {
       closeModal();
-      const result = await saveAsFile(markdown);
-      if (options.closeOnSuccess && result && result.saved) await forceCloseWindow();
+      finishSaveAs();
     });
-    document.getElementById('conflictOverwrite').addEventListener('click', async () => {
+    document.getElementById('conflictOverwrite').addEventListener('click', () => {
       closeModal();
-      const result = await saveFile(true, markdown);
-      if (options.closeOnSuccess && result && result.saved) await forceCloseWindow();
+      finishOverwrite();
     });
   }
 
@@ -2137,6 +2494,25 @@ let isSource = false;
   // diagrams, protected blocks). Clicking one of those does nothing visually,
   // so show a short-lived translucent bubble suggesting the Source view.
   let editHintTimer = null;
+  let sizeHintTimer = null;
+
+  function showSizeHint(kind) {
+    const bubble = document.getElementById('sizeHintBubble');
+    if (!bubble) return;
+    const editBubble = document.getElementById('editHintBubble');
+    if (editBubble) editBubble.classList.remove('visible');
+    clearTimeout(editHintTimer);
+    let text;
+    if (kind === 'width') {
+      text = t('Width', '宽度') + ' ' + pageWidthPct + '%';
+    } else {
+      text = t('Font', '字号') + ' ' + contentFontSize + 'px';
+    }
+    bubble.textContent = text;
+    bubble.classList.add('visible');
+    clearTimeout(sizeHintTimer);
+    sizeHintTimer = setTimeout(() => bubble.classList.remove('visible'), 1000);
+  }
 
   function findNonEditableAncestor(target) {
     const contentEl = document.getElementById('content');
@@ -2151,6 +2527,9 @@ let isSource = false;
   function showEditHint(anchor) {
     const bubble = document.getElementById('editHintBubble');
     if (!bubble) return;
+    const sizeBubble = document.getElementById('sizeHintBubble');
+    if (sizeBubble) sizeBubble.classList.remove('visible');
+    clearTimeout(sizeHintTimer);
     // ⌘E-first copy: the shortcut is the anchor, the verb follows. Kept as
     // constant strings (no user input) so innerHTML is safe.
     bubble.innerHTML = '<span class="edit-hint-key">⌘E</span><span>' + t('to edit in Source', '使用源码模式编辑') + '</span>';
@@ -2176,10 +2555,10 @@ let isSource = false;
       tocToggle.title = label;
       tocToggle.setAttribute('aria-label', label);
     }
-    const ub = document.getElementById('updateBubble');
+      const ub = document.getElementById('updateBubble');
     if (ub) {
       const txt = ub.querySelector('.update-bubble-text');
-      if (txt && !ub.classList.contains('installing')) {
+      if (txt && !ub.classList.contains('installing') && !ub.classList.contains('downloading')) {
         txt.textContent = t('Update available, click to install...', '有新版本可用，点击安装…');
       }
       const closeBtn = ub.querySelector('.update-bubble-close');
@@ -2193,10 +2572,56 @@ let isSource = false;
 
   let _updateBubbleDismissed = false;
 
+  function setUpdateBubbleText(text) {
+    const el = document.getElementById('updateBubble');
+    const txt = el ? el.querySelector('.update-bubble-text') : null;
+    if (txt) txt.textContent = text;
+  }
+
+  function setUpdateProgress(percent) {
+    const bar = document.getElementById('updateProgressBar');
+    if (bar) bar.style.width = Math.max(0, Math.min(100, percent || 0)) + '%';
+  }
+
   function showUpdateBubble() {
     if (_updateBubbleDismissed) return;
     const el = document.getElementById('updateBubble');
-    if (el) el.classList.add('visible');
+    if (el) {
+      el.classList.remove('downloading');
+      el.classList.add('visible');
+      setUpdateProgress(0);
+      setUpdateBubbleText(t('Update available, click to install...', '有新版本可用，点击安装…'));
+    }
+  }
+
+  function showUpdateDownloadProgress(percent) {
+    _updateBubbleDismissed = false;
+    const el = document.getElementById('updateBubble');
+    const p = Math.max(0, Math.min(100, Math.round(percent || 0)));
+    if (el) {
+      el.classList.remove('installing');
+      el.classList.add('visible', 'downloading');
+      setUpdateProgress(p);
+      setUpdateBubbleText(t('Downloading update... ', '正在下载更新… ') + p + '%');
+    }
+  }
+
+  function showUpdateDownloadFailed(message) {
+    const el = document.getElementById('updateBubble');
+    if (el) {
+      el.classList.remove('downloading', 'installing');
+      el.classList.add('visible');
+      setUpdateProgress(0);
+      setUpdateBubbleText(t('Download failed. Check your connection.', '下载失败，请检查网络。'));
+    }
+    showStatus(t('Update download failed: ', '更新下载失败：') + (message || t('unknown', '未知')), true);
+  }
+
+  function showManualInstallGuide(dmgPath, message) {
+    const hint = dmgPath
+      ? t(' Open the DMG and drag mdPreview to Applications: ', ' 请打开 DMG，并将 mdPreview 拖到 Applications：') + dmgPath
+      : t(' Please download the DMG manually and drag mdPreview to Applications.', ' 请手动下载 DMG，并将 mdPreview 拖到 Applications。');
+    showStatus((message || t('Update failed.', '更新失败。')) + hint, true);
   }
 
   function dismissUpdateBubble(event) {
@@ -2208,9 +2633,10 @@ let isSource = false;
 
   function installUpdate() {
     const el = document.getElementById('updateBubble');
-    if (el && el.classList.contains('installing')) return;
+    if (el && (el.classList.contains('installing') || el.classList.contains('downloading'))) return;
     if (el) {
-      el.querySelector('.update-bubble-text').textContent = t('Installing...', '正在安装…');
+      setUpdateBubbleText(t('Installing...', '正在安装…'));
+      el.classList.remove('downloading');
       el.classList.add('installing');
     }
     showStatus(t('Installing update...', '正在安装更新…'));
@@ -2219,16 +2645,21 @@ let isSource = false;
         if (result && result.success) {
           showStatus(t('Update installed. Restarting...', '更新已安装，正在重启…'));
         } else {
-          showStatus(t('Update failed: ', '更新失败：') + (result ? result.error : t('unknown', '未知')), true);
+          const error = result ? result.error : t('unknown', '未知');
+          if (result && result.manual_install) {
+            showManualInstallGuide(result.manual_dmg_path || '', t('Automatic install failed.', '自动安装失败。'));
+          } else {
+            showStatus(t('Update failed: ', '更新失败：') + error, true);
+          }
           if (el) {
-            el.querySelector('.update-bubble-text').textContent = t('Update available, click to install...', '有新版本可用，点击安装…');
+            setUpdateBubbleText(t('Update available, click to install...', '有新版本可用，点击安装…'));
             el.classList.remove('installing');
           }
         }
       }).catch(function(err) {
         showStatus(t('Update failed: ', '更新失败：') + err, true);
         if (el) {
-          el.querySelector('.update-bubble-text').textContent = t('Update available, click to install...', '有新版本可用，点击安装…');
+          setUpdateBubbleText(t('Update available, click to install...', '有新版本可用，点击安装…'));
           el.classList.remove('installing');
         }
       });
@@ -2440,14 +2871,16 @@ let isSource = false;
     // menu item handles it, so this is a JS-level fallback as well.
     if (cmd && e.key === '=') { e.preventDefault(); zoomIn(); }
     if (cmd && e.key === '-') { e.preventDefault(); zoomOut(); }
-    // Width: ⌘. / ⌘, (moved off ⌘= / ⌘- which are now Zoom). ⌘, was
-    // Preferences; Preferences moved to ⌘⇧, in the app menu.
-    if (cmd && e.key === '.') { e.preventDefault(); adjustPageWidth(40); }
-    if (cmd && e.key === ',') { e.preventDefault(); adjustPageWidth(-40); }
+    // Width: ⌘. / ⌘, (moved off ⌘= / ⌘- which are now Zoom).
+    if (cmd && e.key === '.') { e.preventDefault(); adjustPageWidth(10); }
+    if (cmd && e.key === ',') { e.preventDefault(); adjustPageWidth(-10); }
     if (cmd && e.key === 'e') { e.preventDefault(); toggleView(); }
-    if (cmd && e.key === 'i') { e.preventDefault(); showFileProperties(); }
     if (cmd && e.key === 'f') { e.preventDefault(); openFindBar(); }
     if (cmd && e.key === 'g') { e.preventDefault(); e.shiftKey ? findPrev() : findNext(); }
+    // Paste as Markdown: normally the native Edit menu item (Cmd+Shift+V)
+    // consumes this first; this is a JS-level fallback for before menus are
+    // set up or if the menu item is unavailable.
+    if (cmd && e.shiftKey && e.key === 'v') { e.preventDefault(); pasteAsMarkdown(); return; }
   });
 
   function isBlockedHref(href) {
@@ -2537,6 +2970,30 @@ let isSource = false;
   sourceTextarea.addEventListener('input', scheduleSourceTocHighlight);
   document.addEventListener('dragover', (e) => e.preventDefault());
   document.addEventListener('drop', handleImageDrop);
+  // Paste interception:
+  //   source  : keep native plain-text paste; if the clipboard is rich, show
+  //             the Cmd+Shift+V reminder bubble.
+  //   preview : always convert to Markdown (Cmd+V / menu Paste).
+  // Only intercept when the editor itself is the target (not the find input).
+  document.addEventListener('paste', (e) => {
+    if (closing) return;
+    const ta = document.getElementById('textarea');
+    const content = document.getElementById('content');
+    const target = e.target;
+    const inSourceEditor = ta && target === ta;
+    const inPreviewEditor = content && target && target.nodeType === 1 && content.contains(target);
+    if (!inSourceEditor && !inPreviewEditor) return;
+    if (isSource) {
+      if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.read_clipboard === 'function') {
+        window.pywebview.api.read_clipboard().then(function (clip) {
+          if (clip && (clip.format === 'html' || clip.format === 'markdown')) showPasteHint();
+        }).catch(function () {});
+      }
+    } else {
+      e.preventDefault();
+      pasteAsMarkdown();
+    }
+  });
   window.addEventListener('resize', handleTocResize);
   keepAliveTimer = setInterval(() => { if (!closing && isSource) pushContentToPython(false); }, 5000);
 

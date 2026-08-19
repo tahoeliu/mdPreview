@@ -20,8 +20,11 @@
   .syn-heading { color: #007aff; font-weight: 600; }
   .syn-bold { color: #c41e3a; }
   .syn-italic { color: #8e44ad; }
+  .syn-strike { color: #9da2a8; text-decoration: line-through; }
   .syn-code { color: #d6336c; }
   .syn-codeblock { color: #6a737d; }
+  .syn-lang { color: #e36209; font-style: italic; }
+  .syn-image { color: #d6336c; font-weight: 600; }
   .syn-link { color: #007aff; }
   .syn-list { color: #28a745; }
   .syn-quote { color: #6a737d; }
@@ -68,14 +71,21 @@
   .status { position: fixed; bottom: 16px; right: 20px; font-size: 12px; color: #666; background: rgba(245,245,247,0.85); border: 1px solid #e0e0e0; border-radius: 8px; padding: 7px 14px; opacity: 0; transition: opacity 0.4s; pointer-events: none; user-select: none; box-shadow: 0 3px 16px rgba(0,0,0,0.08); max-width: 400px; word-break: break-word; }
   .status.visible { opacity: 1; }
   .status.error { color: #b00020; background: #fff1f1; border-color: #f0b8b8; pointer-events: auto; cursor: pointer; }
-  .edit-hint-bubble { position: fixed; left: 50%; bottom: 72px; z-index: 950; max-width: 340px; padding: 10px 16px; background: rgba(30,30,32,0.78); color: #fff; border-radius: 10px; font-size: 13px; line-height: 1.5; box-shadow: 0 8px 28px rgba(0,0,0,0.22); opacity: 0; pointer-events: none; user-select: none; white-space: nowrap; display: flex; align-items: center; gap: 8px; backdrop-filter: blur(10px) saturate(1.4); -webkit-backdrop-filter: blur(10px) saturate(1.4); transition: opacity 0.18s ease, transform 0.18s ease; transform: translateX(-50%) translateY(4px); }
+  .edit-hint-bubble { position: fixed; left: 50%; bottom: 72px; z-index: 950; max-width: 360px; padding: 7px 13px; background: rgba(248,248,250,0.58); color: rgba(29,29,31,0.82); border: 1px solid rgba(0,0,0,0.08); border-radius: 14px; font-size: 12px; font-weight: 400; line-height: 1.45; box-shadow: 0 10px 28px rgba(0,0,0,0.12), 0 1px 4px rgba(0,0,0,0.06); opacity: 0; pointer-events: none; user-select: none; white-space: nowrap; display: flex; align-items: center; gap: 7px; backdrop-filter: blur(30px) saturate(1.9); -webkit-backdrop-filter: blur(30px) saturate(1.9); transition: opacity 0.2s ease, transform 0.2s ease; transform: translateX(-50%) translateY(4px); }
   .edit-hint-bubble.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
-  .edit-hint-key { background: rgba(255,255,255,0.16); color: #fff; border-radius: 5px; padding: 1px 7px; font-size: 12px; font-weight: 500; line-height: 1.6; }
-  .update-bubble { position: fixed; top: 16px; right: 20px; z-index: 600; display: none; align-items: center; gap: 8px; background: rgba(245,245,247,0.85); color: #333; border: 1px solid #d0d0d0; border-radius: 20px; padding: 8px 12px; font-size: 12px; font-weight: 500; cursor: pointer; user-select: none; box-shadow: 0 2px 12px rgba(0,0,0,0.08); opacity: 0; transition: opacity 0.3s, transform 0.3s; transform: translateY(-8px); max-width: 300px; }
+  .size-hint-bubble { bottom: 72px; }
+  .edit-hint-key { background: rgba(0,0,0,0.045); color: inherit; border-radius: 6px; padding: 1px 5px; font-size: 11px; font-weight: 400; line-height: 1.55; }
+  .edit-hint-keys { display: inline-flex; gap: 4px; }
+  .update-bubble { position: fixed; top: 16px; right: 20px; z-index: 600; display: none; align-items: center; gap: 10px; background: rgba(245,245,247,0.78); color: #333; border: 1px solid rgba(0,0,0,0.12); border-radius: 18px; padding: 9px 12px; font-size: 12px; font-weight: 500; cursor: pointer; user-select: none; box-shadow: 0 8px 28px rgba(0,0,0,0.12), 0 1px 3px rgba(0,0,0,0.06); opacity: 0; transition: opacity 0.3s, transform 0.3s; transform: translateY(-8px); max-width: 320px; backdrop-filter: blur(28px) saturate(1.8); -webkit-backdrop-filter: blur(28px) saturate(1.8); }
   .update-bubble.visible { display: flex; opacity: 1; transform: translateY(0); }
-  .update-bubble:hover { background: rgba(235,235,237,0.96); border-color: #b0b0b0; }
+  .update-bubble:hover { background: rgba(235,235,237,0.92); border-color: rgba(0,0,0,0.2); }
   .update-bubble.installing { pointer-events: none; opacity: 0.6; }
-  .update-bubble-text { white-space: nowrap; }
+  .update-bubble.downloading { cursor: default; }
+  .update-bubble-body { min-width: 210px; }
+  .update-bubble-text { display: block; white-space: nowrap; }
+  .update-progress { display: none; height: 5px; margin-top: 7px; overflow: hidden; background: rgba(0,0,0,0.1); border-radius: 999px; }
+  .update-bubble.downloading .update-progress { display: block; }
+  .update-progress-bar { width: 0%; height: 100%; background: #007aff; border-radius: inherit; transition: width 0.18s ease; }
   .update-bubble-close { background: none; border: none; color: #999; font-size: 16px; cursor: pointer; padding: 0 0 0 4px; line-height: 1; }
   .update-bubble-close:hover { color: #555; }
   .mode-indicator { position: fixed; bottom: 36px; right: 56px; z-index: 500; font-size: 30px; font-weight: 600; letter-spacing: 0.5px; color: #888; opacity: 0; pointer-events: none; user-select: none; transition: opacity 0.75s ease; }
@@ -90,8 +100,6 @@
   .modal-row:last-child { border-bottom: none; }
   .modal-label { width: 90px; flex-shrink: 0; color: #888; }
   .modal-value { flex: 1; color: #333; word-break: break-all; }
-  .modal-copy { flex-shrink: 0; align-self: center; margin-left: 10px; padding: 3px 9px; border: 1px solid #c8c8c8; border-radius: 5px; background: #fff; color: #555; font-size: 12px; cursor: pointer; }
-  .modal-copy:hover { background: #f0f0f0; color: #333; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 10px; padding: 0 22px 18px; }
   .modal-close, .modal-button { display: block; padding: 6px 20px; background: #007aff; color: #fff; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; }
   .modal-close:hover, .modal-button:hover { background: #0066d9; }
@@ -118,7 +126,7 @@
   .toc-toggle:hover { color: #555; background: rgba(0,0,0,0.05); }
   .toc-toggle-icon { width: 9px; height: 9px; border-top: 1.8px solid currentColor; border-left: 1.8px solid currentColor; transform: rotate(-45deg); transition: transform 0.2s ease; }
   .toc-toggle.collapsed .toc-toggle-icon { transform: rotate(135deg); }
-  .toc-sidebar a { display: block; color: #7a7a7a; text-decoration: none; padding-top: 3px; padding-bottom: 3px; padding-right: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 4px; }
+  .toc-sidebar a { display: block; color: #7a7a7a; text-decoration: none; padding-top: 3px; padding-bottom: 3px; padding-right: 0; white-space: nowrap; overflow: hidden; text-overflow: clip; border-radius: 4px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent 100%); mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent 100%); }
   .toc-sidebar a:hover { color: #444; background: rgba(0,0,0,0.04); }
   .toc-sidebar a.toc-active { color: #007aff; font-weight: 600; background: rgba(0,122,255,0.06); }
   .toc-sidebar .toc-level-1 { padding-left: 0; font-weight: 600; }
@@ -138,7 +146,7 @@
   /* ── Print ── */
   @media print {
     body { background: #fff !important; color: #000 !important; overflow: visible !important; height: auto !important; }
-    .toc-sidebar, .toc-toggle, .find-bar, .status, .modal-overlay, .image-lightbox, .mode-indicator, .update-bubble { display: none !important; }
+    .toc-sidebar, .toc-toggle, .find-bar, .status, .modal-overlay, .image-lightbox, .mode-indicator, .edit-hint-bubble, .update-bubble { display: none !important; }
     .scroll-wrap { position: static !important; overflow: visible !important; }
     .page { max-width: none !important; margin: 0 !important; padding: 0 !important; }
     .markdown pre, .markdown .math-block, .markdown .frontmatter, .mermaid-diagram { overflow: visible !important; white-space: pre-wrap !important; }
@@ -160,8 +168,6 @@
     .markdown hr { border-top-color: #3a3a3c; }
     .modal-box, .find-bar, .find-bar input { background: #2a2a2c; color: #f0f0f0; border-color: #444; }
     .modal-value { color: #f0f0f0; }
-    .modal-copy { background: #333336; color: #ddd; border-color: #555; }
-    .modal-copy:hover { background: #3d3d40; color: #fff; }
     .toc-toggle:hover { color: #ddd; background: rgba(255,255,255,0.08); }
     .toc-sidebar a { color: #aaa; }
     .toc-sidebar a:hover { color: #eee; background: rgba(255,255,255,0.07); }
@@ -172,12 +178,14 @@
     .welcome-overlay .welcome-tip { color: #888; }
     .welcome-overlay .welcome-icon { opacity: 0.5; }
     .welcome-overlay .welcome-tip kbd { background: #333336; border-color: #555; color: #ccc; }
-    .update-bubble { background: rgba(42,42,44,0.96); color: #ddd; border-color: #444; }
-    .update-bubble:hover { background: rgba(52,52,54,0.96); border-color: #555; }
+    .update-bubble { background: rgba(42,42,44,0.82); color: #ddd; border-color: rgba(255,255,255,0.14); }
+    .update-bubble:hover { background: rgba(52,52,54,0.92); border-color: rgba(255,255,255,0.22); }
+    .update-progress { background: rgba(255,255,255,0.16); }
+    .update-progress-bar { background: #0a84ff; }
     .update-bubble-close { color: #888; }
     .update-bubble-close:hover { color: #ccc; }
     .mode-indicator { color: #aaa; }
     .mode-indicator.visible { opacity: 0.4; transition: none; }
-    .edit-hint-bubble { background: rgba(58,58,61,0.85); color: #f5f5f7; }
-    .edit-hint-key { background: rgba(255,255,255,0.18); color: #f5f5f7; }
+    .edit-hint-bubble { background: rgba(44,44,46,0.52); color: rgba(245,245,247,0.86); border-color: rgba(255,255,255,0.12); }
+    .edit-hint-key { background: rgba(255,255,255,0.12); color: inherit; }
   }

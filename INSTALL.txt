@@ -1,0 +1,114 @@
+How to Install mdPreview  /  如何安装 mdPreview
+================================================
+
+─────────────────────────────────────────────────
+English
+─────────────────────────────────────────────────
+
+Step 1: Install the App
+-----------------------
+Drag mdPreview.app to the Applications folder on the right.
+
+
+Step 2: First Launch (Bypassing macOS Security)
+------------------------------------------------
+mdPreview is open-source software without an Apple Developer code signing
+certificate ($99/year). macOS will block it and show "cannot be opened" or
+"cannot verify the developer."
+
+Choose any of the following methods to resolve this:
+
+Method 1 (Recommended): Right-click → Open
+  1. Open Finder → go to the Applications folder
+  2. Find mdPreview, hold Control and click (or right-click) its icon
+  3. Select "Open" from the context menu
+  4. A dialog appears — click "Open"
+  5. You can now double-click to open it normally. This is only needed once.
+
+Method 2: Terminal Command
+  1. Open the Terminal app (Launchpad → Other → Terminal, or search "Terminal")
+  2. Copy and paste the following command, then press Enter:
+
+     xattr -cr /Applications/mdPreview.app
+
+  3. Now double-click mdPreview to open it normally
+
+Method 3: System Settings (macOS 13 Ventura and later)
+  1. Try double-clicking mdPreview first, then close the block dialog
+  2. Open System Settings → Privacy & Security
+  3. Scroll down to the Security section — you'll see "mdPreview was blocked"
+  4. Click "Open Anyway" and enter your password
+  5. Double-click mdPreview again to open it
+
+
+Step 3: Set as Default Markdown Viewer
+--------------------------------------
+  1. Find any .md file in Finder
+  2. Right-click → select "Get Info"
+  3. Expand the "Open with" section
+  4. Select mdPreview from the dropdown
+  5. Click "Change All..."
+
+All .md files will now open with mdPreview.
+
+
+Having Issues?
+--------------
+• Project page: https://github.com/tahoeliu/mdPreview
+• Report an issue: https://github.com/tahoeliu/mdPreview/issues
+
+
+─────────────────────────────────────────────────
+中文
+─────────────────────────────────────────────────
+
+第一步：安装应用
+-----------------
+将 mdPreview.app 拖拽到右侧的 Applications 文件夹。
+
+
+第二步：首次打开（绕过 macOS 安全限制）
+-----------------------------------------
+mdPreview 是开源软件，未购买 Apple 开发者签名证书（$99/年），
+因此 macOS 会拦截并提示"无法打开"或"无法验证开发者"。
+
+请选择以下任一方法即可解决：
+
+方法一（推荐）：右键打开
+  1. 打开「访达 (Finder)」→ 进入「应用程序」文件夹
+  2. 找到 mdPreview，按住 Control 键点击（或右键点击）它的图标
+  3. 在弹出的菜单中选择「打开」
+  4. 此时会出现一个对话框，点击「打开」即可
+  5. 之后就可以正常双击打开了，只需操作一次
+
+方法二：终端命令
+  1. 打开「终端」应用（在启动台 → 其他 → 终端，或用聚焦搜索 "Terminal"）
+  2. 复制并粘贴以下命令，按回车执行：
+
+     xattr -cr /Applications/mdPreview.app
+
+  3. 然后双击 mdPreview 即可正常打开
+
+方法三：系统设置（macOS 13 Ventura 及以上）
+  1. 先尝试双击打开 mdPreview，被拦截后关闭弹窗
+  2. 打开「系统设置」→「隐私与安全性」
+  3. 向下滚动，在「安全性」区域会看到 "已阻止打开 mdPreview"
+  4. 点击「仍要打开」，输入密码确认
+  5. 再次双击 mdPreview 即可打开
+
+
+第三步：设为 Markdown 默认打开方式
+-----------------------------------
+  1. 在访达中找到任意 .md 文件
+  2. 右键点击 → 选择「显示简介」
+  3. 展开「打开方式」一栏
+  4. 在下拉菜单中选择 mdPreview
+  5. 点击「全部更改」按钮
+
+此后所有 .md 文件都会用 mdPreview 打开。
+
+
+遇到问题？
+----------
+• 项目主页：https://github.com/tahoeliu/mdPreview
+• 提交 Issue：https://github.com/tahoeliu/mdPreview/issues

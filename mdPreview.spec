@@ -3,16 +3,18 @@
 from pathlib import Path
 
 VERSION = Path('VERSION').read_text(encoding='utf-8').strip()
-# Versioning rule (user): one feature cycle keeps the same 3-part feature
-# version (e.g. 1.3.4); internal builds are distinguished by a 4th segment
-# (e.g. 1.3.4.1). CFBundleShortVersionString shows the 3-part feature version;
-# CFBundleVersion carries the full 4-part build version.
-BUILD_VERSION = VERSION
-SHORT_VERSION = '.'.join(VERSION.split('.')[:3])
+# Versioning rule (user): a feature cycle uses a 3-part version (e.g. 1.3.4);
+# internal builds append a 4th segment (e.g. 1.3.4.1). The FULL version string
+# (incl. the optional 4th segment) is shown as CFBundleShortVersionString, so
+# the About panel reads e.g. "Version 1.4.1.1" (CFBundleVersion is omitted to
+# avoid the redundant "(build)" suffix next to the version line). The auto-update
+# integrity check reads CFBundleShortVersionString from the staged app instead
+# (see mdPreview.py _download_and_extract).
+SHORT_VERSION = VERSION
 block_cipher = None
 
 a = Analysis(
-    ['markdown_viewer.py'],
+    ['mdPreview.py'],
     pathex=[],
     binaries=[],
     datas=[
@@ -26,6 +28,9 @@ a = Analysis(
         ('html2canvas.min.js', '.'),
         ('app_icon.icns', '.'),
         ('doc_icon.icns', '.'),
+        # Shown in the standard macOS About panel (bottom "Credits" area).
+        # Contains a clickable "GitHub" hyperlink + "©tahoeliu".
+        ('Credits.rtf', '.'),
     ],
     hiddenimports=[
         'webview.platforms.cocoa',
@@ -104,11 +109,10 @@ app = BUNDLE(
     coll,
     name='mdPreview.app',
     icon='app_icon.icns',
-    bundle_identifier='com.workbuddy.mdpreview',
+    bundle_identifier='tahoeliu.mdpreview',
     info_plist={
         'CFBundleName': 'mdPreview',
         'CFBundleDisplayName': 'mdPreview',
-        'CFBundleVersion': BUILD_VERSION,
         'CFBundleShortVersionString': SHORT_VERSION,
         'LSMinimumSystemVersion': '10.13',
         'NSHighResolutionCapable': True,

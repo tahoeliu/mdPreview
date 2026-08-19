@@ -34,8 +34,12 @@
 <div class="mode-indicator" id="modeIndicator"></div>
 <div class="status" id="status"></div>
 <div class="edit-hint-bubble" id="editHintBubble" role="status" aria-live="polite"></div>
+<div class="edit-hint-bubble size-hint-bubble" id="sizeHintBubble" role="status" aria-live="polite"></div>
 <div class="update-bubble" id="updateBubble" onclick="installUpdate()" role="alert">
-  <span class="update-bubble-text">Update available, click to install...</span>
+  <div class="update-bubble-body">
+    <span class="update-bubble-text">Update available, click to install...</span>
+    <div class="update-progress" aria-hidden="true"><div class="update-progress-bar" id="updateProgressBar"></div></div>
+  </div>
   <button class="update-bubble-close" onclick="dismissUpdateBubble(event)" title="Dismiss" aria-label="Dismiss">&times;</button>
 </div>
 <div class="image-lightbox" id="imageLightbox"><img id="imageLightboxImg" alt="Preview"></div>

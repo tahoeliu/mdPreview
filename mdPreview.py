@@ -227,6 +227,11 @@ if HAS_COCOA:
         except Exception:
             return None
 
+    def _format_disclaimer(ext):
+        if ext == 'md':
+            return ''
+        return _t('Experimental; output may differ from preview.', '实验性功能，输出效果可能与预览不同。')
+
     class _FormatPopupActions(NSObject):
         """Action target for the save panel's format popup: switches the panel's
         allowed file type and renames the file field's extension."""
@@ -244,6 +249,12 @@ if HAS_COCOA:
                 if idx < 0 or idx >= len(formats):
                     return
                 ext = formats[idx][1]
+                disclaimer = h.get('disclaimer')
+                if disclaimer is not None:
+                    try:
+                        disclaimer.setStringValue_(_format_disclaimer(ext))
+                    except Exception:
+                        pass
                 panel = h.get('panel')
                 if panel is not None:
                     try:
@@ -260,7 +271,7 @@ if HAS_COCOA:
             except Exception:
                 log_exception('format popup changed failed')
 
-    def _run_format_panel(holder, base_name, formats, title):
+    def _run_format_panel(holder, base_name, formats, title, name_label=None):
         """Native save panel with a format popup in its accessory view.
 
         Formats: list of (display_label, extension_key). On OK, holder gets
@@ -270,34 +281,47 @@ if HAS_COCOA:
         """
         try:
             from AppKit import (NSSavePanel, NSPopUpButton, NSView, NSTextField,
-                                NSMakeRect, NSColor, NSOKButton)
+                                NSMakeRect, NSColor, NSFont, NSOKButton)
             from PyObjCTools import AppHelper
 
             def _do():
                 try:
                     panel = NSSavePanel.savePanel()
                     panel.setTitle_(title)
+                    if name_label:
+                        try:
+                            panel.setNameFieldLabel_(name_label)
+                        except Exception:
+                            pass
                     try:
-                        # The Save/Export action button follows the dialog title
-                        # (NSSavePanel's built-in name label is system-fixed).
+                        # The Save/Export action button follows the dialog title.
                         panel.setPrompt_(title)
                     except Exception:
                         pass
                     panel.setCanCreateDirectories_(True)
-                    acc = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 320, 64))
+                    acc = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 360, 82))
                     label = NSTextField.labelWithString_(_t('Format:', '格式：'))
-                    label.setFrame_(NSMakeRect(0, 22, 60, 20))
+                    label.setFrame_(NSMakeRect(0, 42, 60, 20))
                     label.setTextColor_(NSColor.secondaryLabelColor())
-                    popup = NSPopUpButton.alloc().initWithFrame_(NSMakeRect(60, 18, 240, 25))
+                    popup = NSPopUpButton.alloc().initWithFrame_(NSMakeRect(60, 38, 260, 25))
                     for f in formats:
                         popup.addItemWithTitle_(f[0])
+                    disclaimer = NSTextField.labelWithString_(_format_disclaimer(formats[0][1]))
+                    disclaimer.setFrame_(NSMakeRect(60, 12, 300, 18))
+                    disclaimer.setTextColor_(NSColor.tertiaryLabelColor())
+                    try:
+                        disclaimer.setFont_(NSFont.systemFontOfSize_(11))
+                    except Exception:
+                        pass
                     holder['formats'] = formats
                     holder['panel'] = panel
+                    holder['disclaimer'] = disclaimer
                     actions = _FormatPopupActions.alloc().initWithHolder_(holder)
                     popup.setTarget_(actions)
                     popup.setAction_('formatChanged:')
                     acc.addSubview_(label)
                     acc.addSubview_(popup)
+                    acc.addSubview_(disclaimer)
                     panel.setAccessoryView_(acc)
                     panel.setAllowedFileTypes_([formats[0][1]])
                     panel.setNameFieldStringValue_(base_name + '.' + formats[0][1])
@@ -549,6 +573,46 @@ class MarkdownAPI:
             log_exception('set dirty title failed')
         return True
 
+    def read_clipboard(self):
+        """Read the best available clipboard flavor for 'Paste as Markdown'.
+
+        A copy operation normally puts several flavors of the same content on
+        the pasteboard. Priority: text/markdown (zero-loss) > HTML (convert
+        via turndown) > plain text (insert as-is). RTF-only content (e.g. some
+        native apps) intentionally falls back to plain text in v1.
+
+        Called from JS on paste; the pywebview JS bridge runs on a background
+        thread, and reading the general pasteboard there is safe on modern
+        macOS. Returns {'format': 'markdown'|'html'|'text'|'none', 'content': str}.
+        """
+        try:
+            from AppKit import NSPasteboard
+        except Exception:
+            return {'format': 'none', 'content': ''}
+        try:
+            pb = NSPasteboard.generalPasteboard()
+            types = [str(t) for t in (pb.types() or [])]
+            if not types:
+                return {'format': 'none', 'content': ''}
+
+            def _get(t):
+                val = pb.stringForType_(t)
+                return str(val) if val is not None else ''
+
+            for t in ('text/markdown', 'public.markdown', 'net.daringfireball.markdown'):
+                if t in types and _get(t):
+                    return {'format': 'markdown', 'content': _get(t)}
+            for t in ('public.html', 'text/html', 'com.microsoft.word.html'):
+                if t in types and _get(t):
+                    return {'format': 'html', 'content': _get(t)}
+            for t in ('public.utf8-plain-text', 'public.plain-text', 'public.text', 'NSStringPboardType'):
+                if t in types:
+                    return {'format': 'text', 'content': _get(t)}
+            return {'format': 'none', 'content': ''}
+        except Exception:
+            log_exception('read clipboard failed')
+            return {'format': 'none', 'content': ''}
+
     def reset_to_untitled(self):
         """Turn the current window into a blank Untitled document without closing it.
 
@@ -635,11 +699,11 @@ class MarkdownAPI:
             base = os.path.splitext(os.path.basename(default_name or 'Untitled'))[0] or 'Untitled'
             formats = [
                 (_t('Markdown (.md)', 'Markdown (.md)'), 'md'),
+                (_t('Plain Text (.txt)', '纯文本 (.txt)'), 'txt'),
                 (_t('Web Page (.html)', '网页 (.html)'), 'html'),
-                (_t('PDF', 'PDF'), 'pdf'),
                 (_t('Word Document (.docx)', 'Word 文档 (.docx)'), 'docx'),
                 (_t('PNG Image (.png)', 'PNG 图片 (.png)'), 'png'),
-                (_t('Plain Text (.txt)', '纯文本 (.txt)'), 'txt'),
+                (_t('PDF', 'PDF'), 'pdf'),
             ]
             holder = {}
             _run_format_panel(holder, base, formats, _t('Save', '保存'))
@@ -664,20 +728,19 @@ class MarkdownAPI:
         try:
             base = os.path.splitext(os.path.basename(default_name or 'Untitled'))[0] or 'Untitled'
             formats = [
-                (_t('PDF', 'PDF'), 'pdf'),
                 (_t('Web Page (.html)', '网页 (.html)'), 'html'),
                 (_t('Word Document (.docx)', 'Word 文档 (.docx)'), 'docx'),
                 (_t('PNG Image (.png)', 'PNG 图片 (.png)'), 'png'),
+                (_t('PDF', 'PDF'), 'pdf'),
                 (_t('Plain Text (.txt)', '纯文本 (.txt)'), 'txt'),
-                (_t('Markdown (.md)', 'Markdown (.md)'), 'md'),
             ]
             holder = {}
-            _run_format_panel(holder, base, formats, _t('Export', '导出'))
+            _run_format_panel(holder, base, formats, _t('Export As', '导出为'), _t('Export As:', '导出为：'))
             if holder.get('cancelled'):
                 return {'success': False, 'cancelled': True}
             if 'error' in holder:
                 return {'success': False, 'error': holder['error']}
-            return {'success': True, 'path': holder['path'], 'format': holder.get('format', 'md')}
+            return {'success': True, 'path': holder['path'], 'format': holder.get('format', 'html')}
         except Exception as e:
             log_exception('export as choose failed')
             return {'success': False, 'error': str(e)}
@@ -888,8 +951,9 @@ class MarkdownAPI:
 
         Step 1: a simple native NSAlert (sheet) asking whether to save, with
         vertical buttons Delete (red) / Save / Cancel (top to bottom).
-        Step 2: if the user chooses Save, the standard NSSavePanel opens for
-        the file name & location.
+        Step 2: if the user chooses Save, a document that already has a path
+        is saved in place immediately; only untitled documents open the
+        standard NSSavePanel to pick a name & location.
         Returns {'action': 'save', 'path': ...}, {'action': 'delete'} or
         {'action': 'cancel'}.
         """
@@ -908,8 +972,6 @@ class MarkdownAPI:
                 initial_name = 'untitled.md'
             else:
                 base_name = os.path.splitext(os.path.basename(self.file_path or ''))[0] or 'untitled'
-                base_dir = os.path.dirname(self.file_path) or os.path.expanduser('~/Desktop')
-                initial_name = os.path.basename(self.file_path) or 'untitled.md'
 
             def _run_save_panel():
                 try:
@@ -935,8 +997,14 @@ class MarkdownAPI:
                     code = int(code)
                     if code == 1000:  # Delete
                         result_holder['action'] = 'delete'
-                    elif code == 1002:  # Save -> open the native save panel
-                        AppHelper.callAfter(_run_save_panel)
+                    elif code == 1002:  # Save
+                        if is_untitled:
+                            # Untitled document: ask for a name & location.
+                            AppHelper.callAfter(_run_save_panel)
+                        else:
+                            # Already has a path: save in place, no Save As panel.
+                            result_holder['action'] = 'save'
+                            result_holder['path'] = self.file_path
                     else:  # Cancel / Esc
                         result_holder['action'] = 'cancel'
                 except Exception:
@@ -992,6 +1060,86 @@ class MarkdownAPI:
             log_exception('native save prompt failed')
             return {'action': 'cancel'}
 
+    def native_conflict_prompt(self, path=''):
+        """Native save-conflict alert (sheet): Save Current / Save As / Cancel.
+
+        Shown when the file on disk changed since it was opened or last
+        saved. Vertical layout (right to left on macOS): Save Current (red,
+        destructive) / Save As / Cancel (default, triggered by Enter).
+        Returns {'action': 'overwrite'}, {'action': 'save_as'} or
+        {'action': 'cancel'}. The JS side performs the chosen action; Save As
+        opens the regular Save-As panel there.
+        """
+        if not HAS_COCOA:
+            return {'action': 'cancel'}
+        try:
+            from AppKit import NSAlert, NSColor
+            from PyObjCTools import AppHelper
+
+            result_holder = {}
+            name = os.path.basename(path or self.file_path or '') or 'Untitled.md'
+
+            def handler(code):
+                try:
+                    code = int(code)
+                    if code == 1000:  # Save Current (overwrite)
+                        result_holder['action'] = 'overwrite'
+                    elif code == 1001:  # Save As
+                        result_holder['action'] = 'save_as'
+                    else:  # Cancel / Esc
+                        result_holder['action'] = 'cancel'
+                except Exception:
+                    result_holder['action'] = 'cancel'
+
+            def _run():
+                try:
+                    import webview.platforms.cocoa as cocoa_mod
+                    bv = cocoa_mod.BrowserView.instances.get(getattr(self.window, 'uid', None))
+                    host = bv.window if bv is not None else None
+                    if host is None:
+                        from AppKit import NSApp
+                        host = NSApp.mainWindow()
+
+                    alert = NSAlert.alloc().init()
+                    alert.setMessageText_(
+                        _t('The file "%s" has changed on disk since it was opened or last saved.' % name,
+                           '文件"%s"自打开或上次保存以来已在磁盘上发生变化。' % name))
+                    alert.setInformativeText_(
+                        _t('Save Current overwrites the changed file. Save As keeps it untouched and saves this document to a new path.',
+                           '「保存当前」将用当前窗口内容覆盖磁盘文件；「另存为」保持磁盘文件不变，将本文档保存到新路径。'))
+                    # Response codes follow button order: First=Save Current(1000),
+                    # Second=Save As(1001), Third=Cancel(1002).
+                    # Colors (right to left): Save Current red/destructive,
+                    # Save As blue default (Enter), Cancel plain gray (Esc).
+                    alert.addButtonWithTitle_(_t('Save Current', '保存当前'))
+                    alert.addButtonWithTitle_(_t('Save As', '另存为'))
+                    alert.addButtonWithTitle_(_t('Cancel', '取消'))
+                    buttons = alert.buttons()
+                    try:
+                        del_btn = buttons.objectAtIndex_(0)
+                        del_btn.setHasDestructiveAction_(True)
+                        del_btn.setBezelColor_(NSColor.systemRedColor())
+                        del_btn.setKeyEquivalent_('')
+                        buttons.objectAtIndex_(1).setKeyEquivalent_('\r')  # Save As: default (blue)
+                        buttons.objectAtIndex_(2).setKeyEquivalent_('')    # Cancel: plain gray
+                    except Exception:
+                        pass
+                    alert.beginSheetModalForWindow_completionHandler_(host, handler)
+                except Exception as e:
+                    log_exception('native conflict alert run failed')
+                    result_holder['action'] = 'cancel'
+                    result_holder['error'] = str(e)
+
+            AppHelper.callAfter(_run)
+            for _ in range(150):  # 15s timeout; fall back to cancel
+                if result_holder:
+                    break
+                time.sleep(0.1)
+            return result_holder or {'action': 'cancel'}
+        except Exception:
+            log_exception('native conflict prompt failed')
+            return {'action': 'cancel'}
+
     def open_external_link(self, url):
         """Open a URL with the system default handler."""
         try:
@@ -1006,13 +1154,10 @@ class MarkdownAPI:
         if not HAS_COCOA:
             return {'success': False, 'error': 'Cocoa not available'}
         try:
-            bundle_id = 'com.workbuddy.mdpreview'
+            bundle_id = 'tahoeliu.mdpreview'
             extensions = ['md', 'markdown', 'mdown', 'mkd', 'mkdown']
             utis = [
                 'net.daringfireball.markdown',
-                'com.apple.traditional-mac-plain-text',
-                'public.plain-text',
-                'public.text',
             ]
 
             try:
@@ -1070,6 +1215,10 @@ class MarkdownAPI:
     def perform_auto_install(self):
         """Called from JS when user clicks the update bubble."""
         return _perform_auto_install()
+
+    def download_update_with_progress(self, version):
+        """Manual update download with progress updates shown in the page."""
+        return _manual_download_update_with_progress(version)
 
     def get_file_properties(self):
         """Return file properties for the Properties dialog"""
@@ -1177,6 +1326,8 @@ _file_menu_setup = False
 _app_menu_setup = False
 _update_menu_item = None
 _available_update_version = None
+_properties_panel_ref = None
+_about_window_ref = None
 _window_count = [0]  # list-based counter so it stays mutable inside ObjC callbacks
 # Windows that were "closed" by the user but kept alive hidden so the app can
 # stay resident without a cold start. Each entry is id(window) -> window.
@@ -1752,6 +1903,21 @@ if HAS_COCOA:
             log_exception('make md icon failed')
             return None
 
+    def _make_symbol_icon(name):
+        try:
+            from AppKit import NSImage
+            icon = NSImage.imageWithSystemSymbolName_accessibilityDescription_(name, '')
+            if icon is not None:
+                icon.setTemplate_(True)
+            return icon
+        except Exception:
+            return None
+
+    def _set_symbol_icon(item, name):
+        icon = _make_symbol_icon(name)
+        if icon is not None:
+            item.setImage_(icon)
+
     def setup_all_menus():
         """Set up all custom menu items. Called once menus are ready."""
         global _view_menu_setup, _file_menu_setup, _app_menu_setup, _update_menu_item
@@ -1775,16 +1941,16 @@ if HAS_COCOA:
                 if about_item:
                     about_item.setAction_('showAbout:')
                     about_item.setTarget_(_view_menu_handler)
-                # Preferences ⌘, was reassigned to Decrease Width; move
-                # Preferences to ⌘⇧, to avoid the clash.
-                pref_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Preferences…", "偏好设置…"), "showPreferences:", ",")
-                pref_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 17))  # Cmd+Shift+,
-                pref_item.setTarget_(_view_menu_handler)
-                app_menu.insertItem_atIndex_(pref_item, 1)
-                # Insert "Check for Updates…" right after Preferences
+                for idx in range(app_menu.numberOfItems() - 1, 0, -1):
+                    item = app_menu.itemAtIndex_(idx)
+                    title = str(item.title() or '')
+                    action = str(item.action() or '')
+                    if title in ('Preferences…', 'Preferences...', '偏好设置…', '偏好设置...') or action == 'showPreferences:':
+                        app_menu.removeItemAtIndex_(idx)
+                # Insert "Check for Updates…" after the standard About item.
                 update_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Check for Updates…", "检查更新…"), "checkForUpdates:", "")
                 update_item.setTarget_(_view_menu_handler)
-                app_menu.insertItem_atIndex_(update_item, 2)
+                app_menu.insertItem_atIndex_(update_item, 1)
                 _update_menu_item = update_item
                 _app_menu_setup = True
 
@@ -1799,9 +1965,18 @@ if HAS_COCOA:
                         break
 
                 if view_menu:
-                    # Preview / Source toggle — the app's most important
-                    # action, so it goes FIRST in the View menu with an "md"
-                    # icon and ⌘E.
+                    # Keep the existing first section (Tab navigation) intact,
+                    # then rebuild the rest so separators and native items have
+                    # a stable order.
+                    first_section_end = view_menu.numberOfItems()
+                    for idx in range(view_menu.numberOfItems()):
+                        if view_menu.itemAtIndex_(idx).isSeparatorItem():
+                            first_section_end = idx + 1
+                            break
+                    while view_menu.numberOfItems() > first_section_end:
+                        view_menu.removeItemAtIndex_(first_section_end)
+
+                    # Section 2: Preview/Source + Outline.
                     toggle_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
                         _t("Toggle Preview / Source", "切换预览 / 源码"), "toggleView:", "e")
                     toggle_item.setKeyEquivalentModifierMask_(1 << 20)  # Command
@@ -1809,31 +1984,41 @@ if HAS_COCOA:
                     if md_icon is not None:
                         toggle_item.setImage_(md_icon)
                     toggle_item.setTarget_(_view_menu_handler)
-                    view_menu.insertItem_atIndex_(toggle_item, 0)
-                    view_menu.insertItem_atIndex_(NSMenuItem.separatorItem(), 1)
-                    # Zoom In / Zoom Out (⌘= / ⌘-)
-                    zoom_in_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Bigger Text", "放大文字"), "zoomIn:", "=")
-                    zoom_in_item.setKeyEquivalentModifierMask_(1 << 20)
-                    view_menu.addItem_(zoom_in_item)
-                    zoom_out_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Smaller Text", "缩小文字"), "zoomOut:", "-")
-                    zoom_out_item.setKeyEquivalentModifierMask_(1 << 20)
-                    view_menu.addItem_(zoom_out_item)
-                    view_menu.addItem_(NSMenuItem.separatorItem())
+                    view_menu.insertItem_atIndex_(toggle_item, first_section_end)
                     outline_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Show/Hide Outline", "显示/隐藏大纲"), "toggleOutline:", "o")
                     outline_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 19))  # Cmd+Option+O
-                    view_menu.addItem_(outline_item)
-                    view_menu.addItem_(NSMenuItem.separatorItem())
-                    # Width shortcuts were moved from ⌘= / ⌘- (now Zoom) to ⌘. / ⌘,
-                    # following the same left=decrease, right=increase layout.
+                    _set_symbol_icon(outline_item, 'list.bullet.rectangle')
+                    view_menu.insertItem_atIndex_(outline_item, first_section_end + 1)
+                    view_menu.insertItem_atIndex_(NSMenuItem.separatorItem(), first_section_end + 2)
+
+                    # Section 3: Full Screen.
+                    fullscreen_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Enter Full Screen", "进入全屏幕"), "toggleFullScreen:", "f")
+                    fullscreen_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 19))  # Cmd+Option+F
+                    _set_symbol_icon(fullscreen_item, 'arrow.up.left.and.arrow.down.right')
+                    view_menu.insertItem_atIndex_(fullscreen_item, first_section_end + 3)
+                    view_menu.insertItem_atIndex_(NSMenuItem.separatorItem(), first_section_end + 4)
+
+                    # Section 4: width and text-size controls.
                     inc_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Increase Width", "加宽"), "increaseWidth:", ".")
                     inc_item.setKeyEquivalentModifierMask_(1 << 20)
-                    view_menu.addItem_(inc_item)
+                    _set_symbol_icon(inc_item, 'arrow.left.and.right')
+                    view_menu.insertItem_atIndex_(inc_item, first_section_end + 5)
                     dec_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Decrease Width", "变窄"), "decreaseWidth:", ",")
                     dec_item.setKeyEquivalentModifierMask_(1 << 20)
-                    view_menu.addItem_(dec_item)
+                    _set_symbol_icon(dec_item, 'arrow.left.and.right')
+                    view_menu.insertItem_atIndex_(dec_item, first_section_end + 6)
                     reset_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Reset Width", "重置宽度"), "resetWidth:", "0")
                     reset_item.setKeyEquivalentModifierMask_(1 << 20)
-                    view_menu.addItem_(reset_item)
+                    _set_symbol_icon(reset_item, 'arrow.uturn.left')
+                    view_menu.insertItem_atIndex_(reset_item, first_section_end + 7)
+                    zoom_in_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Bigger Text", "放大文字"), "zoomIn:", "=")
+                    zoom_in_item.setKeyEquivalentModifierMask_(1 << 20)
+                    _set_symbol_icon(zoom_in_item, 'textformat.size.larger')
+                    view_menu.insertItem_atIndex_(zoom_in_item, first_section_end + 8)
+                    zoom_out_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Smaller Text", "缩小文字"), "zoomOut:", "-")
+                    zoom_out_item.setKeyEquivalentModifierMask_(1 << 20)
+                    _set_symbol_icon(zoom_out_item, 'textformat.size.smaller')
+                    view_menu.insertItem_atIndex_(zoom_out_item, first_section_end + 9)
                     outline_item.setTarget_(_view_menu_handler)
                     inc_item.setTarget_(_view_menu_handler)
                     dec_item.setTarget_(_view_menu_handler)
@@ -1932,6 +2117,23 @@ if HAS_COCOA:
                         break
 
                 if edit_menu and not getattr(_view_menu_handler, '_edit_menu_setup', False):
+                    # "Paste as Markdown": insert right after the native Paste
+                    # item (or at the top of the Edit menu if it is absent).
+                    # Cmd+Shift+V overrides macOS' default "Paste and Match Style".
+                    paste_insert_at = 0
+                    for idx in range(edit_menu.numberOfItems()):
+                        it = edit_menu.itemAtIndex_(idx)
+                        act = str(it.action() or '')
+                        if act == 'paste:':
+                            paste_insert_at = idx + 1
+                            break
+                    paste_md_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                        _t("Paste as Markdown", "粘贴为 Markdown"), "pasteAsMarkdown:", "v")
+                    paste_md_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 17))  # Cmd+Shift
+                    _set_symbol_icon(paste_md_item, 'doc.richtext')
+                    paste_md_item.setTarget_(_view_menu_handler)
+                    edit_menu.insertItem_atIndex_(paste_md_item, paste_insert_at)
+
                     edit_menu.addItem_(NSMenuItem.separatorItem())
                     find_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Find", "查找"), "findAction:", "f")
                     find_item.setTarget_(_view_menu_handler)
@@ -1993,6 +2195,126 @@ if HAS_COCOA:
         except Exception:
             log_exception('dispatch js failed')
 
+    def _current_file_properties():
+        ref = _get_target_window()
+        api = _window_apis.get(id(ref)) if ref else None
+        if api is None:
+            api = _main_api_ref
+        return api.get_file_properties() if api is not None else {
+            'name': 'Untitled.md',
+            'location': '',
+            'size': 0,
+            'sizeFormatted': '0 B',
+            'modified': '',
+            'created': '',
+            'exists': False,
+            'encoding': '',
+        }
+
+    def _show_native_properties_panel():
+        """Show file properties in a standard native macOS window."""
+        global _properties_panel_ref
+        try:
+            from AppKit import (
+                NSBackingStoreBuffered, NSColor, NSFont, NSImage, NSImageScaleProportionallyUpOrDown,
+                NSImageView, NSMakeRect, NSTextField, NSWindow,
+                NSWindowStyleMaskClosable, NSWindowStyleMaskTitled,
+            )
+            props = _current_file_properties()
+            name = props.get('name') or 'Untitled.md'
+            location = props.get('location') or ''
+            path_value = os.path.join(location, name) if location else name
+            rows = [
+                (_t('Name', '名称'), name),
+                (_t('Path', '路径'), path_value),
+                (_t('Size', '大小'), f"{props.get('sizeFormatted') or '0 B'} ({props.get('size') or 0} {_t('bytes', '字节')})"),
+                (_t('Encoding', '编码'), props.get('encoding') or '-'),
+                (_t('Modified', '修改时间'), props.get('modified') or '-'),
+                (_t('Created', '创建时间'), props.get('created') or '-'),
+            ]
+
+            width = 560
+            row_h = 30
+            top_pad = 26
+            bottom_pad = 24
+            left_w = 150
+            right_x = left_w + 14
+            right_w = width - right_x - 20
+            label_w = 78
+            value_w = right_w - label_w - 8
+            label_font = NSFont.systemFontOfSize_(12)
+            value_font = NSFont.systemFontOfSize_(12)
+            path_label = _t('Path', '路径')
+            try:
+                from AppKit import NSFontAttributeName
+                from Foundation import NSString
+                path_text = NSString.stringWithString_(str(path_value))
+                path_width = path_text.sizeWithAttributes_({NSFontAttributeName: value_font}).width
+            except Exception:
+                path_width = len(str(path_value)) * 7
+            path_needs_wrap = path_width > value_w
+            row_heights = [52 if label == path_label and path_needs_wrap else row_h for label, _ in rows]
+            height = top_pad + bottom_pad + sum(row_heights)
+            panel = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+                NSMakeRect(0, 0, width, height),
+                NSWindowStyleMaskTitled | NSWindowStyleMaskClosable,
+                NSBackingStoreBuffered,
+                False,
+            )
+            panel.setTitle_(_t('File Properties', '文件属性'))
+            panel.setReleasedWhenClosed_(False)
+            panel.setBackgroundColor_(NSColor.whiteColor())
+            content = panel.contentView()
+            content.setWantsLayer_(True)
+            content.layer().setBackgroundColor_(NSColor.whiteColor().CGColor())
+
+            icon_size = 72
+            icon_x = (left_w - icon_size) / 2 + 8
+            icon_y = (height - icon_size) / 2
+            icon_view = NSImageView.alloc().initWithFrame_(NSMakeRect(icon_x, icon_y, icon_size, icon_size))
+            icon = NSImage.alloc().initWithContentsOfFile_(get_resource_path('doc_icon.icns'))
+            if icon is not None:
+                icon_view.setImage_(icon)
+            icon_view.setImageScaling_(NSImageScaleProportionallyUpOrDown)
+            content.addSubview_(icon_view)
+
+            y = height - top_pad
+            for (label, value), current_row_h in zip(rows, row_heights):
+                is_wrapped_path = label == path_label and path_needs_wrap
+                value_h = 46 if is_wrapped_path else 24
+                row_bottom = y - current_row_h
+                label_field = NSTextField.labelWithString_(label)
+                label_field.setFrame_(NSMakeRect(right_x, row_bottom + current_row_h - 22, label_w, 18))
+                label_field.setFont_(label_font)
+                label_field.setTextColor_(NSColor.secondaryLabelColor())
+                content.addSubview_(label_field)
+
+                value_field = NSTextField.alloc().initWithFrame_(NSMakeRect(right_x + label_w + 8, row_bottom + current_row_h - value_h - 2, value_w, value_h))
+                value_field.setStringValue_(str(value))
+                value_field.setFont_(value_font)
+                value_field.setEditable_(False)
+                value_field.setSelectable_(True)
+                value_field.setBezeled_(False)
+                value_field.setDrawsBackground_(False)
+                value_field.setLineBreakMode_(0 if is_wrapped_path else 4)
+                value_field.setUsesSingleLineMode_(not is_wrapped_path)
+                content.addSubview_(value_field)
+                y = row_bottom
+
+            panel.center()
+            panel.makeKeyAndOrderFront_(None)
+            _properties_panel_ref = panel
+        except Exception:
+            log_exception('show native properties failed')
+            try:
+                from AppKit import NSAlert
+                alert = NSAlert.alloc().init()
+                alert.setMessageText_(_t('File Properties', '文件属性'))
+                alert.setInformativeText_(_t('Could not open the native properties window.', '无法打开原生属性窗口。'))
+                alert.runModal()
+            except Exception:
+                pass
+
     # Dynamically create an ObjC class to handle menu actions
     from Foundation import NSObject
 
@@ -2019,7 +2341,7 @@ if HAS_COCOA:
             _dispatch_js('toggleToc()')
 
         def showProperties_(self, sender):
-            _dispatch_js('showFileProperties()')
+            _show_native_properties_panel()
 
         def saveFile_(self, sender):
             _dispatch_js('saveFile()')
@@ -2038,10 +2360,22 @@ if HAS_COCOA:
                 log_exception('open recent file failed')
 
         def closeWindow_(self, sender):
+            global _properties_panel_ref, _about_window_ref
+            try:
+                if _properties_panel_ref and _properties_panel_ref.isVisible():
+                    _properties_panel_ref.close()
+                    return
+            except Exception:
+                pass
+            # Dismiss the standard About panel with Cmd+W. It is not a normal
+            # document window, so the default close path would otherwise ignore it.
+            try:
+                if _about_window_ref is not None and _about_window_ref.isVisible():
+                    _about_window_ref.close()
+                    return
+            except Exception:
+                pass
             _dispatch_js('closeWindow()')
-
-        def showPreferences_(self, sender):
-            _dispatch_js('showPreferences()')
 
         def exportAs_(self, sender):
             _dispatch_js('exportAs()')
@@ -2055,6 +2389,9 @@ if HAS_COCOA:
 
         def findAction_(self, sender):
             _dispatch_js('openFindBar()')
+
+        def pasteAsMarkdown_(self, sender):
+            _dispatch_js('pasteAsMarkdown()')
 
         def findNextAction_(self, sender):
             _dispatch_js('findNext()')
@@ -2076,7 +2413,6 @@ if HAS_COCOA:
                         return
                     local = _get_current_version()
                     if _is_newer(remote, local):
-                        _set_update_available(remote)
                         AppHelper.callAfter(_show_update_alert, remote)
                     else:
                         _clear_update_available()
@@ -2088,7 +2424,16 @@ if HAS_COCOA:
         def showAbout_(self, sender):
             """Show the standard macOS About panel.
             Reads app name, version, and icon from the .app bundle's Info.plist."""
-            NSApplication.sharedApplication().orderFrontStandardAboutPanel_(sender)
+            global _about_window_ref
+            app = NSApplication.sharedApplication()
+            # Capture the standard About panel so Cmd+W can dismiss it later
+            # (the default close path would otherwise ignore this auxiliary panel).
+            before = {w.__c_void_p__().value for w in app.windows()}
+            app.orderFrontStandardAboutPanel_(sender)
+            for w in app.windows():
+                if w.__c_void_p__().value not in before:
+                    _about_window_ref = w
+                    break
 
         def setupAllMenusRetry_(self, sender):
             setup_all_menus()
@@ -2439,11 +2784,12 @@ def _set_update_available(remote_version):
         AppHelper.callAfter(_update_menu)
     # Auto-download in background to hidden staging dir
     def _bg_download():
-        staging_app = _download_and_extract(remote_version)
-        if staging_app:
+        update = _download_and_extract(remote_version)
+        if update:
             cfg = load_config()
-            cfg['pending_staging_app'] = staging_app
+            cfg['pending_staging_app'] = update['staging_app']
             cfg['pending_update_version'] = remote_version
+            cfg.pop('pending_update_dmg', None)
             save_config(cfg)
             if HAS_COCOA:
                 AppHelper.callAfter(lambda: _dispatch_js('showUpdateBubble()'))
@@ -2482,44 +2828,46 @@ def _show_update_alert(remote_version):
         alert.addButtonWithTitle_(_t('Later', '稍后'))
         response = alert.runModal()
         if response == 1000:  # Download
-            # Auto-download and extract to staging, then show bubble
-            def _bg_download():
-                staging_app = _download_and_extract(remote_version)
-                if staging_app:
-                    cfg = load_config()
-                    cfg['pending_staging_app'] = staging_app
-                    cfg['pending_update_version'] = remote_version
-                    save_config(cfg)
-                    AppHelper.callAfter(lambda: _dispatch_js('showUpdateBubble()'))
-            threading.Thread(target=_bg_download, daemon=True).start()
+            version_arg = json.dumps(remote_version)
+            AppHelper.callAfter(lambda: _dispatch_js("showUpdateDownloadProgress(0)"))
+            AppHelper.callAfter(lambda: _dispatch_js(f"window.pywebview.api.download_update_with_progress({version_arg})"))
             return True
         return False
     except Exception:
         return False
 
 
-def _download_and_extract(version):
-    """Download DMG to hidden staging dir, extract .app, return staging path.
-
-    Hardened: the extracted app's version is verified against the expected
-    release version, and the DMG is always detached (even on failure) so no
-    dangling mount is left behind.
-    """
+def _download_and_extract(version, progress_callback=None, keep_dmg=False):
+    """Download DMG to staging dir, extract .app, return staging and DMG paths."""
     import urllib.request
     import subprocess
     mount_dir = None
+    dmg_path = None
     try:
         os.makedirs(UPDATE_STAGING_DIR, exist_ok=True)
         dmg_path = os.path.join(UPDATE_STAGING_DIR, 'mdPreview.dmg')
         url = 'https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg'
         req = urllib.request.Request(url, headers={'User-Agent': 'mdPreview'})
+        if progress_callback:
+            progress_callback(0)
         with urllib.request.urlopen(req, timeout=60) as resp:
+            total = int(resp.headers.get('Content-Length') or 0)
+            done = 0
+            last_percent = -1
             with open(dmg_path, 'wb') as f:
                 while True:
                     chunk = resp.read(65536)
                     if not chunk:
                         break
                     f.write(chunk)
+                    done += len(chunk)
+                    if progress_callback and total > 0:
+                        percent = min(100, int(done * 100 / total))
+                        if percent != last_percent:
+                            last_percent = percent
+                            progress_callback(percent)
+        if progress_callback:
+            progress_callback(100)
         if os.path.getsize(dmg_path) < 1000000:
             os.remove(dmg_path)
             return None
@@ -2540,26 +2888,48 @@ def _download_and_extract(version):
         try:
             import plistlib
             with open(plist, 'rb') as pf:
-                staged_version = plistlib.load(pf).get('CFBundleVersion')
+                staged_version = plistlib.load(pf).get('CFBundleShortVersionString')
         except Exception:
             pass
         if not staged_version or (version and _is_newer(version, staged_version)):
             log_exception('staged update failed version check: got %r want %r' % (staged_version, version))
             shutil.rmtree(staging_app, ignore_errors=True)
             return None
-        return staging_app
+        return {'staging_app': staging_app, 'dmg_path': dmg_path if keep_dmg else ''}
     except Exception:
-        log_exception('auto download and extract failed')
+        log_exception('download and extract failed')
         return None
     finally:
         if mount_dir and os.path.exists(mount_dir):
             subprocess.run(['hdiutil', 'detach', mount_dir], capture_output=True)
             shutil.rmtree(mount_dir, ignore_errors=True)
         try:
-            if os.path.exists(dmg_path):
+            if dmg_path and os.path.exists(dmg_path) and not keep_dmg:
                 os.remove(dmg_path)
         except Exception:
             pass
+
+
+def _manual_download_update_with_progress(version):
+    """Download a manually requested update and report progress to the UI."""
+    def _progress(percent):
+        if HAS_COCOA:
+            AppHelper.callAfter(lambda p=percent: _dispatch_js(f'showUpdateDownloadProgress({int(p)})'))
+
+    update = _download_and_extract(version, progress_callback=_progress, keep_dmg=True)
+    if not update:
+        if HAS_COCOA:
+            AppHelper.callAfter(lambda: _dispatch_js("showUpdateDownloadFailed('download failed')"))
+        return {'success': False, 'error': 'Download failed'}
+
+    cfg = load_config()
+    cfg['pending_staging_app'] = update['staging_app']
+    cfg['pending_update_version'] = version
+    cfg['pending_update_dmg'] = update.get('dmg_path', '')
+    save_config(cfg)
+    if HAS_COCOA:
+        AppHelper.callAfter(lambda: _dispatch_js('showUpdateBubble()'))
+    return {'success': True}
 
 
 def _schedule_startup_update_check():
@@ -2718,8 +3088,19 @@ def _perform_auto_install():
         cfg = load_config()
         staging_app = cfg.get('pending_staging_app', '')
         version = cfg.get('pending_update_version', '')
+        manual_dmg_path = cfg.get('pending_update_dmg', '')
         if not staging_app or not os.path.exists(staging_app):
-            return {'success': False, 'error': 'No staged update found'}
+            return {'success': False, 'error': 'No staged update found', 'manual_dmg_path': manual_dmg_path}
+
+        app_dir = '/Applications'
+        app_path = os.path.join(app_dir, 'mdPreview.app')
+        if not os.access(app_dir, os.W_OK) or (os.path.exists(app_path) and not os.access(app_path, os.W_OK)):
+            return {
+                'success': False,
+                'error': 'Permission denied while replacing /Applications/mdPreview.app',
+                'manual_install': True,
+                'manual_dmg_path': manual_dmg_path,
+            }
 
         # Smoke-test the staged app first: never replace a working install
         # with a package that fails to launch.
@@ -2728,7 +3109,7 @@ def _perform_auto_install():
             cfg.pop('pending_staging_app', None)
             cfg.pop('pending_update_version', None)
             save_config(cfg)
-            return {'success': False, 'error': 'Staged update failed launch test'}
+            return {'success': False, 'error': 'Staged update failed launch test', 'manual_install': True, 'manual_dmg_path': manual_dmg_path}
 
         # Write helper script that runs after app exits. It keeps the old app
         # until the new one has been verified running (launch + pgrep), and
@@ -2774,6 +3155,7 @@ def _perform_auto_install():
         # Clean up config
         cfg.pop('pending_staging_app', None)
         cfg.pop('pending_update_version', None)
+        cfg.pop('pending_update_dmg', None)
         save_config(cfg)
 
         # Quit the app so the helper can replace it
@@ -2784,7 +3166,11 @@ def _perform_auto_install():
         return {'success': True}
     except Exception as e:
         log_exception('auto install failed')
-        return {'success': False, 'error': str(e)}
+        try:
+            manual_dmg_path = load_config().get('pending_update_dmg', '')
+        except Exception:
+            manual_dmg_path = ''
+        return {'success': False, 'error': str(e), 'manual_install': True, 'manual_dmg_path': manual_dmg_path}
 
 
 if __name__ == '__main__':
