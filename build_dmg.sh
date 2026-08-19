@@ -15,6 +15,10 @@ fi
 rm -rf build dist/mdPreview.app
 "$PYTHON" -m PyInstaller mdPreview.spec --noconfirm --clean
 
+# Stop Spotlight/LaunchServices from registering this build as a duplicate
+# "Open With" handler.
+touch dist/.metadata_never_index
+
 echo ""
 echo "=== Creating DMG ==="
 rm -f "dist/mdPreview-${VERSION}.dmg"

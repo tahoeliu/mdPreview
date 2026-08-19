@@ -168,16 +168,24 @@ Now Markdown files will open in mdPreview by default.
 | Shortcut | Action |
 |---|---|
 | `⌘ N` | New file |
+| `⌘ O` | Open file |
+| `⌘ W` | Close window |
 | `⌘ S` | Save |
-| `⌘ ⇧ S` | Save As / Export |
+| `⌘ ⇧ S` | Save As |
+| `⌘ P` | Print |
 | `⌘ E` | Switch between preview and source |
+| `⌘ ⇧ V` | Paste as Markdown |
 | `⌘ F` | Find |
 | `⌘ G` | Find next |
 | `⌘ ⇧ G` | Find previous |
 | `⌘ =` | Increase text size |
 | `⌘ -` | Decrease text size |
+| `⌘ .` | Increase reading width |
+| `⌘ ,` | Decrease reading width |
+| `⌘ 0` | Reset reading width |
 | `⌘ ⌥ O` | Toggle outline |
-| `⌘ P` | Print |
+| `⌘ ⌥ F` | Enter full screen |
+| `⌘ I` | Show file properties |
 
 ---
 

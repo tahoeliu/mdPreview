@@ -408,7 +408,6 @@ let isSource = false;
       if (table.parentElement && table.parentElement.classList.contains('table-wrap')) continue;
       const wrap = document.createElement('div');
       wrap.className = 'table-wrap';
-      wrap.setAttribute('contenteditable', 'false');
       table.parentNode.insertBefore(wrap, table);
       wrap.appendChild(table);
     }
@@ -598,12 +597,12 @@ let isSource = false;
   }
 
   function protectComplexBlocks(container) {
-    container.querySelectorAll('pre, table, .frontmatter, .mermaid-diagram').forEach((node) => {
+    container.querySelectorAll('pre, .frontmatter, .mermaid-diagram').forEach((node) => {
       node.setAttribute('contenteditable', 'false');
     });
     container.querySelectorAll('div, section, article').forEach((node) => {
       if (node.querySelector('.frontmatter, .mermaid-diagram')) return;
-      const hasMarkdownClass = node.classList.contains('frontmatter') || node.classList.contains('mermaid-diagram') || node.classList.contains('table-wrap');
+      const hasMarkdownClass = node.classList.contains('frontmatter') || node.classList.contains('mermaid-diagram');
       if (hasMarkdownClass) node.setAttribute('contenteditable', 'false');
     });
   }
@@ -995,7 +994,40 @@ let isSource = false;
     if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.read_clipboard === 'function') {
       return window.pywebview.api.read_clipboard();
     }
-    return Promise.resolve({ format: 'none', content: '' });
+    return Promise.resolve({ format: 'none', content: '', plain: '' });
+  }
+
+  function stripHtmlToText(html) {
+    if (!html || !html.trim()) return '';
+    try {
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      return normalizeWhitespace((doc.body && doc.body.textContent) || '');
+    } catch (e) {
+      return normalizeWhitespace(String(html).replace(/<[^>]*>/g, ' '));
+    }
+  }
+
+  function hasMarkdownSyntax(text) {
+    const s = String(text || '').trim();
+    if (!s) return false;
+    return /(^|\n)\s{0,3}(#{1,6}\s+|([-*+]\s+)|\d+[.)]\s+|>\s+|(```+|~~~+)|[-*_]{3,}\s*$)/.test(s) ||
+      /!\[[^\]]*\]\([^)]*\)|\[[^\]]+\]\([^)]*\)|`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~/.test(s) ||
+      /(^|\n)\s*\|.+\|\s*(\n|$)/.test(s);
+  }
+
+  function htmlHasRealFormatting(html, plain) {
+    if (!html || !html.trim()) return false;
+    if (/(<\s*(table|ul|ol|li|blockquote|pre|code|h[1-6]|strong|b|em|i|u|s|del|a|img|br|hr)\b)|\s(style|href|src)=/i.test(html)) return true;
+    const htmlText = stripHtmlToText(html);
+    const plainText = normalizeWhitespace(plain || '');
+    return !!htmlText && (!plainText || htmlText !== plainText);
+  }
+
+  function shouldShowSourcePasteHint(clip) {
+    if (!clip) return false;
+    if (clip.format === 'html') return htmlHasRealFormatting(clip.content, clip.plain);
+    if (clip.format === 'markdown') return hasMarkdownSyntax(clip.content || clip.plain || '');
+    return false;
   }
 
   function unwrapElement(el) {
@@ -1582,9 +1614,19 @@ let isSource = false;
     // silently disabling the hint. Editable-vs-not is decided by
     // findNonEditableAncestor() below.
     if (!isSource && !e.target.closest('button, a, input, select, label, [role="button"]')) {
+      if (getTableInteractionTarget(e)) {
+        showTableEditHint();
+        return;
+      }
       const ne = findNonEditableAncestor(e.target);
       if (ne) showEditHint(ne);
     }
+  });
+  document.getElementById('content').addEventListener('beforeinput', (e) => {
+    if (!isSource && getTableInteractionTarget(e)) showTableEditHint();
+  });
+  document.getElementById('content').addEventListener('input', (e) => {
+    if (!isSource && getTableInteractionTarget(e)) showTableEditHint();
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeModal();
@@ -2524,6 +2566,18 @@ let isSource = false;
     return null;
   }
 
+  function getTableInteractionTarget(event) {
+    const contentEl = document.getElementById('content');
+    const fromTarget = event && event.target && event.target.closest ? event.target.closest('table') : null;
+    if (fromTarget && contentEl && contentEl.contains(fromTarget)) return fromTarget;
+    const selection = window.getSelection ? window.getSelection() : null;
+    if (!selection || selection.rangeCount === 0) return null;
+    const node = selection.anchorNode;
+    const el = node && node.nodeType === 1 ? node : (node ? node.parentNode : null);
+    const fromSelection = el && el.closest ? el.closest('table') : null;
+    return fromSelection && contentEl && contentEl.contains(fromSelection) ? fromSelection : null;
+  }
+
   function showEditHint(anchor) {
     const bubble = document.getElementById('editHintBubble');
     if (!bubble) return;
@@ -2536,6 +2590,20 @@ let isSource = false;
     bubble.classList.add('visible');
     clearTimeout(editHintTimer);
     editHintTimer = setTimeout(() => bubble.classList.remove('visible'), 1600);
+  }
+
+  function showTableEditHint() {
+    const bubble = document.getElementById('editHintBubble');
+    if (!bubble) return;
+    const sizeBubble = document.getElementById('sizeHintBubble');
+    if (sizeBubble) sizeBubble.classList.remove('visible');
+    clearTimeout(sizeHintTimer);
+    bubble.innerHTML = '<span class="edit-hint-copy">Switch to Source mode</span>' +
+      '<span class="edit-hint-keys"><span class="edit-hint-key">⌘</span><span class="edit-hint-key">E</span></span>' +
+      '<span class="edit-hint-copy">to keep your table formatting intact</span>';
+    bubble.classList.add('visible');
+    clearTimeout(editHintTimer);
+    editHintTimer = setTimeout(() => bubble.classList.remove('visible'), 1800);
   }
 
   // Apply bilingual text to static UI elements declared in index.html.
@@ -2986,7 +3054,7 @@ let isSource = false;
     if (isSource) {
       if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.read_clipboard === 'function') {
         window.pywebview.api.read_clipboard().then(function (clip) {
-          if (clip && (clip.format === 'html' || clip.format === 'markdown')) showPasteHint();
+          if (shouldShowSourcePasteHint(clip)) showPasteHint();
         }).catch(function () {});
       }
     } else {

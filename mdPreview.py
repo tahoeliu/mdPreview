@@ -583,35 +583,43 @@ class MarkdownAPI:
 
         Called from JS on paste; the pywebview JS bridge runs on a background
         thread, and reading the general pasteboard there is safe on modern
-        macOS. Returns {'format': 'markdown'|'html'|'text'|'none', 'content': str}.
+        macOS. Returns {'format': 'markdown'|'html'|'text'|'none', 'content': str,
+        'plain': str}. `plain` is the best plain-text flavor, included so JS can
+        tell rich HTML/Markdown apart from an app's plain-text HTML wrapper.
         """
         try:
             from AppKit import NSPasteboard
         except Exception:
-            return {'format': 'none', 'content': ''}
+            return {'format': 'none', 'content': '', 'plain': ''}
         try:
             pb = NSPasteboard.generalPasteboard()
             types = [str(t) for t in (pb.types() or [])]
             if not types:
-                return {'format': 'none', 'content': ''}
+                return {'format': 'none', 'content': '', 'plain': ''}
 
             def _get(t):
                 val = pb.stringForType_(t)
                 return str(val) if val is not None else ''
 
-            for t in ('text/markdown', 'public.markdown', 'net.daringfireball.markdown'):
-                if t in types and _get(t):
-                    return {'format': 'markdown', 'content': _get(t)}
-            for t in ('public.html', 'text/html', 'com.microsoft.word.html'):
-                if t in types and _get(t):
-                    return {'format': 'html', 'content': _get(t)}
+            plain = ''
             for t in ('public.utf8-plain-text', 'public.plain-text', 'public.text', 'NSStringPboardType'):
                 if t in types:
-                    return {'format': 'text', 'content': _get(t)}
-            return {'format': 'none', 'content': ''}
+                    plain = _get(t)
+                    if plain:
+                        break
+
+            for t in ('text/markdown', 'public.markdown', 'net.daringfireball.markdown'):
+                if t in types and _get(t):
+                    return {'format': 'markdown', 'content': _get(t), 'plain': plain}
+            for t in ('public.html', 'text/html', 'com.microsoft.word.html'):
+                if t in types and _get(t):
+                    return {'format': 'html', 'content': _get(t), 'plain': plain}
+            if plain:
+                return {'format': 'text', 'content': plain, 'plain': plain}
+            return {'format': 'none', 'content': '', 'plain': ''}
         except Exception:
             log_exception('read clipboard failed')
-            return {'format': 'none', 'content': ''}
+            return {'format': 'none', 'content': '', 'plain': ''}
 
     def reset_to_untitled(self):
         """Turn the current window into a blank Untitled document without closing it.
@@ -2422,18 +2430,95 @@ if HAS_COCOA:
             threading.Thread(target=_do_check, daemon=True).start()
 
         def showAbout_(self, sender):
-            """Show the standard macOS About panel.
-            Reads app name, version, and icon from the .app bundle's Info.plist."""
+            """Show a custom native About window with a plain white background."""
             global _about_window_ref
-            app = NSApplication.sharedApplication()
-            # Capture the standard About panel so Cmd+W can dismiss it later
-            # (the default close path would otherwise ignore this auxiliary panel).
-            before = {w.__c_void_p__().value for w in app.windows()}
-            app.orderFrontStandardAboutPanel_(sender)
-            for w in app.windows():
-                if w.__c_void_p__().value not in before:
-                    _about_window_ref = w
-                    break
+            try:
+                from AppKit import (
+                    NSApp, NSBackingStoreBuffered, NSFont, NSImage, NSImageScaleProportionallyUpOrDown,
+                    NSImageView, NSMakeRect, NSTextField, NSWindow, NSWindowStyleMaskClosable,
+                    NSWindowStyleMaskTitled, NSColor, NSCenterTextAlignment,
+                    NSParagraphStyleAttributeName
+                )
+                from Foundation import NSURL, NSMutableParagraphStyle, NSMakeRange
+
+                if _about_window_ref is not None and _about_window_ref.isVisible():
+                    _about_window_ref.makeKeyAndOrderFront_(None)
+                    return
+
+                width = 420
+                height = 248
+                panel = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+                    NSMakeRect(0, 0, width, height),
+                    NSWindowStyleMaskTitled | NSWindowStyleMaskClosable,
+                    NSBackingStoreBuffered,
+                    False,
+                )
+                panel.setTitle_(_t('About mdPreview', '关于 mdPreview'))
+                panel.setReleasedWhenClosed_(False)
+                panel.setBackgroundColor_(NSColor.whiteColor())
+                content = panel.contentView()
+                content.setWantsLayer_(True)
+                content.layer().setBackgroundColor_(NSColor.whiteColor().CGColor())
+
+                icon_size = 82
+                icon_view = NSImageView.alloc().initWithFrame_(NSMakeRect((width - icon_size) / 2, height - 104, icon_size, icon_size))
+                icon = NSImage.alloc().initWithContentsOfFile_(get_resource_path('app_icon.icns'))
+                if icon is not None:
+                    icon_view.setImage_(icon)
+                icon_view.setImageScaling_(NSImageScaleProportionallyUpOrDown)
+                content.addSubview_(icon_view)
+
+                title_font = NSFont.systemFontOfSize_weight_(20, 0.35)
+                text_font = NSFont.systemFontOfSize_(13)
+                small_font = NSFont.systemFontOfSize_(12)
+
+                title = NSTextField.labelWithString_('mdPreview')
+                title.setFrame_(NSMakeRect(0, height - 136, width, 26))
+                title.setAlignment_(NSCenterTextAlignment)
+                title.setFont_(title_font)
+                title.setTextColor_(NSColor.labelColor())
+                content.addSubview_(title)
+
+                version = NSTextField.labelWithString_('Version ' + _get_current_version())
+                version.setFrame_(NSMakeRect(0, height - 162, width, 20))
+                version.setAlignment_(NSCenterTextAlignment)
+                version.setFont_(text_font)
+                version.setTextColor_(NSColor.secondaryLabelColor())
+                content.addSubview_(version)
+
+                credit = NSTextField.labelWithString_('GitHub   ©tahoeliu')
+                credit.setFrame_(NSMakeRect(0, 32, width, 20))
+                credit.setAlignment_(NSCenterTextAlignment)
+                credit.setFont_(small_font)
+                credit.setTextColor_(NSColor.secondaryLabelColor())
+                credit.setEditable_(False)
+                credit.setSelectable_(False)
+                credit.setBezeled_(False)
+                credit.setDrawsBackground_(False)
+                content.addSubview_(credit)
+
+                try:
+                    url = NSURL.URLWithString_('https://github.com/tahoeliu/mdPreview')
+                    credit.setAllowsEditingTextAttributes_(True)
+                    credit.setSelectable_(True)
+                    attr = NSMutableAttributedString.alloc().initWithString_('GitHub   ©tahoeliu')
+                    paragraph = NSMutableParagraphStyle.alloc().init()
+                    paragraph.setAlignment_(NSCenterTextAlignment)
+                    attr.addAttribute_value_range_('NSLink', url, NSMakeRange(0, 6))
+                    attr.addAttribute_value_range_(NSParagraphStyleAttributeName, paragraph, NSMakeRange(0, attr.length()))
+                    credit.setAttributedStringValue_(attr)
+                except Exception:
+                    pass
+
+                panel.center()
+                panel.makeKeyAndOrderFront_(None)
+                _about_window_ref = panel
+            except Exception:
+                log_exception('show custom about failed')
+                try:
+                    NSApplication.sharedApplication().orderFrontStandardAboutPanel_(sender)
+                except Exception:
+                    pass
 
         def setupAllMenusRetry_(self, sender):
             setup_all_menus()
