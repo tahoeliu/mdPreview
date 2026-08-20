@@ -362,6 +362,397 @@ let isSource = false;
     }
   }
 
+  const CODE_HIGHLIGHT_MAX_CHARS = 350000;
+  const CODE_LANGUAGE_ALIASES = {
+    json: 'json',
+    js: 'javascript', javascript: 'javascript', jsx: 'javascript',
+    ts: 'typescript', typescript: 'typescript', tsx: 'typescript',
+    py: 'python', python: 'python',
+    bash: 'shell', sh: 'shell', shell: 'shell', zsh: 'shell', console: 'shell', terminal: 'shell',
+    yaml: 'yaml', yml: 'yaml',
+    html: 'html', xml: 'html', svg: 'html',
+    css: 'css', scss: 'css', less: 'css',
+    sql: 'sql'
+  };
+  const JS_TS_KEYWORDS = new Set('as async await break case catch class const constructor continue debugger default delete do else export extends finally for from function get if import in instanceof let new of return set static super switch this throw try typeof var void while with yield interface type enum implements private protected public readonly abstract declare namespace module satisfies'.split(' '));
+  const PY_KEYWORDS = new Set('and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield'.split(' '));
+  const SHELL_COMMANDS = new Set('alias awk brew cat cd chmod chown cp curl docker echo env export find git grep head jq kill less ls make mkdir mv npm npx open pnpm python python3 rm rsync sed source ssh sudo tail tar test touch unzip yarn zip'.split(' '));
+  const SQL_KEYWORDS = new Set('add alter and as asc between by case column create database delete desc distinct drop else exists from group having in inner insert into is join left like limit not null on or order outer primary right select set table then union update values view when where'.split(' '));
+  const CSS_AT_RULES = new Set('charset container font-face import keyframes layer media namespace page property scope supports'.split(' '));
+
+  function spanTok(kind, value) {
+    return '<span class="tok tok-' + kind + '">' + escHtml(value) + '</span>';
+  }
+
+  function normalizeCodeLanguage(code) {
+    const classes = Array.from(code.classList || []);
+    for (const cls of classes) {
+      const match = cls.match(/^(?:language|lang)-(.+)$/i);
+      if (match) {
+        const raw = match[1].toLowerCase().replace(/[^a-z0-9+#.-]/g, '');
+        return CODE_LANGUAGE_ALIASES[raw] || raw;
+      }
+    }
+    return '';
+  }
+
+  function readQuoted(text, start) {
+    const quote = text[start];
+    let i = start + 1;
+    while (i < text.length) {
+      if (text[i] === '\\') { i += 2; continue; }
+      if (text[i] === quote) { i++; break; }
+      i++;
+    }
+    return i;
+  }
+
+  function highlightJsonCode(text) {
+    let out = '';
+    let i = 0;
+    while (i < text.length) {
+      const ch = text[i];
+      if (ch === '"') {
+        const end = readQuoted(text, i);
+        const raw = text.slice(i, end);
+        let j = end;
+        while (j < text.length && /\s/.test(text[j])) j++;
+        out += spanTok(text[j] === ':' ? 'key' : 'string', raw);
+        i = end;
+        continue;
+      }
+      const num = text.slice(i).match(/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/);
+      if (num) { out += spanTok('number', num[0]); i += num[0].length; continue; }
+      const lit = text.slice(i).match(/^(?:true|false|null)\b/);
+      if (lit) { out += spanTok(lit[0] === 'null' ? 'null' : 'literal', lit[0]); i += lit[0].length; continue; }
+      if (/^[{}[\],:]$/.test(ch)) out += spanTok('punct', ch);
+      else out += escHtml(ch);
+      i++;
+    }
+    return out;
+  }
+
+  function highlightCStyleCode(text, keywords, options = {}) {
+    let out = '';
+    let i = 0;
+    while (i < text.length) {
+      const ch = text[i];
+      const next = text[i + 1];
+      if (ch === '/' && next === '/') {
+        const end = text.indexOf('\n', i);
+        const stop = end < 0 ? text.length : end;
+        out += spanTok('comment', text.slice(i, stop));
+        i = stop;
+        continue;
+      }
+      if (ch === '/' && next === '*') {
+        const end = text.indexOf('*/', i + 2);
+        const stop = end < 0 ? text.length : end + 2;
+        out += spanTok('comment', text.slice(i, stop));
+        i = stop;
+        continue;
+      }
+      if (ch === '"' || ch === "'" || ch === '`') {
+        const end = readQuoted(text, i);
+        out += spanTok('string', text.slice(i, end));
+        i = end;
+        continue;
+      }
+      const num = text.slice(i).match(/^(?:0x[\da-fA-F]+|\d+(?:\.\d+)?)(?:[eE][+-]?\d+)?\b/);
+      if (num) { out += spanTok('number', num[0]); i += num[0].length; continue; }
+      const word = text.slice(i).match(/^[A-Za-z_$][\w$]*/);
+      if (word) {
+        const value = word[0];
+        if (keywords.has(value)) out += spanTok('keyword', value);
+        else if (/^(?:true|false|null|undefined|NaN|Infinity)$/.test(value)) out += spanTok(value === 'null' ? 'null' : 'literal', value);
+        else if (options.typescript && /^[A-Z][\w$]*$/.test(value)) out += spanTok('type', value);
+        else out += escHtml(value);
+        i += value.length;
+        continue;
+      }
+      if (/^[{}[\]().,;:?]$/.test(ch)) out += spanTok('punct', ch);
+      else out += escHtml(ch);
+      i++;
+    }
+    return out;
+  }
+
+  function highlightPythonCode(text) {
+    let out = '';
+    let i = 0;
+    while (i < text.length) {
+      const ch = text[i];
+      if (ch === '#') {
+        const end = text.indexOf('\n', i);
+        const stop = end < 0 ? text.length : end;
+        out += spanTok('comment', text.slice(i, stop));
+        i = stop;
+        continue;
+      }
+      if ((ch === '"' || ch === "'") && text.slice(i, i + 3) === ch + ch + ch) {
+        const end = text.indexOf(ch + ch + ch, i + 3);
+        const stop = end < 0 ? text.length : end + 3;
+        out += spanTok('string', text.slice(i, stop));
+        i = stop;
+        continue;
+      }
+      if (ch === '"' || ch === "'") {
+        const end = readQuoted(text, i);
+        out += spanTok('string', text.slice(i, end));
+        i = end;
+        continue;
+      }
+      if (ch === '@') {
+        const deco = text.slice(i).match(/^@[A-Za-z_][\w.]*/);
+        if (deco) { out += spanTok('decorator', deco[0]); i += deco[0].length; continue; }
+      }
+      const num = text.slice(i).match(/^(?:0x[\da-fA-F]+|\d+(?:\.\d+)?)(?:[eE][+-]?\d+)?\b/);
+      if (num) { out += spanTok('number', num[0]); i += num[0].length; continue; }
+      const word = text.slice(i).match(/^[A-Za-z_][\w]*/);
+      if (word) {
+        const value = word[0];
+        if (PY_KEYWORDS.has(value)) out += spanTok('keyword', value);
+        else if (/^(?:True|False|None)$/.test(value)) out += spanTok(value === 'None' ? 'null' : 'literal', value);
+        else out += escHtml(value);
+        i += value.length;
+        continue;
+      }
+      if (/^[{}[\]().,:]$/.test(ch)) out += spanTok('punct', ch);
+      else out += escHtml(ch);
+      i++;
+    }
+    return out;
+  }
+
+  function highlightShellCode(text) {
+    let out = '';
+    let i = 0;
+    let atCommandStart = true;
+    while (i < text.length) {
+      const ch = text[i];
+      if (ch === '\n') { out += '\n'; i++; atCommandStart = true; continue; }
+      if (ch === '#') {
+        const end = text.indexOf('\n', i);
+        const stop = end < 0 ? text.length : end;
+        out += spanTok('comment', text.slice(i, stop));
+        i = stop;
+        continue;
+      }
+      if ((ch === '$' || ch === '#') && atCommandStart) { out += spanTok('prompt', ch); i++; continue; }
+      if (ch === '"' || ch === "'") {
+        const end = readQuoted(text, i);
+        out += spanTok('string', text.slice(i, end));
+        i = end;
+        atCommandStart = false;
+        continue;
+      }
+      const variable = text.slice(i).match(/^\$\{?[A-Za-z_][\w]*\}?/);
+      if (variable) { out += spanTok('variable', variable[0]); i += variable[0].length; atCommandStart = false; continue; }
+      const flag = text.slice(i).match(/^--?[A-Za-z0-9][\w-]*/);
+      if (flag) { out += spanTok('flag', flag[0]); i += flag[0].length; atCommandStart = false; continue; }
+      const word = text.slice(i).match(/^[A-Za-z_][\w.-]*/);
+      if (word) {
+        const value = word[0];
+        out += SHELL_COMMANDS.has(value) ? spanTok('command', value) : escHtml(value);
+        i += value.length;
+        atCommandStart = false;
+        continue;
+      }
+      out += escHtml(ch);
+      if (!/\s/.test(ch)) atCommandStart = false;
+      i++;
+    }
+    return out;
+  }
+
+  function highlightYamlValue(value) {
+    const leading = (value.match(/^\s*/) || [''])[0];
+    const body = value.slice(leading.length);
+    if (/^#/.test(body)) return escHtml(leading) + spanTok('comment', body);
+    if (/^(?:"(?:\\.|[^"])*"|'(?:\\.|[^'])*')/.test(body)) {
+      const end = readQuoted(body, 0);
+      return escHtml(leading) + spanTok('string', body.slice(0, end)) + escHtml(body.slice(end));
+    }
+    const literal = body.match(/^(?:true|false|null|yes|no|on|off)\b/i);
+    if (literal) return escHtml(leading) + spanTok('literal', literal[0]) + escHtml(body.slice(literal[0].length));
+    const number = body.match(/^-?\d+(?:\.\d+)?\b/);
+    if (number) return escHtml(leading) + spanTok('number', number[0]) + escHtml(body.slice(number[0].length));
+    return escHtml(value);
+  }
+
+  function highlightYamlCode(text) {
+    return text.split('\n').map((line) => {
+      const commentOnly = line.match(/^(\s*)(#.*)$/);
+      if (commentOnly) return escHtml(commentOnly[1]) + spanTok('comment', commentOnly[2]);
+      const kv = line.match(/^(\s*)(-\s+)?([A-Za-z0-9_.-]+)(\s*:)(.*)$/);
+      if (kv) {
+        return escHtml(kv[1]) + escHtml(kv[2] || '') + spanTok('key', kv[3]) + spanTok('punct', kv[4]) + highlightYamlValue(kv[5]);
+      }
+      return escHtml(line);
+    }).join('\n');
+  }
+
+  function highlightHtmlTag(tag) {
+    let out = '';
+    let i = 0;
+    if (tag.startsWith('</')) { out += spanTok('punct', '</'); i = 2; }
+    else if (tag.startsWith('<')) { out += spanTok('punct', '<'); i = 1; }
+    while (i < tag.length) {
+      if (tag[i] === '>') { out += spanTok('punct', '>'); i++; continue; }
+      if (tag[i] === '/' && tag[i + 1] === '>') { out += spanTok('punct', '/>'); i += 2; continue; }
+      if (/\s/.test(tag[i])) { out += escHtml(tag[i]); i++; continue; }
+      if (tag[i] === '=') { out += spanTok('punct', '='); i++; continue; }
+      if (tag[i] === '"' || tag[i] === "'") {
+        const end = readQuoted(tag, i);
+        out += spanTok('string', tag.slice(i, end));
+        i = end;
+        continue;
+      }
+      const name = tag.slice(i).match(/^[A-Za-z_:][-\w:.]*/);
+      if (name) {
+        const prev = tag.slice(0, i).trim();
+        const next = tag.slice(i + name[0].length).match(/^\s*=/);
+        out += (!prev || prev === '<' || prev === '</') ? spanTok('tag', name[0]) : (next ? spanTok('attr', name[0]) : escHtml(name[0]));
+        i += name[0].length;
+        continue;
+      }
+      out += escHtml(tag[i]);
+      i++;
+    }
+    return out;
+  }
+
+  function highlightHtmlCode(text) {
+    let out = '';
+    let i = 0;
+    while (i < text.length) {
+      if (text.startsWith('<!--', i)) {
+        const end = text.indexOf('-->', i + 4);
+        const stop = end < 0 ? text.length : end + 3;
+        out += spanTok('comment', text.slice(i, stop));
+        i = stop;
+        continue;
+      }
+      if (text[i] === '<') {
+        const end = text.indexOf('>', i + 1);
+        if (end < 0) { out += escHtml(text.slice(i)); break; }
+        out += highlightHtmlTag(text.slice(i, end + 1));
+        i = end + 1;
+        continue;
+      }
+      out += escHtml(text[i]);
+      i++;
+    }
+    return out;
+  }
+
+  function highlightCssCode(text) {
+    let out = '';
+    let i = 0;
+    while (i < text.length) {
+      if (text[i] === '/' && text[i + 1] === '*') {
+        const end = text.indexOf('*/', i + 2);
+        const stop = end < 0 ? text.length : end + 2;
+        out += spanTok('comment', text.slice(i, stop));
+        i = stop;
+        continue;
+      }
+      if (text[i] === '"' || text[i] === "'") {
+        const end = readQuoted(text, i);
+        out += spanTok('string', text.slice(i, end));
+        i = end;
+        continue;
+      }
+      const color = text.slice(i).match(/^#[\da-fA-F]{3,8}\b/);
+      if (color) { out += spanTok('color', color[0]); i += color[0].length; continue; }
+      const number = text.slice(i).match(/^-?\d+(?:\.\d+)?(?:px|em|rem|vh|vw|%|s|ms|deg)?\b/);
+      if (number) { out += spanTok('number', number[0]); i += number[0].length; continue; }
+      const prop = text.slice(i).match(/^[-A-Za-z]+(?=\s*:)/);
+      if (prop) { out += spanTok('property', prop[0]); i += prop[0].length; continue; }
+      const at = text.slice(i).match(/^@([A-Za-z-]+)/);
+      if (at && CSS_AT_RULES.has(at[1])) { out += spanTok('keyword', at[0]); i += at[0].length; continue; }
+      if (/^[{}():;,]$/.test(text[i])) out += spanTok('punct', text[i]);
+      else out += escHtml(text[i]);
+      i++;
+    }
+    return out;
+  }
+
+  function highlightSqlCode(text) {
+    let out = '';
+    let i = 0;
+    while (i < text.length) {
+      if (text[i] === '-' && text[i + 1] === '-') {
+        const end = text.indexOf('\n', i);
+        const stop = end < 0 ? text.length : end;
+        out += spanTok('comment', text.slice(i, stop));
+        i = stop;
+        continue;
+      }
+      if (text[i] === '/' && text[i + 1] === '*') {
+        const end = text.indexOf('*/', i + 2);
+        const stop = end < 0 ? text.length : end + 2;
+        out += spanTok('comment', text.slice(i, stop));
+        i = stop;
+        continue;
+      }
+      if (text[i] === '"' || text[i] === "'") {
+        const end = readQuoted(text, i);
+        out += spanTok('string', text.slice(i, end));
+        i = end;
+        continue;
+      }
+      const num = text.slice(i).match(/^\d+(?:\.\d+)?\b/);
+      if (num) { out += spanTok('number', num[0]); i += num[0].length; continue; }
+      const word = text.slice(i).match(/^[A-Za-z_][\w$]*/);
+      if (word) {
+        const value = word[0];
+        out += SQL_KEYWORDS.has(value.toLowerCase()) ? spanTok('keyword', value) : escHtml(value);
+        i += value.length;
+        continue;
+      }
+      if (/^[(),.;*=<>+-]$/.test(text[i])) out += spanTok('punct', text[i]);
+      else out += escHtml(text[i]);
+      i++;
+    }
+    return out;
+  }
+
+  function highlightGenericCode(text) {
+    return highlightCStyleCode(text, new Set(), {});
+  }
+
+  function highlightCodeByLanguage(text, language) {
+    if (language === 'json') return highlightJsonCode(text);
+    if (language === 'javascript') return highlightCStyleCode(text, JS_TS_KEYWORDS, {});
+    if (language === 'typescript') return highlightCStyleCode(text, JS_TS_KEYWORDS, { typescript: true });
+    if (language === 'python') return highlightPythonCode(text);
+    if (language === 'shell') return highlightShellCode(text);
+    if (language === 'yaml') return highlightYamlCode(text);
+    if (language === 'html') return highlightHtmlCode(text);
+    if (language === 'css') return highlightCssCode(text);
+    if (language === 'sql') return highlightSqlCode(text);
+    return highlightGenericCode(text);
+  }
+
+  function highlightRenderedCodeBlocks(container) {
+    if (!container || !container.querySelectorAll) return;
+    container.querySelectorAll('pre code').forEach((code) => {
+      if (code.dataset.syntaxHighlighted === 'true') return;
+      const language = normalizeCodeLanguage(code);
+      if (language === 'mermaid') return;
+      const source = code.textContent || '';
+      code.dataset.syntaxHighlighted = 'true';
+      code.classList.add('syntax-highlighted');
+      if (language) code.classList.add('syntax-lang-' + language);
+      if (source.length > CODE_HIGHLIGHT_MAX_CHARS) {
+        code.classList.add('syntax-highlight-skipped');
+        return;
+      }
+      code.innerHTML = highlightCodeByLanguage(source, language);
+    });
+  }
+
   function appendParsedMarkdown(markdown, container, options = {}) {
     const keepExisting = !!options.keepExisting;
     let frontmatter = '';
@@ -411,6 +802,7 @@ let isSource = false;
       table.parentNode.insertBefore(wrap, table);
       wrap.appendChild(table);
     }
+    highlightRenderedCodeBlocks(container);
     protectComplexBlocks(container);
     balanceTableColumns(container);
     lastRenderedHash = contentHash(content);
@@ -1015,17 +1407,43 @@ let isSource = false;
       /(^|\n)\s*\|.+\|\s*(\n|$)/.test(s);
   }
 
-  function htmlHasRealFormatting(html, plain) {
+  function elementHasMarkdownStyle(el) {
+    const style = ((el && el.getAttribute && el.getAttribute('style')) || '').toLowerCase();
+    if (!style || !normalizeWhitespace(el.textContent || '')) return false;
+    return /font-weight\s*:\s*(bold|[6-9]00)\b/.test(style) ||
+      /font-style\s*:\s*italic\b/.test(style) ||
+      /text-decoration[^;]*(line-through|underline)/.test(style);
+  }
+
+  function htmlHasMarkdownConvertibleFormatting(html, plain) {
     if (!html || !html.trim()) return false;
-    if (/(<\s*(table|ul|ol|li|blockquote|pre|code|h[1-6]|strong|b|em|i|u|s|del|a|img|br|hr)\b)|\s(style|href|src)=/i.test(html)) return true;
-    const htmlText = stripHtmlToText(html);
-    const plainText = normalizeWhitespace(plain || '');
-    return !!htmlText && (!plainText || htmlText !== plainText);
+    let doc;
+    try {
+      doc = new DOMParser().parseFromString(html, 'text/html');
+    } catch (e) {
+      return false;
+    }
+    const body = doc.body;
+    if (!body || !normalizeWhitespace(body.textContent || '')) return false;
+
+    // These tags produce meaningful Markdown syntax after conversion. Plain
+    // text wrappers such as <p>, <div>, <span>, <br>, and style-only layout
+    // markup are intentionally ignored to avoid reminders for normal text.
+    if (body.querySelector('table, ul, ol, li, blockquote, pre, code, h1, h2, h3, h4, h5, h6, strong, b, em, i, s, del, hr')) return true;
+
+    const link = body.querySelector('a[href]');
+    if (link) {
+      const href = normalizeWhitespace(link.getAttribute('href') || '');
+      const text = normalizeWhitespace(link.textContent || '');
+      if (href && text && href !== text) return true;
+    }
+
+    return Array.from(body.querySelectorAll('[style]')).some(elementHasMarkdownStyle);
   }
 
   function shouldShowSourcePasteHint(clip) {
     if (!clip) return false;
-    if (clip.format === 'html') return htmlHasRealFormatting(clip.content, clip.plain);
+    if (clip.format === 'html') return htmlHasMarkdownConvertibleFormatting(clip.content, clip.plain);
     if (clip.format === 'markdown') return hasMarkdownSyntax(clip.content || clip.plain || '');
     return false;
   }
@@ -2257,11 +2675,15 @@ let isSource = false;
         const toggleTip = isZh
           ? '<kbd>⌘</kbd><kbd>E</kbd> 预览'
           : '<kbd>⌘</kbd><kbd>E</kbd> to preview';
+        const pasteTip = isZh
+          ? '<kbd>⌘</kbd><kbd>⇧</kbd><kbd>V</kbd> 粘贴为 Markdown'
+          : '<kbd>⌘</kbd><kbd>⇧</kbd><kbd>V</kbd> to paste as Markdown';
         const title = isZh ? '开始书写' : 'Start writing';
         overlay.innerHTML = '<div class="welcome-icon">&#9998;</div>' +
           '<div class="welcome-title">' + title + '</div>' +
           '<div class="welcome-tip">' + tips + '</div>' +
-          '<div class="welcome-tip">' + toggleTip + '</div>';
+          '<div class="welcome-tip">' + toggleTip + '</div>' +
+          '<div class="welcome-tip">' + pasteTip + '</div>';
         content.parentNode.appendChild(overlay);
         overlay.addEventListener('click', () => {
           // Focus the editor without dismissing the hint — it stays visible

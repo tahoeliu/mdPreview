@@ -44,6 +44,26 @@
   .markdown code { font-family: "SF Mono", "Menlo", monospace; font-size: calc(var(--content-font-size, 16px) * 0.875); background: #f5f5f7; padding: 2px 6px; border-radius: 4px; color: #a31515; }
   .markdown pre { margin: 0 0 16px; padding: 14px 18px; background: #f5f5f7; border-radius: 8px; overflow-x: auto; }
   .markdown pre code { background: none; color: #1d1d1f; padding: 0; font-size: calc(var(--content-font-size, 16px) * 0.8125); line-height: 1.6; }
+  .markdown pre code.syntax-highlighted { color: #24292f; }
+  .markdown pre code .tok { font-weight: 400; }
+  .tok-key { color: #0550ae; }
+  .tok-string { color: #0a7d35; }
+  .tok-number { color: #953800; }
+  .tok-literal { color: #8250df; }
+  .tok-null { color: #6e7781; }
+  .tok-keyword { color: #cf222e; }
+  .tok-comment { color: #6e7781; font-style: italic; }
+  .tok-punct { color: #57606a; }
+  .tok-type { color: #116329; }
+  .tok-decorator { color: #8250df; }
+  .tok-command { color: #0550ae; }
+  .tok-variable { color: #953800; }
+  .tok-flag { color: #8250df; }
+  .tok-prompt { color: #57606a; }
+  .tok-tag { color: #116329; }
+  .tok-attr { color: #953800; }
+  .tok-property { color: #0550ae; }
+  .tok-color { color: #bf3989; }
   .markdown .table-wrap { width: 100%; margin: 0 0 16px; }
   .markdown table { border-collapse: collapse; width: 100%; font-size: calc(var(--content-font-size, 16px) * 0.875); table-layout: fixed; }
   .markdown th, .markdown td { border: 1px solid #e0e0e0; padding: 8px 14px; text-align: left; overflow-wrap: break-word; word-wrap: break-word; position: relative; }
@@ -156,6 +176,7 @@
     .markdown h2, .markdown h3, .markdown h4 { page-break-after: avoid; }
     .markdown pre, .markdown blockquote, .markdown table, .markdown img { page-break-inside: avoid; }
     .markdown code { background: #f5f5f5 !important; color: #333 !important; }
+    .tok { color: #333 !important; font-style: normal !important; font-weight: 400 !important; }
     .markdown a { color: #000 !important; text-decoration: underline !important; }
     .markdown table { width: 100% !important; }
   }
@@ -164,6 +185,25 @@
     .markdown, .highlight-layer { color: #e8e8e8; }
     #textarea { caret-color: #fff; }
     .markdown code, .markdown pre, .markdown th, .markdown .frontmatter { background: #2a2a2c; color: #f0f0f0; border-color: #3a3a3c; }
+    .markdown pre code.syntax-highlighted { color: #e6edf3; }
+    .tok-key { color: #79c0ff; }
+    .tok-string { color: #a5d6ff; }
+    .tok-number { color: #ffa657; }
+    .tok-literal { color: #d2a8ff; }
+    .tok-null { color: #8b949e; }
+    .tok-keyword { color: #ff7b72; }
+    .tok-comment { color: #8b949e; }
+    .tok-punct { color: #c9d1d9; }
+    .tok-type { color: #7ee787; }
+    .tok-decorator { color: #d2a8ff; }
+    .tok-command { color: #79c0ff; }
+    .tok-variable { color: #ffa657; }
+    .tok-flag { color: #d2a8ff; }
+    .tok-prompt { color: #8b949e; }
+    .tok-tag { color: #7ee787; }
+    .tok-attr { color: #ffa657; }
+    .tok-property { color: #79c0ff; }
+    .tok-color { color: #ff7bcb; }
     .markdown blockquote { border-left-color: #4a4a4c; color: #c8c8c8; }
     .markdown th, .markdown td { border-color: #3a3a3c; }
     .markdown hr { border-top-color: #3a3a3c; }

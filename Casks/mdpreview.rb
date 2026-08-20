@@ -1,5 +1,5 @@
 cask "mdpreview" do
-  version "1.4.2"
+  version "1.4.5"
   sha256 :no_check
 
   url "https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg"
