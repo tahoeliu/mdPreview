@@ -10,7 +10,7 @@
   .welcome-overlay .welcome-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.3; }
   .welcome-overlay .welcome-title { font-size: 20px; font-weight: 600; color: #888; margin-bottom: 8px; }
   .welcome-overlay .welcome-tip { font-size: 14px; line-height: 1.6; color: #aaa; margin-top: 4px; }
-  .welcome-overlay .welcome-tip kbd { font-family: -apple-system; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; padding: 1px 6px; font-size: 12px; color: #666; margin: 0 1px; }
+  .welcome-overlay .welcome-tip kbd { font-family: -apple-system; background: rgba(0,0,0,0.035); border: 1px solid rgba(0,0,0,0.08); border-radius: 3px; padding: 0 4px; font-size: 11px; line-height: 1.35; color: inherit; margin: 0 0.5px; }
   .markdown.hidden { display: none; }
   .source { display: none; position: relative; min-height: calc(100vh - 180px); }
   .source.visible { display: block; }
@@ -42,10 +42,29 @@
   .markdown li { margin-bottom: 4px; }
   .markdown blockquote { margin: 0 0 16px; padding: 4px 20px; border-left: 3px solid #e0e0e0; color: #666; }
   .markdown code { font-family: "SF Mono", "Menlo", monospace; font-size: calc(var(--content-font-size, 16px) * 0.875); background: #f5f5f7; padding: 2px 6px; border-radius: 4px; color: #a31515; }
-  .markdown pre { margin: 0 0 16px; padding: 14px 18px; background: #f5f5f7; border-radius: 8px; overflow-x: auto; }
-  .markdown pre code { background: none; color: #1d1d1f; padding: 0; font-size: calc(var(--content-font-size, 16px) * 0.8125); line-height: 1.6; }
+  .markdown pre { margin: 0 0 16px; padding: 14px 18px; background: #f5f5f7; border-radius: 8px; position: relative; overflow: visible; }
+  .markdown pre code { display: block; overflow-x: auto; background: none; color: #1d1d1f; padding: 0; font-size: calc(var(--content-font-size, 16px) * 0.8125); line-height: 1.6; }
   .markdown pre code.syntax-highlighted { color: #24292f; }
   .markdown pre code .tok { font-weight: 400; }
+  /* Non-selectable language badge, top-right corner of the gray code background.
+     Absolute to the <pre> so it never scrolls and is never captured by a text
+     selection / copy of the code. */
+  .markdown pre .code-lang-label {
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    font-family: "SF Mono", "Menlo", monospace;
+    font-size: 11px;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    color: rgba(0, 0, 0, 0.35);
+    background: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    pointer-events: none;
+    z-index: 2;
+  }
   .tok-key { color: #0550ae; }
   .tok-string { color: #0a7d35; }
   .tok-number { color: #953800; }
@@ -64,11 +83,12 @@
   .tok-attr { color: #953800; }
   .tok-property { color: #0550ae; }
   .tok-color { color: #bf3989; }
-  .markdown .table-wrap { width: 100%; margin: 0 0 16px; }
+  .markdown .table-wrap { width: 100%; margin: 0 0 6px; }
   .markdown table { border-collapse: collapse; width: 100%; font-size: calc(var(--content-font-size, 16px) * 0.875); table-layout: fixed; }
   .markdown th, .markdown td { border: 1px solid #e0e0e0; padding: 8px 14px; text-align: left; overflow-wrap: break-word; word-wrap: break-word; position: relative; }
   .markdown th { background: #f5f5f7; font-weight: 600; }
-  .markdown th.col-edge::after, .markdown td.col-edge::after { content: ''; position: absolute; top: 0; right: -1px; width: 3px; height: 100%; background: #007aff; pointer-events: none; }
+  .markdown th.col-edge::after, .markdown td.col-edge::after { content: ''; position: absolute; top: 0; right: -1px; width: 2px; height: 100%; background: rgba(0, 122, 255, 0.22); pointer-events: none; }
+  .markdown .render-caret-spacer { min-height: 1.8em; margin: 0 0 10px; cursor: text; }
   .markdown img { max-width: 100%; border-radius: 10px; margin: 8px 0; cursor: zoom-in; }
   .markdown hr { border: none; border-top: 1px solid #e8e8e8; margin: 28px 0; }
   .markdown strong { font-weight: 700; }
@@ -156,7 +176,7 @@
   .toc-sidebar .toc-level-4 { padding-left: 36px; }
   .toc-sidebar .toc-level-5 { padding-left: 48px; }
   .toc-sidebar .toc-level-6 { padding-left: 60px; }
-  body.has-toc .page { margin-left: max(200px, calc((100vw - var(--page-width, 720px)) / 2)); margin-right: auto; width: min(var(--page-width, 720px), calc(100vw - 200px)); max-width: var(--page-width, 720px); }
+  body.has-toc .page { margin-left: var(--toc-aware-page-left, 200px); margin-right: auto; width: var(--toc-aware-page-width, min(var(--page-width, 720px), calc(100vw - 200px))); max-width: var(--page-width, 720px); }
   .frontmatter-toggle { float: right; border: none; background: transparent; color: #888; cursor: pointer; font-size: 12px; }
   .frontmatter.collapsed { max-height: 42px; overflow: hidden; }
   .mermaid-error { margin: 16px 0; padding: 12px 14px; border: 1px solid #f0c0c0; background: #fff5f5; color: #b00020; border-radius: 8px; font-family: "SF Mono", "Menlo", monospace; font-size: 13px; white-space: pre-wrap; }
@@ -171,6 +191,8 @@
     .scroll-wrap { position: static !important; overflow: visible !important; }
     .page { max-width: none !important; margin: 0 !important; padding: 0 !important; }
     .markdown pre, .markdown .math-block, .markdown .frontmatter, .mermaid-diagram { overflow: visible !important; white-space: pre-wrap !important; }
+    .markdown pre code { overflow: visible !important; white-space: pre-wrap !important; }
+    .code-lang-label { display: none !important; }
     .markdown { font-size: 12pt; line-height: 1.5; color: #000 !important; }
     .markdown h1 { font-size: 20pt; page-break-after: avoid; }
     .markdown h2, .markdown h3, .markdown h4 { page-break-after: avoid; }
@@ -204,6 +226,7 @@
     .tok-attr { color: #ffa657; }
     .tok-property { color: #79c0ff; }
     .tok-color { color: #ff7bcb; }
+    .markdown pre .code-lang-label { color: rgba(255, 255, 255, 0.4); }
     .markdown blockquote { border-left-color: #4a4a4c; color: #c8c8c8; }
     .markdown th, .markdown td { border-color: #3a3a3c; }
     .markdown hr { border-top-color: #3a3a3c; }
@@ -218,7 +241,7 @@
     .welcome-overlay .welcome-title { color: #aaa; }
     .welcome-overlay .welcome-tip { color: #888; }
     .welcome-overlay .welcome-icon { opacity: 0.5; }
-    .welcome-overlay .welcome-tip kbd { background: #333336; border-color: #555; color: #ccc; }
+    .welcome-overlay .welcome-tip kbd { background: rgba(255,255,255,0.055); border-color: rgba(255,255,255,0.11); color: inherit; }
     .update-bubble { background: rgba(42,42,44,0.82); color: #ddd; border-color: rgba(255,255,255,0.14); }
     .update-bubble:hover { background: rgba(52,52,54,0.92); border-color: rgba(255,255,255,0.22); }
     .update-progress { background: rgba(255,255,255,0.16); }

@@ -23,6 +23,12 @@ let isSource = false;
   const FIRST_SCREEN_MARKDOWN_CHARS = 18000;
   // Centralized tuning knobs (kept together so they are easy to find/adjust).
   const TOC_AUTO_HIDE_WIDTH = 800;   // below this window width the TOC auto-hides
+  const TOC_WIDTH = 200;
+  // MacBook Air 13-inch default scaled full-screen width in CSS pixels.
+  // Up to this width, keep the reading page centered in the area to the right
+  // of the TOC. Past this width, hold the left-side spacing steady until the
+  // full-window center catches up, then switch to full-window centering.
+  const TOC_RIGHT_PANE_CENTER_MAX_WIDTH = 1470;
   const FONT_MIN = 12;
   const FONT_MAX = 24;
   const FONT_STEP = 1;
@@ -107,6 +113,15 @@ let isSource = false;
           prefix = options.bulletListMarker + ' ';
         }
         return prefix + content + (node.nextSibling && !/\n$/.test(content) ? '\n' : '');
+      }
+    });
+    turndownService.addRule('renderCaretSpacer', {
+      filter: function (node) {
+        return node.nodeType === 1 && node.classList && node.classList.contains('render-caret-spacer');
+      },
+      replacement: function (content, node) {
+        const text = (content || node.textContent || '').trim();
+        return text ? '\n\n' + text + '\n\n' : '';
       }
     });
     turndownService.addRule('table', {
@@ -743,6 +758,14 @@ let isSource = false;
       if (language === 'mermaid') return;
       const source = code.textContent || '';
       code.dataset.syntaxHighlighted = 'true';
+
+      // `text` blocks: keep the source as plain, uncolored text and render no
+      // language badge.
+      if (language === 'text') {
+        code.classList.add('syntax-lang-text');
+        return;
+      }
+
       code.classList.add('syntax-highlighted');
       if (language) code.classList.add('syntax-lang-' + language);
       if (source.length > CODE_HIGHLIGHT_MAX_CHARS) {
@@ -750,6 +773,19 @@ let isSource = false;
         return;
       }
       code.innerHTML = highlightCodeByLanguage(source, language);
+
+      // Non-selectable language badge in the top-right corner of the gray
+      // background. It must never be captured by a text selection / copy of the
+      // code, so it is marked user-select:none and contenteditable=false.
+      const pre = code.parentElement;
+      if (language && pre && pre.tagName === 'PRE' && !pre.querySelector('.code-lang-label')) {
+        const label = document.createElement('span');
+        label.className = 'code-lang-label';
+        label.textContent = language;
+        label.setAttribute('contenteditable', 'false');
+        label.setAttribute('aria-hidden', 'true');
+        pre.appendChild(label);
+      }
     });
   }
 
@@ -805,7 +841,62 @@ let isSource = false;
     highlightRenderedCodeBlocks(container);
     protectComplexBlocks(container);
     balanceTableColumns(container);
+    ensureBlockCaretLandingZones(container, content);
     lastRenderedHash = contentHash(content);
+  }
+
+  function ensureBlockCaretLandingZones(container, source) {
+    container.querySelectorAll('.render-caret-spacer').forEach((node) => node.remove());
+    const blockSelector = '.table-wrap, table, pre, blockquote, ul, ol, .mermaid-diagram, .math-block, .frontmatter';
+    const blocks = Array.from(container.querySelectorAll(blockSelector));
+    for (const block of blocks) {
+      if (!block.parentNode || block.closest('.table-wrap table')) continue;
+      let next = block.nextSibling;
+      while (next && next.nodeType === Node.TEXT_NODE && !next.textContent.trim()) next = next.nextSibling;
+      const hasEditableLanding = next && next.nodeType === Node.ELEMENT_NODE && !next.matches(blockSelector);
+      if (hasEditableLanding) continue;
+      block.parentNode.insertBefore(createRenderCaretSpacer(), block.nextSibling);
+    }
+    if (/\n\s*$/.test(String(source || ''))) {
+      const last = container.lastElementChild;
+      if (!last || !last.classList.contains('render-caret-spacer')) container.appendChild(createRenderCaretSpacer());
+    }
+  }
+
+  function createRenderCaretSpacer() {
+    const p = document.createElement('p');
+    p.className = 'render-caret-spacer';
+    p.setAttribute('data-render-only', 'true');
+    p.innerHTML = '<br>';
+    return p;
+  }
+
+  function placeCaretInRenderSpacer(spacer) {
+    if (!spacer) return false;
+    const sel = window.getSelection();
+    if (!sel) return false;
+    const range = document.createRange();
+    range.selectNodeContents(spacer);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    const content = document.getElementById('content');
+    try { content.focus({ preventScroll: true }); } catch (e) { content.focus(); }
+    return true;
+  }
+
+  function placeCaretAtSafeRenderedLanding(content) {
+    const spacers = content ? content.querySelectorAll('.render-caret-spacer') : [];
+    if (spacers && spacers.length && placeCaretInRenderSpacer(spacers[spacers.length - 1])) return true;
+    const sel = window.getSelection();
+    if (!sel || !content) return false;
+    const range = document.createRange();
+    range.selectNodeContents(content);
+    range.collapse(false);
+    sel.removeAllRanges();
+    sel.addRange(range);
+    try { content.focus({ preventScroll: true }); } catch (e) { content.focus(); }
+    return true;
   }
 
   function scheduleDeferredEnhancements(container, content, jobId) {
@@ -886,12 +977,43 @@ let isSource = false;
     return tocHasContent && !isTocAutoHideWidth();
   }
 
+  function updateTocAwarePageLayout() {
+    const page = document.getElementById('page');
+    if (!page) return;
+
+    if (!document.body.classList.contains('has-toc')) {
+      page.style.removeProperty('--toc-aware-page-left');
+      page.style.removeProperty('--toc-aware-page-width');
+      return;
+    }
+
+    const windowWidth = window.innerWidth;
+    const pageWidth = getPageWidth();
+    const compressedWidth = Math.max(0, windowWidth - TOC_WIDTH);
+    let targetWidth = Math.min(pageWidth, compressedWidth);
+    let targetLeft = TOC_WIDTH;
+
+    if (windowWidth > TOC_WIDTH + pageWidth) {
+      targetWidth = pageWidth;
+      const rightPaneCenterMaxWidth = Math.max(TOC_RIGHT_PANE_CENTER_MAX_WIDTH, TOC_WIDTH * 2 + pageWidth);
+      const rightPaneCenteredLeft = TOC_WIDTH + (Math.min(windowWidth, rightPaneCenterMaxWidth) - TOC_WIDTH - pageWidth) / 2;
+      const fullWindowCenteredLeft = (windowWidth - pageWidth) / 2;
+      targetLeft = windowWidth <= rightPaneCenterMaxWidth + TOC_WIDTH
+        ? rightPaneCenteredLeft
+        : fullWindowCenteredLeft;
+    }
+
+    page.style.setProperty('--toc-aware-page-left', Math.round(targetLeft) + 'px');
+    page.style.setProperty('--toc-aware-page-width', Math.round(targetWidth) + 'px');
+  }
+
   function setTocVisible(visible) {
     const toc = document.getElementById('tocSidebar');
     const show = !!visible && tocHasContent;
     toc.classList.toggle('hidden', !show);
     document.body.classList.toggle('has-toc', show);
     syncTocToggle(!show);
+    updateTocAwarePageLayout();
   }
 
   function applyTocVisibility() {
@@ -909,6 +1031,7 @@ let isSource = false;
       return;
     }
     applyTocVisibility();
+    updateTocAwarePageLayout();
     if (!isSource) scheduleScrollSpy();
   }
 
@@ -916,11 +1039,16 @@ let isSource = false;
     const toc = document.getElementById('tocSidebar');
     const toggle = document.getElementById('tocToggle');
     const headings = Array.from(container.querySelectorAll('h1, h2, h3, h4, h5, h6'));
+    const visibleHeadingLevels = Array.from(new Set(headings
+      .map(h => parseInt(h.tagName.slice(1), 10))
+      .filter(level => Number.isFinite(level))))
+      .sort((a, b) => a - b);
     tocHasContent = headings.length >= 2;
     if (toggle) toggle.style.display = tocHasContent ? '' : 'none';
     toc.innerHTML = headings.map((h) => {
-      const level = h.tagName.slice(1);
-      return `<a class="toc-level-${level}" href="#${encodeURIComponent(h.id)}" data-target="${h.id}">${escHtml(h.textContent)}</a>`;
+      const level = parseInt(h.tagName.slice(1), 10);
+      const relativeIndent = Math.max(0, visibleHeadingLevels.indexOf(level)) * 12;
+      return `<a class="toc-level-${level}" style="padding-left: ${relativeIndent}px;" href="#${encodeURIComponent(h.id)}" data-target="${h.id}">${escHtml(h.textContent)}</a>`;
     }).join('');
     applyTocVisibility();
     setupScrollSpy(headings);
@@ -989,7 +1117,7 @@ let isSource = false;
   }
 
   function protectComplexBlocks(container) {
-    container.querySelectorAll('pre, .frontmatter, .mermaid-diagram').forEach((node) => {
+    container.querySelectorAll('.frontmatter, .mermaid-diagram').forEach((node) => {
       node.setAttribute('contenteditable', 'false');
     });
     container.querySelectorAll('div, section, article').forEach((node) => {
@@ -1255,6 +1383,7 @@ let isSource = false;
   }
   function applyPageWidth() {
     setPageWidth(BASE_WIDTH * pageWidthPct / 100);
+    updateTocAwarePageLayout();
   }
   function getPageWidth() {
     const page = document.getElementById('page');
@@ -2024,15 +2153,20 @@ let isSource = false;
       document.getElementById('imageLightbox').classList.add('visible');
       return;
     }
-    // Non-editable rendered content (frontmatter, code blocks, math, Mermaid,
-    // protected blocks, ...): show a transient hint pointing the user to the
-    // Source view instead of silently doing nothing.
+    // Non-editable rendered content (frontmatter, math, Mermaid, protected
+    // blocks, ...): show a transient hint pointing the user to the Source view
+    // instead of silently doing nothing. Editable complex content such as
+    // tables and fenced code blocks reuse the same formatting-safety hint.
     // NOTE: do NOT exclude [contenteditable="true"] here — closest() walks up
     // to #content (which IS contenteditable="true") and would always match,
     // silently disabling the hint. Editable-vs-not is decided by
     // findNonEditableAncestor() below.
+    if (!isSource && e.target.closest && e.target.closest('.render-caret-spacer')) {
+      placeCaretInRenderSpacer(e.target.closest('.render-caret-spacer'));
+      return;
+    }
     if (!isSource && !e.target.closest('button, a, input, select, label, [role="button"]')) {
-      if (getTableInteractionTarget(e)) {
+      if (getEditableComplexInteractionTarget(e)) {
         showTableEditHint();
         return;
       }
@@ -2041,10 +2175,10 @@ let isSource = false;
     }
   });
   document.getElementById('content').addEventListener('beforeinput', (e) => {
-    if (!isSource && getTableInteractionTarget(e)) showTableEditHint();
+    if (!isSource && getEditableComplexInteractionTarget(e)) showTableEditHint();
   });
   document.getElementById('content').addEventListener('input', (e) => {
-    if (!isSource && getTableInteractionTarget(e)) showTableEditHint();
+    if (!isSource && getEditableComplexInteractionTarget(e)) showTableEditHint();
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeModal();
@@ -2460,6 +2594,10 @@ let isSource = false;
   function syncPositionToRendered(headingId) {
     const content = document.getElementById('content');
     if (headingId === undefined) headingId = getActiveTocTarget();
+    if (!headingId) {
+      placeCaretAtSafeRenderedLanding(content);
+      return;
+    }
     scrollToTocTarget(headingId);
     // Place the caret at the target heading BEFORE focusing: focusing a
     // contenteditable reveals the caret and scrolls it into view, and with
@@ -2918,10 +3056,15 @@ let isSource = false;
       if (result && result.success) {
         const { path, format } = result;
         if (format === 'md') {
-          filePath = path;
-          markSaved(markdown);
-          showStatus(t('Saved', '已保存'));
-          return { saved: true };
+          const saveRes = await window.pywebview.api.save_file(path, markdown, true);
+          if (saveRes && saveRes.success) {
+            filePath = path;
+            markSaved(markdown);
+            showStatus(t('Saved', '已保存'));
+            return { saved: true, path };
+          }
+          showStatus(t('Save failed: ', '保存失败：') + ((saveRes && saveRes.error) || ''), true);
+          return { saved: false, error: (saveRes && saveRes.error) || 'save-failed' };
         }
         // Saved as another format: export only, keep the working file untouched.
         const writeRes = await exportAsWrite(path, format);
@@ -3000,6 +3143,29 @@ let isSource = false;
     return fromSelection && contentEl && contentEl.contains(fromSelection) ? fromSelection : null;
   }
 
+  function getCodeBlockInteractionTarget(event) {
+    const contentEl = document.getElementById('content');
+    function editableCodeBlockFrom(el) {
+      const pre = el && el.closest ? el.closest('pre') : null;
+      if (!pre || !contentEl || !contentEl.contains(pre)) return null;
+      const code = pre.querySelector('code');
+      if (code && normalizeCodeLanguage(code) === 'mermaid') return null;
+      return pre;
+    }
+    const targetEl = event && event.target && event.target.nodeType === 1 ? event.target : (event && event.target ? event.target.parentNode : null);
+    const fromTarget = editableCodeBlockFrom(targetEl);
+    if (fromTarget) return fromTarget;
+    const selection = window.getSelection ? window.getSelection() : null;
+    if (!selection || selection.rangeCount === 0) return null;
+    const node = selection.anchorNode;
+    const el = node && node.nodeType === 1 ? node : (node ? node.parentNode : null);
+    return editableCodeBlockFrom(el);
+  }
+
+  function getEditableComplexInteractionTarget(event) {
+    return getTableInteractionTarget(event) || getCodeBlockInteractionTarget(event);
+  }
+
   function showEditHint(anchor) {
     const bubble = document.getElementById('editHintBubble');
     if (!bubble) return;
@@ -3022,7 +3188,7 @@ let isSource = false;
     clearTimeout(sizeHintTimer);
     bubble.innerHTML = '<span class="edit-hint-copy">Switch to Source mode</span>' +
       '<span class="edit-hint-keys"><span class="edit-hint-key">⌘</span><span class="edit-hint-key">E</span></span>' +
-      '<span class="edit-hint-copy">to keep your table formatting intact</span>';
+      '<span class="edit-hint-copy">to keep your formatting intact</span>';
     bubble.classList.add('visible');
     clearTimeout(editHintTimer);
     editHintTimer = setTimeout(() => bubble.classList.remove('visible'), 1800);

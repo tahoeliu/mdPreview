@@ -1,8 +1,11 @@
 # mdPreview.spec — PyInstaller build configuration for standalone macOS app
 
+import os
 from pathlib import Path
 
 VERSION = Path('VERSION').read_text(encoding='utf-8').strip()
+CODESIGN_IDENTITY = os.environ.get('MDPREVIEW_CODESIGN_IDENTITY') or None
+ENTITLEMENTS_FILE = os.environ.get('MDPREVIEW_ENTITLEMENTS_FILE') or None
 # Versioning rule (user): a feature cycle uses a 3-part version (e.g. 1.3.4);
 # internal builds append a 4th segment (e.g. 1.3.4.1). The FULL version string
 # (incl. the optional 4th segment) is shown as CFBundleShortVersionString, so
@@ -110,6 +113,8 @@ app = BUNDLE(
     name='mdPreview.app',
     icon='app_icon.icns',
     bundle_identifier='tahoeliu.mdpreview',
+    codesign_identity=CODESIGN_IDENTITY,
+    entitlements_file=ENTITLEMENTS_FILE,
     info_plist={
         'CFBundleName': 'mdPreview',
         'CFBundleDisplayName': 'mdPreview',
@@ -135,6 +140,19 @@ app = BUNDLE(
                 ],
                 'CFBundleTypeExtensions': [
                     'md', 'markdown', 'mdown', 'mkd', 'mkdown',
+                ],
+            },
+            {
+                'CFBundleTypeName': 'Plain Text Document',
+                'CFBundleTypeRole': 'Editor',
+                'LSHandlerRank': 'Alternate',
+                'CFBundleTypeIconFile': 'doc_icon.icns',
+                'LSItemContentTypes': [
+                    'public.plain-text',
+                    'public.text',
+                ],
+                'CFBundleTypeExtensions': [
+                    'txt',
                 ],
             }
         ],

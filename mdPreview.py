@@ -55,6 +55,73 @@ def _t(en, zh):
     return zh if _is_chinese_locale() else en
 
 
+def _is_privacy_sensitive_user_path(path):
+    """String-only check for macOS privacy-gated user folders; does not touch disk."""
+    if not path:
+        return False
+    try:
+        target = os.path.abspath(os.path.expanduser(path))
+        protected_roots = [
+            os.path.abspath(os.path.expanduser('~/Desktop')),
+            os.path.abspath(os.path.expanduser('~/Documents')),
+            os.path.abspath(os.path.expanduser('~/Downloads')),
+        ]
+        return any(target == root or target.startswith(root + os.sep) for root in protected_roots)
+    except Exception:
+        return False
+
+
+def _default_save_directory(preferred=None):
+    """Choose the save panel folder: last explicit choice, then Desktop, then Home.
+
+    Do not preflight Desktop/Documents/Downloads with os.path.isdir/os.path.exists;
+    those checks themselves can trigger macOS TCC prompts before the user acts.
+    """
+    candidates = []
+    if preferred:
+        candidates.append(preferred)
+    try:
+        cfg = load_config()
+        if cfg.get('last_save_dir'):
+            candidates.append(cfg.get('last_save_dir'))
+        for recent_path in cfg.get('recent_files', [])[:10]:
+            if recent_path:
+                candidates.append(os.path.dirname(os.path.abspath(recent_path)))
+    except Exception:
+        pass
+    candidates.append(os.path.expanduser('~/Desktop'))
+    candidates.append(os.path.expanduser('~'))
+    seen = set()
+    for directory in candidates:
+        try:
+            directory = os.path.abspath(os.path.expanduser(directory))
+            if directory in seen:
+                continue
+            seen.add(directory)
+            if _is_privacy_sensitive_user_path(directory):
+                return directory
+            if os.path.isdir(directory):
+                return directory
+        except Exception:
+            continue
+    return os.path.expanduser('~')
+
+
+def _remember_save_directory(path):
+    """Remember successful explicit save locations for future panels."""
+    if not path:
+        return
+    try:
+        directory = os.path.dirname(os.path.abspath(path))
+        if not directory:
+            return
+        cfg = load_config()
+        cfg['last_save_dir'] = directory
+        save_config(cfg)
+    except Exception:
+        log_exception('remember save directory failed')
+
+
 def _fsync_directory(directory):
     """Best-effort fsync for a directory after an atomic rename."""
     try:
@@ -228,9 +295,70 @@ if HAS_COCOA:
             return None
 
     def _format_disclaimer(ext):
-        if ext == 'md':
+        # md / txt / html are written as plain text and match the preview
+        # exactly, so they never need the experimental warning.
+        if ext in ('md', 'txt', 'html'):
             return ''
         return _t('Experimental; output may differ from preview.', '实验性功能，输出效果可能与预览不同。')
+
+    # Measured from a real Save panel on macOS 26 Tahoe at 2x retina:
+    # the Where popup's left edge sits at x = 80pt from the accessory view's
+    # left edge. Used to right-align the Format label and place the popup.
+    _MEASURED_LABEL_WIDTH = 90.0
+
+    def _measure_label_width():
+        """Pixel position of the Where popup column in NSSavePanel.
+
+        On macOS 26 Tahoe the system label column ends and the popup column
+        begins at ~80pt from the accessory view's left edge (pixel-measured
+        from a real Save dialog). This is the only knob we need: the popup
+        starts at this x, and the Format label is right-aligned into
+        0..label_w.
+        """
+        try:
+            return float(_MEASURED_LABEL_WIDTH)
+        except Exception:
+            return 80.0
+
+    def _layout_format_acc(acc, label, popup, disclaimer, ext, label_w=None):
+        """Position Format row to match the historical v1.4.0/v1.4.2 geometry.
+
+        v1.4.0 (no disclaimer): acc 360x64, label y=22, popup y=18.
+        v1.4.2 (with disclaimer): acc 360x82, label y=42, popup y=38, disclaimer y=12.
+
+        Those values produced visually balanced rows on prior macOS versions
+        and remain the only known-working geometry. The label is now
+        right-aligned into 0..label_w so the popup can start at label_w and
+        line up with the Where popup above.
+        """
+        from AppKit import NSMakeRect, NSRightTextAlignment
+        if label_w is None:
+            label_w = _measure_label_width()
+        has = bool(_format_disclaimer(ext))
+        if has:
+            acc_h = 82.0
+            ly = 42.0
+            py = 38.0
+            dy = 12.0
+        else:
+            acc_h = 64.0
+            ly = 22.0
+            py = 18.0
+            dy = None
+        acc_w = acc.frame().size.width
+        popup_w = max(120.0, acc_w - label_w - 20.0)
+        try:
+            label.setAlignment_(NSRightTextAlignment)
+        except Exception:
+            pass
+        label.setFrame_(NSMakeRect(0, ly, label_w - 4.0, 20))
+        popup.setFrame_(NSMakeRect(label_w, py, popup_w, 25))
+        if has:
+            disclaimer.setFrame_(NSMakeRect(label_w, dy, popup_w, 18))
+            disclaimer.setHidden_(False)
+        else:
+            disclaimer.setHidden_(True)
+        acc.setFrame_(NSMakeRect(0, 0, acc_w, acc_h))
 
     class _FormatPopupActions(NSObject):
         """Action target for the save panel's format popup: switches the panel's
@@ -249,10 +377,20 @@ if HAS_COCOA:
                 if idx < 0 or idx >= len(formats):
                     return
                 ext = formats[idx][1]
+                acc = h.get('acc')
+                label = h.get('label')
+                popup = h.get('popup')
                 disclaimer = h.get('disclaimer')
-                if disclaimer is not None:
+                label_w = h.get('label_w')
+                if acc is not None and label is not None and popup is not None and disclaimer is not None:
                     try:
-                        disclaimer.setStringValue_(_format_disclaimer(ext))
+                        _layout_format_acc(acc, label, popup, disclaimer, ext, label_w)
+                        panel = h.get('panel')
+                        if panel is not None:
+                            try:
+                                panel.contentView().layoutSubtreeIfNeeded_()
+                            except Exception:
+                                pass
                     except Exception:
                         pass
                 panel = h.get('panel')
@@ -274,6 +412,11 @@ if HAS_COCOA:
     def _run_format_panel(holder, base_name, formats, title, name_label=None):
         """Native save panel with a format popup in its accessory view.
 
+        Layout: the label column width is measured at runtime from a "Where:"
+        NSTextField via sizeToFit(), then the popup is placed immediately after
+        it. This aligns with the panel's built-in rows without hardcoding
+        any per-macOS pixel values.
+
         Formats: list of (display_label, extension_key). On OK, holder gets
         'path' + 'format' (the extension key); on cancel, 'cancelled'; on
         failure, 'error'. Runs the panel on the main thread and polls here
@@ -294,34 +437,56 @@ if HAS_COCOA:
                         except Exception:
                             pass
                     try:
-                        # The Save/Export action button follows the dialog title.
                         panel.setPrompt_(title)
                     except Exception:
                         pass
                     panel.setCanCreateDirectories_(True)
-                    acc = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 360, 82))
+                    try:
+                        from Foundation import NSURL
+                        panel.setDirectoryURL_(NSURL.fileURLWithPath_(_default_save_directory()))
+                    except Exception:
+                        pass
+
+                    label_w = _measure_label_width()
+
+                    # --- Format label (right-aligned in 0..label_w) ---
                     label = NSTextField.labelWithString_(_t('Format:', '格式：'))
-                    label.setFrame_(NSMakeRect(0, 42, 60, 20))
                     label.setTextColor_(NSColor.secondaryLabelColor())
-                    popup = NSPopUpButton.alloc().initWithFrame_(NSMakeRect(60, 38, 260, 25))
+
+                    # --- Format popup (starts at label_w) ---
+                    popup = NSPopUpButton.alloc().initWithFrame_(NSMakeRect(0, 0, 260, 25))
+                    popup.setAutoresizingMask_(2)  # NSViewWidthSizable
                     for f in formats:
                         popup.addItemWithTitle_(f[0])
+
+                    # --- Disclaimer (shown only for docx/png/pdf) ---
                     disclaimer = NSTextField.labelWithString_(_format_disclaimer(formats[0][1]))
-                    disclaimer.setFrame_(NSMakeRect(60, 12, 300, 18))
                     disclaimer.setTextColor_(NSColor.tertiaryLabelColor())
                     try:
                         disclaimer.setFont_(NSFont.systemFontOfSize_(11))
                     except Exception:
                         pass
-                    holder['formats'] = formats
-                    holder['panel'] = panel
-                    holder['disclaimer'] = disclaimer
-                    actions = _FormatPopupActions.alloc().initWithHolder_(holder)
-                    popup.setTarget_(actions)
-                    popup.setAction_('formatChanged:')
+                    disclaimer.setAutoresizingMask_(2)
+
+                    # --- Plain NSView as the accessory container ---
+                    acc = NSView.alloc().initWithFrame_(NSMakeRect(0, 0, 360, 50))
+                    _layout_format_acc(acc, label, popup, disclaimer, formats[0][1], label_w)
                     acc.addSubview_(label)
                     acc.addSubview_(popup)
                     acc.addSubview_(disclaimer)
+
+                    holder['formats'] = formats
+                    holder['panel'] = panel
+                    holder['acc'] = acc
+                    holder['label'] = label
+                    holder['popup'] = popup
+                    holder['disclaimer'] = disclaimer
+                    holder['label_w'] = label_w
+
+                    actions = _FormatPopupActions.alloc().initWithHolder_(holder)
+                    popup.setTarget_(actions)
+                    popup.setAction_('formatChanged:')
+
                     panel.setAccessoryView_(acc)
                     panel.setAllowedFileTypes_([formats[0][1]])
                     panel.setNameFieldStringValue_(base_name + '.' + formats[0][1])
@@ -422,7 +587,7 @@ if HAS_COCOA:
             try:
                 holder = self._holder or {}
                 name = ''
-                directory = holder.get('base_dir') or os.path.expanduser('~/Desktop')
+                directory = holder.get('base_dir') or _default_save_directory()
                 field = holder.get('name_field')
                 if field is not None:
                     name = (field.stringValue() or '').strip()
@@ -686,6 +851,7 @@ class MarkdownAPI:
             if previous_path and previous_path != path:
                 _remove_draft(path)
             add_recent_file(path)
+            _remember_save_directory(path)
             return {'success': True, 'encoding': encoding}
         except Exception as e:
             log_exception('save file failed')
@@ -807,6 +973,7 @@ class MarkdownAPI:
                                         os.remove(tmp_path)
                                     except Exception:
                                         pass
+                                _remember_save_directory(path)
                                 result_holder['done'] = True
                             except Exception as e:
                                 result_holder['error'] = str(e)
@@ -839,9 +1006,11 @@ class MarkdownAPI:
                     return {'success': False, 'error': 'Empty file data'}
                 with open(path, 'wb') as f:
                     f.write(raw)
+                _remember_save_directory(path)
                 return {'success': True, 'path': path}
 
             _safe_write_text(path, content, encoding='utf-8')
+            _remember_save_directory(path)
             return {'success': True, 'path': path}
         except Exception as e:
             log_exception('export as write failed')
@@ -871,7 +1040,7 @@ class MarkdownAPI:
                     panel.setCanChooseFiles_(True)
                     panel.setCanChooseDirectories_(False)
                     panel.setAllowsMultipleSelection_(True)
-                    panel.setAllowedFileTypes_(['md', 'markdown', 'mdown', 'mkd', 'mkdown'])
+                    panel.setAllowedFileTypes_(['md', 'markdown', 'mdown', 'mkd', 'mkdown', 'txt'])
                     response = panel.runModal()
                     if response != NSOKButton:
                         result_holder['cancelled'] = True
@@ -976,7 +1145,7 @@ class MarkdownAPI:
             is_untitled = self.is_untitled or not self.file_path
             if is_untitled:
                 base_name = 'untitled'
-                base_dir = os.path.expanduser('~/Desktop')
+                base_dir = _default_save_directory()
                 initial_name = 'untitled.md'
             else:
                 base_name = os.path.splitext(os.path.basename(self.file_path or ''))[0] or 'untitled'
@@ -1313,7 +1482,10 @@ def add_recent_file(path):
         try:
             path = os.path.abspath(path)
             cfg = load_config()
-            recent = [p for p in cfg.get('recent_files', []) if p != path and os.path.exists(p)]
+            # Do not preflight historical paths with os.path.exists(). On macOS,
+            # merely probing Desktop/Documents/Downloads can trigger a TCC prompt
+            # during save, before the user explicitly opens a recent item.
+            recent = [p for p in cfg.get('recent_files', []) if p != path]
             recent.insert(0, path)
             cfg['recent_files'] = recent[:10]
             save_config(cfg)
@@ -1837,7 +2009,7 @@ def handle_opened_file(file_path, main_window=None, main_api=None):
     if not file_path or not os.path.exists(file_path):
         return
 
-    valid_extensions = ('.md', '.markdown', '.mdown', '.mkd', '.mkdown')
+    valid_extensions = ('.md', '.markdown', '.mdown', '.mkd', '.mkdown', '.txt')
     if not file_path.lower().endswith(valid_extensions):
         return
 
@@ -2064,8 +2236,10 @@ if HAS_COCOA:
                     recent_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Open Recent", "打开最近"), None, "")
                     recent_menu = NSMenu.alloc().initWithTitle_(_t("Open Recent", "打开最近"))
                     for recent_path in load_config().get('recent_files', [])[:10]:
-                        if not os.path.exists(recent_path):
-                            continue
+                        # Avoid os.path.exists() here: probing privacy-gated
+                        # folders like Desktop can trigger a TCC prompt while
+                        # the menu is merely being built. Open-time errors are
+                        # handled when the user explicitly selects the item.
                         item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(os.path.basename(recent_path), "openRecentFile:", "")
                         item.setRepresentedObject_(recent_path)
                         item.setToolTip_(recent_path)
@@ -2437,7 +2611,8 @@ if HAS_COCOA:
                     NSApp, NSBackingStoreBuffered, NSFont, NSImage, NSImageScaleProportionallyUpOrDown,
                     NSImageView, NSMakeRect, NSTextField, NSWindow, NSWindowStyleMaskClosable,
                     NSWindowStyleMaskTitled, NSColor, NSCenterTextAlignment,
-                    NSParagraphStyleAttributeName
+                    NSParagraphStyleAttributeName, NSFullSizeContentViewWindowMask,
+                    NSFontAttributeName, NSLineBreakByWordWrapping
                 )
                 from Foundation import NSURL, NSMutableParagraphStyle, NSMakeRange
 
@@ -2445,14 +2620,15 @@ if HAS_COCOA:
                     _about_window_ref.makeKeyAndOrderFront_(None)
                     return
 
-                width = 420
-                height = 248
+                width = 300
+                height = 300
                 panel = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
                     NSMakeRect(0, 0, width, height),
-                    NSWindowStyleMaskTitled | NSWindowStyleMaskClosable,
+                    NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSFullSizeContentViewWindowMask,
                     NSBackingStoreBuffered,
                     False,
                 )
+                panel.setTitlebarAppearsTransparent_(True)
                 panel.setTitle_(_t('About mdPreview', '关于 mdPreview'))
                 panel.setReleasedWhenClosed_(False)
                 panel.setBackgroundColor_(NSColor.whiteColor())
@@ -2461,7 +2637,7 @@ if HAS_COCOA:
                 content.layer().setBackgroundColor_(NSColor.whiteColor().CGColor())
 
                 icon_size = 82
-                icon_view = NSImageView.alloc().initWithFrame_(NSMakeRect((width - icon_size) / 2, height - 104, icon_size, icon_size))
+                icon_view = NSImageView.alloc().initWithFrame_(NSMakeRect((width - icon_size) / 2, 178, icon_size, icon_size))
                 icon = NSImage.alloc().initWithContentsOfFile_(get_resource_path('app_icon.icns'))
                 if icon is not None:
                     icon_view.setImage_(icon)
@@ -2473,39 +2649,50 @@ if HAS_COCOA:
                 small_font = NSFont.systemFontOfSize_(12)
 
                 title = NSTextField.labelWithString_('mdPreview')
-                title.setFrame_(NSMakeRect(0, height - 136, width, 26))
+                title.setFrame_(NSMakeRect(0, 140, width, 26))
                 title.setAlignment_(NSCenterTextAlignment)
                 title.setFont_(title_font)
                 title.setTextColor_(NSColor.labelColor())
                 content.addSubview_(title)
 
                 version = NSTextField.labelWithString_('Version ' + _get_current_version())
-                version.setFrame_(NSMakeRect(0, height - 162, width, 20))
+                version.setFrame_(NSMakeRect(0, 112, width, 20))
                 version.setAlignment_(NSCenterTextAlignment)
                 version.setFont_(text_font)
                 version.setTextColor_(NSColor.secondaryLabelColor())
                 content.addSubview_(version)
 
-                credit = NSTextField.labelWithString_('GitHub   ©tahoeliu')
-                credit.setFrame_(NSMakeRect(0, 32, width, 20))
+                credit = NSTextField.labelWithString_('Opensourced on GitHub\n©tahoeliu')
+                credit.setFrame_(NSMakeRect(0, 40, width, 44))
                 credit.setAlignment_(NSCenterTextAlignment)
                 credit.setFont_(small_font)
                 credit.setTextColor_(NSColor.secondaryLabelColor())
                 credit.setEditable_(False)
-                credit.setSelectable_(False)
+                credit.setSelectable_(True)
                 credit.setBezeled_(False)
                 credit.setDrawsBackground_(False)
+                credit.setUsesSingleLineMode_(False)
+                credit.setLineBreakMode_(NSLineBreakByWordWrapping)
+                try:
+                    credit.cell().setWraps_(True)
+                except Exception:
+                    pass
                 content.addSubview_(credit)
 
                 try:
-                    url = NSURL.URLWithString_('https://github.com/tahoeliu/mdPreview')
+                    github_url = NSURL.URLWithString_('https://github.com/tahoeliu/mdPreview')
+                    mail_url = NSURL.URLWithString_('mailto:tianoncall@gmail.com')
                     credit.setAllowsEditingTextAttributes_(True)
-                    credit.setSelectable_(True)
-                    attr = NSMutableAttributedString.alloc().initWithString_('GitHub   ©tahoeliu')
+                    line_text = 'Opensourced on GitHub\n©tahoeliu'
+                    attr = NSMutableAttributedString.alloc().initWithString_(line_text)
                     paragraph = NSMutableParagraphStyle.alloc().init()
                     paragraph.setAlignment_(NSCenterTextAlignment)
-                    attr.addAttribute_value_range_('NSLink', url, NSMakeRange(0, 6))
+                    attr.addAttribute_value_range_(NSFontAttributeName, small_font, NSMakeRange(0, attr.length()))
                     attr.addAttribute_value_range_(NSParagraphStyleAttributeName, paragraph, NSMakeRange(0, attr.length()))
+                    gh_start = line_text.index('GitHub')
+                    attr.addAttribute_value_range_('NSLink', github_url, NSMakeRange(gh_start, len('GitHub')))
+                    ct_start = line_text.index('©tahoeliu')
+                    attr.addAttribute_value_range_('NSLink', mail_url, NSMakeRange(ct_start, len('©tahoeliu')))
                     credit.setAttributedStringValue_(attr)
                 except Exception:
                     pass
@@ -2667,7 +2854,7 @@ def main():
         patch_evaluate_js()
 
     file_paths = []
-    valid_extensions = ('.md', '.markdown', '.mdown', '.mkd', '.mkdown')
+    valid_extensions = ('.md', '.markdown', '.mdown', '.mkd', '.mkdown', '.txt')
     if len(sys.argv) > 1:
         for arg in sys.argv[1:]:
             if arg and os.path.exists(arg) and arg.lower().endswith(valid_extensions):
