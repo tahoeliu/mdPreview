@@ -1,6 +1,6 @@
 cask "mdpreview" do
-  version "1.4.8"
-  sha256 "52be16522778840ad26bcdbec58930a8290505d5aca2d1c33383aab3850426c2"
+  version "1.4.9"
+  sha256 "929530c19d10b8a40fcd42693bbd6c2847aa550201e065d6f1db9167b727a683"
 
   url "https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg"
   name "mdPreview"

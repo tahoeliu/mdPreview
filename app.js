@@ -1715,8 +1715,54 @@ let isSource = false;
       anchor = normalizeWhitespace(caretNode.textContent).slice(0, 120);
       nth = 0;
     }
-    if (!anchor || anchor.length < 2) return -1;
-    return findNthOccurrenceSourceOffset(md, anchor, nth);
+    if (anchor && anchor.length >= 2) {
+      const pos = findNthOccurrenceSourceOffset(md, anchor, nth);
+      if (pos >= 0) return pos;
+    }
+    // Fallback: no text anchor matched (empty paragraph, empty line, caret on
+    // a non-text element). Use the block element's ordinal position among
+    // rendered blocks to approximate the source offset.
+    if (blockEl) {
+      const pos2 = estimateSourceOffsetByBlockOrder(md, content, blockEl, caretOffset);
+      if (pos2 >= 0) return pos2;
+    }
+    return -1;
+  }
+
+  // Estimate a source offset by counting which rendered block the caret is in.
+  // Each rendered block roughly corresponds to a paragraph/block in markdown
+  // separated by blank lines, so we walk the block list, find our block's
+  // index, then scan the source for the same number of block separators.
+  function estimateSourceOffsetByBlockOrder(md, content, targetBlock, caretOffset) {
+    const blocks = Array.from(content.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, pre, blockquote, td, th, div'));
+    let blockIdx = -1;
+    for (let i = 0; i < blocks.length; i++) {
+      if (blocks[i] === targetBlock) { blockIdx = i; break; }
+    }
+    if (blockIdx < 0) return -1;
+    // If the block has text, try to use the text of the *previous* block with
+    // text as an anchor — that's more reliable than counting.
+    for (let j = blockIdx - 1; j >= 0; j--) {
+      const prevText = normalizeWhitespace(blocks[j].textContent);
+      if (prevText.length >= 2) {
+        const pos = findNthOccurrenceSourceOffset(md, prevText.slice(0, 120), 0);
+        if (pos >= 0) {
+          // Position after the previous block's text, past any trailing
+          // whitespace/newlines, landing at the start of the next block.
+          let p = pos;
+          // Skip forward past the matched text and any whitespace to the
+          // start of the next line/block.
+          while (p < md.length && md[p] !== '\n') p++;
+          while (p < md.length && /\s/.test(md[p])) p++;
+          return p;
+        }
+      }
+    }
+    // No previous block with text: caret is in/near the first block.
+    // Find the start of the first non-empty line in the source.
+    let p0 = 0;
+    while (p0 < md.length && /\s/.test(md[p0])) p0++;
+    return p0;
   }
 
   function findNthOccurrenceSourceOffset(md, needle, nth) {
@@ -1783,38 +1829,120 @@ let isSource = false;
     sel.addRange(range);
   }
 
-  // Preview mode: insert converted markdown into the source at the position
-  // matching the rendered caret, then re-render and restore the caret.
-  async function insertMdInPreview(pastedMd) {
+  // Preview mode: paste converted markdown as RENDERED HTML directly into the
+  // contenteditable, instead of rewriting the source and re-rendering the whole
+  // document. Two problems with the old full re-render approach:
+  //   1. Any paste path that fell through to the native insertion dropped the
+  //      raw markdown (visible "#" etc.) into the rendered view.
+  //   2. Replacing innerHTML programmatically clears/breaks the browser's
+  //      native undo stack, so Cmd+Z could never undo a paste.
+  // Using execCommand('insertHTML') keeps the paste inside the browser's own
+  // undo stack (Cmd+Z works) and shows WYSIWYG content (no raw markdown).
+  // savedSel is a { node, offset } snapshot taken synchronously at paste time,
+  // so async clipboard reads cannot lose the caret.
+  function pasteMdIntoRendered(md, savedSel) {
     const content = document.getElementById('content');
-    const textarea = document.getElementById('textarea');
-    const sel = window.getSelection();
-    const caretNode = sel && sel.rangeCount ? sel.getRangeAt(0).startContainer : null;
-    const caretOffset = sel && sel.rangeCount ? sel.getRangeAt(0).startOffset : 0;
-    // Use the real current source: if the user edited the rendered view,
-    // textarea.value is stale (getCurrentMarkdown round-trips via turndown).
-    const src = getCurrentMarkdown();
-    let pos = mapRenderedCaretToSourceOffset(src, content, caretNode, caretOffset);
-    if (pos < 0) pos = src.length;
-    const s = String(pastedMd || '').trim();
+    if (!content) return;
+    const s = String(md || '').trim();
     if (!s) return;
-    const block = s.indexOf('\n') !== -1 ? '\n\n' + s + '\n\n' : s;
-    textarea.value = src.slice(0, pos) + block + src.slice(pos);
-    const caretSource = pos + block.length;
-    textarea.setSelectionRange(caretSource, caretSource);
-    await renderMarkdown(textarea.value, content);
-    renderedDirty = false;
-    setDirty(true);
-    syncHighlight();
-    schedulePythonSync(700);
-    placeCaretNearRenderedText(content, firstMeaningfulLine(s));
-    try { content.focus({ preventScroll: true }); } catch (e) { content.focus(); }
+    restoreRenderedSelection(savedSel);
+    let html;
+    try {
+      html = marked.parse(s);
+    } catch (err) {
+      html = escHtml(s);
+    }
+    // marked emits newline text nodes between block elements; turndown would
+    // later write those back as stray blank lines / spaces, so strip pure
+    // whitespace text nodes outside <pre>/<code> before inserting.
+    html = compactRenderedHtml(html);
+    html = sanitizeHtmlString(html);
+    // A single-paragraph paste stays inline so pasting in the middle of a
+    // paragraph does not split it into separate blocks.
+    const singleP = html.match(/^<p>([\s\S]*)<\/p>\s*$/);
+    if (singleP) html = singleP[1].replace(/\n/g, '<br>');
+    let ok = false;
+    try {
+      content.focus({ preventScroll: true });
+      ok = document.execCommand('insertHTML', false, html);
+    } catch (err) {
+      ok = false;
+    }
+    if (!ok) {
+      // Fallback: manual Range insertion (content stays correct; native undo
+      // for this paste is lost, but WKWebView supports insertHTML so this is
+      // only a safety net).
+      const sel = window.getSelection();
+      if (sel && sel.rangeCount) {
+        const range = sel.getRangeAt(0);
+        const frag = range.createContextualFragment(html);
+        range.deleteContents();
+        range.insertNode(frag);
+        range.collapse(false);
+        sel.removeAllRanges();
+        sel.addRange(range);
+      }
+    }
+    balanceTableColumns(content);
+    rewriteRelativeImages(content);
+    markRenderedContentEdited();
+  }
+
+  function compactRenderedHtml(html) {
+    try {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      const toRemove = [];
+      const walker = document.createTreeWalker(tmp, NodeFilter.SHOW_TEXT, null, false);
+      while (walker.nextNode()) {
+        const n = walker.currentNode;
+        if (n.textContent.trim()) continue;
+        if (n.parentNode && n.parentNode.closest && n.parentNode.closest('pre, code, table')) continue;
+        toRemove.push(n);
+      }
+      toRemove.forEach((n) => n.parentNode && n.parentNode.removeChild(n));
+      return tmp.innerHTML;
+    } catch (e) {
+      return html;
+    }
+  }
+
+  function restoreRenderedSelection(savedSel) {
+    if (!savedSel) return;
+    const sel = window.getSelection();
+    if (!sel) return;
+    const node = savedSel.node;
+    if (!node || !node.parentNode) return;
+    try {
+      const range = document.createRange();
+      range.setStart(node, savedSel.offset);
+      range.collapse(true);
+      sel.removeAllRanges();
+      sel.addRange(range);
+    } catch (e) {}
   }
 
   // Entry point for the "Paste as Markdown" menu item, Cmd+Shift+V, and
   // preview-mode Cmd+V. Reads the best clipboard flavor, converts, inserts.
+  // Guard against double-dispatch: Cmd+V fires the DOM paste event AND a
+  // beforeinput with inputType "insertFromPaste" (menu-driven paste only fires
+  // the latter). Both call pasteAsMarkdown; a short time window collapses them
+  // into one while still allowing genuinely separate pastes.
+  let pasteLastTs = 0;
   async function pasteAsMarkdown() {
-    if (closing) return;
+    const now = Date.now();
+    if (closing || now - pasteLastTs < 50) return;
+    pasteLastTs = now;
+    // Snapshot the current selection synchronously *before* any async call.
+    // pasteAsMarkdown is async (reads clipboard via the pywebbridge); during
+    // those awaits the browser can clear/alter the DOM selection, which makes
+    // mapRenderedCaretToSourceOffset fail and paste at end-of-document.
+    const sel = window.getSelection();
+    let savedSel = null;
+    if (sel && sel.rangeCount > 0) {
+      const range = sel.getRangeAt(0);
+      savedSel = { node: range.startContainer, offset: range.startOffset };
+    }
     await ensureTurndown();
     let clip = null;
     try {
@@ -1845,7 +1973,7 @@ let isSource = false;
     if (isSource) {
       insertMdAtSourceCaret(md);
     } else {
-      await insertMdInPreview(md);
+      pasteMdIntoRendered(md, savedSel);
       // Preview mode: confirm the conversion happened for rich pastes.
       if (clip.format === 'html' || clip.format === 'markdown') showPastedAsMarkdownHint();
     }
@@ -2175,14 +2303,158 @@ let isSource = false;
     }
   });
   document.getElementById('content').addEventListener('beforeinput', (e) => {
-    if (!isSource && getEditableComplexInteractionTarget(e)) showTableEditHint();
+    if (isSource) return;
+    if (getEditableComplexInteractionTarget(e)) showTableEditHint();
+    // Intercept pastes that arrive through the native Edit-menu path (which
+    // does not always fire a DOM paste event) so raw markdown never lands in
+    // the rendered view. The in-flight flag collapses this with the paste
+    // event handler when both fire for the same Cmd+V.
+    if (e.inputType === 'insertFromPaste') {
+      e.preventDefault();
+      pasteAsMarkdown();
+    }
   });
   document.getElementById('content').addEventListener('input', (e) => {
     if (!isSource && getEditableComplexInteractionTarget(e)) showTableEditHint();
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeModal();
+    // Rendered view: Backspace/Delete on a block edge should merge adjacent
+    // blocks (which is how a blank line between markdown paragraphs is
+    // removed). WKWebView/Safari only moves the caret there, so without this
+    // the deletion appears to do nothing and the blank line comes back after
+    // Cmd+E. Only plain key presses (no Cmd/Ctrl/Alt/Shift) are intercepted;
+    // ordinary character deletion inside a block stays native.
+    if (!isSource && (e.key === 'Backspace' || e.key === 'Delete') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      handleRenderedBlockEdgeDelete(e);
+    }
   });
+
+  const RENDER_BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6, li, blockquote';
+
+  function isBlankRenderParagraph(el) {
+    return !!(el && el.tagName === 'P' && !el.textContent.trim() && !el.querySelector('img, pre, table, .mermaid-diagram, .math-block'));
+  }
+
+  function lastTextNodeIn(el) {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
+    let last = null;
+    while (walker.nextNode()) last = walker.currentNode;
+    return last;
+  }
+
+  function placeCaretInRenderedBlock(el, atEnd) {
+    const sel = window.getSelection();
+    if (!sel || !el) return;
+    const r = document.createRange();
+    r.selectNodeContents(el);
+    r.collapse(!atEnd);
+    sel.removeAllRanges();
+    sel.addRange(r);
+  }
+
+  function markRenderedContentEdited() {
+    renderedDirty = true;
+    setDirty(true);
+    schedulePythonSync(PYTHON_SYNC_DEBOUNCE_MS);
+    dismissWelcomeOverlay();
+  }
+
+  function handleRenderedBlockEdgeDelete(e) {
+    const content = document.getElementById('content');
+    if (!content || !content.contains(e.target)) return;
+    if (e.isComposing) return;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount || !sel.isCollapsed) return;
+    const range = sel.getRangeAt(0);
+    let blockEl = null;
+    const node = range.startContainer;
+    if (node.nodeType === Node.TEXT_NODE) blockEl = node.parentElement ? node.parentElement.closest(RENDER_BLOCK_SELECTOR) : null;
+    else if (node.nodeType === Node.ELEMENT_NODE) blockEl = node.closest(RENDER_BLOCK_SELECTOR);
+    if (!blockEl) return;
+    const blockRange = document.createRange();
+    blockRange.selectNodeContents(blockEl);
+    if (e.key === 'Backspace') {
+      const startRange = blockRange.cloneRange();
+      startRange.collapse(true);
+      if (range.compareBoundaryPoints(Range.START_TO_START, startRange) !== 0) return;
+      e.preventDefault();
+      mergeRenderedBlockWithPrevious(blockEl);
+    } else {
+      const endRange = blockRange.cloneRange();
+      endRange.collapse(false);
+      if (range.compareBoundaryPoints(Range.START_TO_START, endRange) !== 0) return;
+      e.preventDefault();
+      mergeRenderedBlockWithNext(blockEl);
+    }
+  }
+
+  function mergeRenderedBlockWithPrevious(blockEl) {
+    const prev = blockEl.previousElementSibling;
+    if (!prev) return;
+    // Backspace inside an empty paragraph deletes that blank paragraph.
+    if (isBlankRenderParagraph(blockEl)) {
+      blockEl.parentNode.removeChild(blockEl);
+      markRenderedContentEdited();
+      if (prev && prev.matches(RENDER_BLOCK_SELECTOR)) placeCaretInRenderedBlock(prev, true);
+      return;
+    }
+    // Deleting a blank paragraph between two blocks removes the blank line.
+    if (isBlankRenderParagraph(prev)) {
+      prev.parentNode.removeChild(prev);
+      markRenderedContentEdited();
+      placeCaretInRenderedBlock(blockEl, false);
+      return;
+    }
+    if (!prev.matches(RENDER_BLOCK_SELECTOR)) return; // tables/pre/mermaid are not merged
+    const origLastText = lastTextNodeIn(prev);
+    const frag = document.createDocumentFragment();
+    while (blockEl.firstChild) frag.appendChild(blockEl.firstChild);
+    prev.appendChild(frag);
+    blockEl.parentNode.removeChild(blockEl);
+    markRenderedContentEdited();
+    const sel = window.getSelection();
+    if (sel) {
+      const r = document.createRange();
+      if (origLastText) { r.setStart(origLastText, origLastText.length); r.collapse(true); }
+      else { r.selectNodeContents(prev); r.collapse(false); }
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+  }
+
+  function mergeRenderedBlockWithNext(blockEl) {
+    let next = blockEl.nextElementSibling;
+    if (!next) return;
+    if (isBlankRenderParagraph(blockEl)) {
+      blockEl.parentNode.removeChild(blockEl);
+      markRenderedContentEdited();
+      if (next && next.matches(RENDER_BLOCK_SELECTOR)) placeCaretInRenderedBlock(next, false);
+      return;
+    }
+    if (isBlankRenderParagraph(next)) {
+      next.parentNode.removeChild(next);
+      markRenderedContentEdited();
+      placeCaretInRenderedBlock(blockEl, true);
+      return;
+    }
+    if (!next.matches(RENDER_BLOCK_SELECTOR)) return;
+    const origLastText = lastTextNodeIn(blockEl);
+    const frag = document.createDocumentFragment();
+    while (next.firstChild) frag.appendChild(next.firstChild);
+    blockEl.appendChild(frag);
+    next.parentNode.removeChild(next);
+    markRenderedContentEdited();
+    const sel = window.getSelection();
+    if (sel) {
+      const r = document.createRange();
+      if (origLastText) { r.setStart(origLastText, origLastText.length); r.collapse(true); }
+      else { r.selectNodeContents(blockEl); r.collapse(false); }
+      sel.removeAllRanges();
+      sel.addRange(r);
+    }
+  }
+
   function escHtml(s) {
     if (!s) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -2228,13 +2500,14 @@ let isSource = false;
         if (colWidths[colCount - 1] < minColWidth) colWidths[colCount - 1] = minColWidth;
       }
 
-      // Apply widths through a <colgroup> so columns stay independently resizable
+      // Apply widths through a <colgroup> so columns stay independently
+      // resizable. Tables that already carry a <colgroup> were balanced before
+      // and may have been drag-resized by the user — never re-balance those
+      // (it would silently reset drag-adjusted widths, e.g. after a paste).
+      if (table.querySelector('colgroup')) continue;
       const total = colWidths.reduce((a, b) => a + b, 0);
-      let colgroup = table.querySelector('colgroup');
-      if (!colgroup) {
-        colgroup = document.createElement('colgroup');
-        table.insertBefore(colgroup, table.firstChild);
-      }
+      const colgroup = document.createElement('colgroup');
+      table.insertBefore(colgroup, table.firstChild);
       colgroup.innerHTML = '';
       colWidths.forEach((w) => {
         const col = document.createElement('col');

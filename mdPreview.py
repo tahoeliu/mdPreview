@@ -2621,7 +2621,7 @@ if HAS_COCOA:
                     return
 
                 width = 300
-                height = 300
+                height = 278
                 panel = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
                     NSMakeRect(0, 0, width, height),
                     NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSFullSizeContentViewWindowMask,
@@ -2637,7 +2637,7 @@ if HAS_COCOA:
                 content.layer().setBackgroundColor_(NSColor.whiteColor().CGColor())
 
                 icon_size = 82
-                icon_view = NSImageView.alloc().initWithFrame_(NSMakeRect((width - icon_size) / 2, 178, icon_size, icon_size))
+                icon_view = NSImageView.alloc().initWithFrame_(NSMakeRect((width - icon_size) / 2, 146, icon_size, icon_size))
                 icon = NSImage.alloc().initWithContentsOfFile_(get_resource_path('app_icon.icns'))
                 if icon is not None:
                     icon_view.setImage_(icon)
@@ -2649,21 +2649,21 @@ if HAS_COCOA:
                 small_font = NSFont.systemFontOfSize_(12)
 
                 title = NSTextField.labelWithString_('mdPreview')
-                title.setFrame_(NSMakeRect(0, 140, width, 26))
+                title.setFrame_(NSMakeRect(0, 100, width, 26))
                 title.setAlignment_(NSCenterTextAlignment)
                 title.setFont_(title_font)
                 title.setTextColor_(NSColor.labelColor())
                 content.addSubview_(title)
 
                 version = NSTextField.labelWithString_('Version ' + _get_current_version())
-                version.setFrame_(NSMakeRect(0, 112, width, 20))
+                version.setFrame_(NSMakeRect(0, 72, width, 20))
                 version.setAlignment_(NSCenterTextAlignment)
                 version.setFont_(text_font)
                 version.setTextColor_(NSColor.secondaryLabelColor())
                 content.addSubview_(version)
 
                 credit = NSTextField.labelWithString_('Opensourced on GitHub\n©tahoeliu')
-                credit.setFrame_(NSMakeRect(0, 40, width, 44))
+                credit.setFrame_(NSMakeRect(0, 12, width, 44))
                 credit.setAlignment_(NSCenterTextAlignment)
                 credit.setFont_(small_font)
                 credit.setTextColor_(NSColor.secondaryLabelColor())
