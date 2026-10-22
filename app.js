@@ -43,6 +43,11 @@ let isSource = false;
 
   if (typeof marked !== 'undefined') marked.setOptions({ breaks: true, gfm: true });
 
+  // Make native Enter create <p> paragraphs (not <div>s) in the rendered
+  // contenteditable. WebKit's <div> paragraph junk otherwise corrupts the
+  // markdown round trip (turndown treats bare <div>s as inline content).
+  try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (err) {}
+
   const _jsT0 = performance.now();  // cold-start profiling
 
   // These are loaded on-demand to speed up cold start by ~300-500ms.
@@ -1273,6 +1278,11 @@ let isSource = false;
     h = h.replace(/^(#{1,6})(\s)/, '<span class="syn-heading">$1</span>$2');
     h = h.replace(/(\*\*|__)(.+?)\1/g, '<span class="syn-bold">$1</span>$2<span class="syn-bold">$1</span>');
     h = h.replace(/(^|[^\*])(\*)([^\s\*][^\*]*?)\*(?!\*)/g, '$1<span class="syn-italic">$2</span>$3<span class="syn-italic">$2</span>');
+    // Single-underscore italic (_like this_). Runs after the bold rule so __
+    // pairs are already wrapped in spans. The [^\w_] guard keeps intraword
+    // underscores (snake_case_words) from matching — matching CommonMark,
+    // which does not emphasize inside words with _.
+    h = h.replace(/(^|[^\w_])_([^_\s][^_]*?)_(?!\w)/g, '$1<span class="syn-italic">_</span>$2<span class="syn-italic">_</span>');
     h = h.replace(/(~~)([^~]+?)(~~)/g, '<span class="syn-strike">$1</span>$2<span class="syn-strike">$1</span>');
     h = h.replace(/`([^`]+)`/g, '<span class="syn-code">`</span>$1<span class="syn-code">`</span>');
     // Image marker "!" gets its own color; the [alt](url) is colored by the
@@ -1415,11 +1425,13 @@ let isSource = false;
     document.documentElement.style.setProperty('--content-font-size', contentFontSize + 'px');
   }
   function zoomIn() {
+    if (imageViewer.isOpen()) { imageViewer.zoomIn(); return; }
     contentFontSize = Math.min(FONT_MAX, contentFontSize + FONT_STEP);
     applyFontSize();
     showSizeHint('font');
   }
   function zoomOut() {
+    if (imageViewer.isOpen()) { imageViewer.zoomOut(); return; }
     contentFontSize = Math.max(FONT_MIN, contentFontSize - FONT_STEP);
     applyFontSize();
     showSizeHint('font');
@@ -1931,7 +1943,7 @@ let isSource = false;
   let pasteLastTs = 0;
   async function pasteAsMarkdown() {
     const now = Date.now();
-    if (closing || now - pasteLastTs < 50) return;
+    if (closing || imageViewer.isOpen() || now - pasteLastTs < 50) return;
     pasteLastTs = now;
     // Snapshot the current selection synchronously *before* any async call.
     // pasteAsMarkdown is async (reads clipboard via the pywebbridge); during
@@ -1969,6 +1981,7 @@ let isSource = false;
       showStatus(t('Nothing to paste', '没有可粘贴的内容'), true);
       return;
     }
+    if (closing || imageViewer.isOpen()) return;
     if (quality) showPasteQualityWarning();
     if (isSource) {
       insertMdAtSourceCaret(md);
@@ -2270,15 +2283,280 @@ let isSource = false;
   document.getElementById('modalOverlay').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeModal();
   });
-  document.getElementById('imageLightbox').addEventListener('click', () => {
-    document.getElementById('imageLightbox').classList.remove('visible');
-  });
-  document.getElementById('content').addEventListener('click', (e) => {
-    const img = e.target.closest('img');
-    if (img) {
+  // BEGIN IMAGE VIEWER — also embedded verbatim in the standalone demo.
+  const imageViewer = (() => {
+    const box = document.getElementById('imageLightbox');
+    const stage = document.getElementById('imageStage');
+    const image = document.getElementById('imageLightboxImg');
+    const vector = document.getElementById('imageLightboxVector');
+    let surface = image;
+    const out = document.getElementById('imageZoomValue');
+    const status = document.getElementById('imageLoadStatus');
+    const minus = document.getElementById('imageZoomOut');
+    const plus = document.getElementById('imageZoomIn');
+    const fitButton = document.getElementById('imageFit');
+    const actualButton = document.getElementById('imageActual');
+    const closeButton = document.getElementById('imageClose');
+    let opened = false, ready = false, generation = 0;
+    let width = 0, height = 0, scale = 1, x = 0, y = 0, fitMode = true;
+    let previousFocus = null, selectionRanges = [], isolated = [];
+    let drag = null, dragged = false, gestureBase = null;
+    let pendingImage = null, hintTimer = null, loadTimer = null;
+    const hint = document.getElementById('imageZoomHint');
+    function showHint() {
+      clearTimeout(hintTimer);
+      hint.classList.remove('is-hidden');
+      hintTimer = setTimeout(() => {
+        if (opened) hint.classList.add('is-hidden');
+        hintTimer = null;
+      }, 5000);
+    }
+    const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
+    const fitScale = () => Math.min(1, Math.max(1, stage.clientWidth - 24) / width, Math.max(1, stage.clientHeight - 24) / height);
+    const minScale = () => Math.min(.1, fitScale());
+
+    function render() {
+      minus.disabled = !ready || scale <= minScale() + 1e-8;
+      plus.disabled = !ready || scale >= 8 - 1e-8;
+      fitButton.disabled = actualButton.disabled = !ready;
+      out.textContent = ready ? (scale < .01 ? (scale * 100).toFixed(1) : Math.round(scale * 100)) + '%' : '—';
+      if (!ready) return;
+      const maxX = Math.max(0, (width * scale - stage.clientWidth) / 2);
+      const maxY = Math.max(0, (height * scale - stage.clientHeight) / 2);
+      x = clamp(x, -maxX, maxX);
+      y = clamp(y, -maxY, maxY);
+      surface.style.width = width + 'px';
+      surface.style.height = height + 'px';
+      surface.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px) scale(${scale})`;
+      stage.classList.toggle('can-pan', maxX > 0 || maxY > 0);
+    }
+    function fit() {
+      if (!ready) return;
+      if (drag) { dragged = true; releaseDrag(); }
+      fitMode = true;
+      scale = fitScale(); x = y = 0;
+      render();
+    }
+    function zoom(next, clientX, clientY) {
+      if (!ready || !Number.isFinite(next)) return;
+      if (drag) { dragged = true; releaseDrag(); }
+      const rect = stage.getBoundingClientRect();
+      const anchorX = Number.isFinite(clientX) ? clientX - rect.left - rect.width / 2 : 0;
+      const anchorY = Number.isFinite(clientY) ? clientY - rect.top - rect.height / 2 : 0;
+      next = clamp(next, minScale(), 8);
+      const ratio = next / scale;
+      x = anchorX - (anchorX - x) * ratio;
+      y = anchorY - (anchorY - y) * ratio;
+      scale = next; fitMode = false;
+      render();
+    }
+    function releaseDrag() {
+      if (drag && stage.hasPointerCapture(drag.id)) stage.releasePointerCapture(drag.id);
+      drag = null;
+      stage.classList.remove('dragging');
+    }
+    function close() {
+      if (!opened) return;
+      opened = false; ready = false; generation++;
+      clearTimeout(hintTimer); hintTimer = null;
+      clearTimeout(loadTimer); loadTimer = null;
+      hint.classList.remove('is-hidden');
+      if (pendingImage) { pendingImage.onload = pendingImage.onerror = null; pendingImage.src = 'data:,'; pendingImage = null; }
+      vector.replaceChildren(); vector.style.display = 'none';
+      surface = image;
+      releaseDrag(); gestureBase = null;
+      box.classList.remove('visible');
+      box.setAttribute('aria-hidden', 'true');
+      image.removeAttribute('src');
+      image.style.visibility = 'hidden';
+      isolated.forEach(([node, inert]) => { node.inert = inert; });
+      isolated = [];
+      if (previousFocus && previousFocus.isConnected) previousFocus.focus({ preventScroll: true });
+      const selection = window.getSelection();
+      if (selection && selectionRanges.length) {
+        selection.removeAllRanges();
+        selectionRanges.forEach(range => { if (range.commonAncestorContainer.isConnected) selection.addRange(range); });
+      }
+      selectionRanges = []; previousFocus = null;
+    }
+    function open(source) {
+      if (opened) close();
+      const svg = source instanceof SVGElement ? source : null;
+      const src = svg ? null : source.currentSrc || source.src;
+      if (!src && !svg) return;
+      surface = svg ? vector : image;
+      previousFocus = document.activeElement;
+      const selection = window.getSelection();
+      selectionRanges = selection ? Array.from({ length: selection.rangeCount }, (_, i) => selection.getRangeAt(i).cloneRange()) : [];
+      isolated = Array.from(document.body.children).filter(node => node !== box && !['SCRIPT', 'STYLE', 'LINK'].includes(node.tagName)).map(node => [node, node.inert]);
+      isolated.forEach(([node]) => { node.inert = true; });
+      opened = true; ready = false; dragged = false; x = y = 0; scale = 1; fitMode = true;
+      const token = ++generation;
+      box.classList.add('visible');
+      box.setAttribute('aria-hidden', 'false');
+      box.setAttribute('aria-label', t('Image preview', '图片预览'));
+      const title = svg ? (svg.querySelector('title')?.textContent || t('Mermaid · Diagram preview', 'Mermaid · 流程图预览')) : (source.alt || t('Image preview', '图片预览'));
+      document.getElementById('imageLightboxTitle').textContent = title;
+      image.alt = title;
+      image.style.visibility = 'hidden';
+      status.textContent = t('Loading image…', '正在载入图片…');
+      fitButton.textContent = t('Fit', '适应窗口');
+      [[minus, t('Zoom out (−)', '缩小（−）')], [plus, t('Zoom in (+)', '放大（+）')], [closeButton, t('Close (Esc)', '关闭（Esc）')], [actualButton, t('Actual size (1)', '实际大小（1）')], [fitButton, t('Fit to window (0)', '适应窗口（0）')]].forEach(([button, label]) => { button.title = label; button.setAttribute('aria-label', label); });
+      box.querySelector('.image-toolbar').setAttribute('aria-label', t('Image zoom', '图片缩放'));
+      out.setAttribute('aria-label', t('Zoom relative to actual image size', '相对于图片实际尺寸的缩放比例'));
+      document.getElementById('imageZoomHint').textContent = t('Scroll or pinch to zoom · Drag to move', '滚轮或双指捏合缩放 · 拖动查看细节');
+      render(); closeButton.focus({ preventScroll: true });
+      if (svg) {
+        // Keep Mermaid's SVG/foreignObject text as vector DOM, not a bitmap.
+        // Prefix all IDs and references so the copy cannot steal document markers.
+        const copy = svg.cloneNode(true);
+        const viewBox = svg.viewBox?.baseVal;
+        const rect = svg.getBoundingClientRect();
+        width = viewBox?.width || rect.width || 800;
+        height = viewBox?.height || rect.height || 600;
+        const prefix = 'viewer-' + token + '-';
+        const ids = new Map();
+        [copy, ...copy.querySelectorAll('[id]')].forEach(node => {
+          if (node.id) { ids.set(node.id, prefix + node.id); node.id = prefix + node.id; }
+        });
+        const replaceRefs = value => {
+          for (const [oldId, newId] of ids) value = value.split('#' + oldId).join('#' + newId);
+          return value;
+        };
+        [copy, ...copy.querySelectorAll('*')].forEach(node => {
+          for (const attr of Array.from(node.attributes)) {
+            if (/^on/i.test(attr.name)) node.removeAttribute(attr.name);
+            else if (attr.name !== 'id') node.setAttribute(attr.name, replaceRefs(attr.value));
+          }
+          if (node.tagName.toLowerCase() === 'style') node.textContent = replaceRefs(node.textContent);
+        });
+        copy.querySelectorAll('script, a').forEach(node => {
+          if (node.tagName.toLowerCase() === 'a') node.replaceWith(...node.childNodes);
+          else node.remove();
+        });
+        copy.setAttribute('width', String(width)); copy.setAttribute('height', String(height));
+        copy.style.maxWidth = 'none'; copy.style.width = '100%'; copy.style.height = '100%';
+        vector.replaceChildren(copy); vector.style.display = 'block';
+        ready = true; status.textContent = ''; fit(); showHint();
+        return;
+      }
+      // Load directly into the visible element: no canvas, CORS fetch, or second
+      // request. This preserves SVG detail, GIF animation and signed image URLs.
+      const loader = image;
+      loader.referrerPolicy = source.referrerPolicy || '';
+      if (source.hasAttribute('crossorigin')) loader.crossOrigin = source.crossOrigin;
+      else loader.removeAttribute('crossorigin');
+      pendingImage = loader;
+      const settle = () => {
+        clearTimeout(loadTimer); loadTimer = null;
+        loader.onload = loader.onerror = null;
+        pendingImage = null;
+      };
+      loader.onload = () => {
+        if (!opened || token !== generation) return;
+        width = loader.naturalWidth; height = loader.naturalHeight;
+        if (!width || !height) { loader.onerror(); return; }
+        settle();
+        ready = true; image.style.visibility = 'visible';
+        status.textContent = ''; fit(); showHint();
+      };
+      loader.onerror = () => {
+        if (!opened || token !== generation) return;
+        settle(); image.removeAttribute('src');
+        ready = false;
+        status.textContent = t('Unable to load this image. Check the connection or link, then close and try again.', '图片载入失败，请检查网络或链接，关闭后重试。');
+        render();
+      };
+      loadTimer = setTimeout(() => { if (loader.onerror) loader.onerror(); }, 20000);
+      loader.src = src;
+    }
+    minus.addEventListener('click', () => zoom(scale / 1.25));
+    plus.addEventListener('click', () => zoom(scale * 1.25));
+    fitButton.addEventListener('click', fit);
+    actualButton.addEventListener('click', () => { x = y = 0; zoom(1); });
+    closeButton.addEventListener('click', close);
+    box.addEventListener('click', e => {
+      if (dragged) { dragged = false; return; }
+      if (e.target === box || e.target === stage) close();
+    });
+    box.addEventListener('wheel', e => {
+      if (!opened) return;
+      e.preventDefault(); e.stopPropagation();
+      if (gestureBase !== null) return; // WebKit can emit both gesture and wheel events.
+      const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? stage.clientHeight : 1);
+      zoom(scale * Math.exp(-clamp(delta, -240, 240) * (e.ctrlKey ? .01 : .002)), e.clientX, e.clientY);
+    }, { passive: false });
+    // Safari / WKWebView exposes native trackpad pinch as GestureEvent.
+    box.addEventListener('gesturestart', e => { e.preventDefault(); if (ready) gestureBase = scale; }, { passive: false });
+    box.addEventListener('gesturechange', e => {
       e.preventDefault();
-      document.getElementById('imageLightboxImg').src = img.src;
-      document.getElementById('imageLightbox').classList.add('visible');
+      if (gestureBase !== null) zoom(gestureBase * e.scale, e.clientX, e.clientY);
+    }, { passive: false });
+    box.addEventListener('gestureend', e => { e.preventDefault(); gestureBase = null; }, { passive: false });
+    stage.addEventListener('pointerdown', e => {
+      if (!ready || e.button !== 0 || e.isPrimary === false) return;
+      dragged = false;
+      if (e.target !== surface && !surface.contains(e.target)) return;
+      e.preventDefault();
+      drag = { id: e.pointerId, startX: e.clientX, startY: e.clientY, x, y };
+      stage.setPointerCapture(e.pointerId);
+    });
+    stage.addEventListener('pointermove', e => {
+      if (!drag || drag.id !== e.pointerId) return;
+      const dx = e.clientX - drag.startX, dy = e.clientY - drag.startY;
+      if (Math.abs(dx) + Math.abs(dy) > 4) dragged = true;
+      if (dragged) {
+        stage.classList.add('dragging');
+        x = drag.x + dx; y = drag.y + dy; render();
+      }
+    });
+    stage.addEventListener('pointerup', e => {
+      if (!drag || drag.id !== e.pointerId) return;
+      // Pointer capture retargets click to the stage: never mistake it for backdrop.
+      dragged = true; releaseDrag();
+    });
+    stage.addEventListener('pointercancel', () => { dragged = true; releaseDrag(); });
+    stage.addEventListener('lostpointercapture', () => { drag = null; stage.classList.remove('dragging'); });
+    window.addEventListener('blur', () => { releaseDrag(); gestureBase = null; });
+    window.addEventListener('resize', () => {
+      if (!opened || !ready) return;
+      if (fitMode) fit(); else { scale = clamp(scale, minScale(), 8); render(); }
+    });
+    // Capture before editor shortcuts: zoom keys must never modify the Markdown.
+    document.addEventListener('keydown', e => {
+      if (!opened) return;
+      e.stopImmediatePropagation();
+      if (e.key === 'Tab') {
+        const controls = Array.from(box.querySelectorAll('button:not(:disabled)'));
+        const current = controls.indexOf(document.activeElement);
+        const next = (current + (e.shiftKey ? -1 : 1) + controls.length) % controls.length;
+        e.preventDefault(); controls[next].focus(); return;
+      }
+      if (e.key === 'Escape') { e.preventDefault(); close(); }
+      else if (e.key === '+' || e.key === '=') { e.preventDefault(); zoom(scale * 1.25); }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); zoom(scale / 1.25); }
+      else if (e.key === '0') { e.preventDefault(); fit(); }
+      else if (e.key === '1') { e.preventDefault(); x = y = 0; zoom(1); }
+      else if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+        e.preventDefault();
+        if (ready) { x += e.key === 'ArrowLeft' ? 40 : e.key === 'ArrowRight' ? -40 : 0; y += e.key === 'ArrowUp' ? 40 : e.key === 'ArrowDown' ? -40 : 0; render(); }
+      } else if (!['Enter', ' ', 'Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) e.preventDefault();
+    }, true);
+    return { open, close, isOpen: () => opened, zoomIn: () => zoom(scale * 1.25), zoomOut: () => zoom(scale / 1.25), fit };
+  })();
+  // END IMAGE VIEWER
+  document.getElementById('content').addEventListener('click', (e) => {
+    const diagram = e.target.closest('.mermaid-diagram');
+    const diagramSvg = diagram && diagram.querySelector('svg');
+    if (!isSource && diagramSvg) {
+      e.preventDefault();
+      imageViewer.open(diagramSvg);
+      return;
+    }
+    const img = e.target.closest('img');
+    if (img && !isSource) {
+      e.preventDefault();
+      imageViewer.open(img);
       return;
     }
     // Non-editable rendered content (frontmatter, math, Mermaid, protected
@@ -2319,6 +2597,13 @@ let isSource = false;
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeModal();
+    // Rendered view: Enter inside a blockquote is taken over (see
+    // handleRenderedEnter). WKWebView's native behavior inserts <div>/<p>
+    // junk — and on an empty quote line a nested blockquote — which corrupts
+    // the markdown round trip (stray "> " blank lines in the source).
+    if (!isSource && e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      handleRenderedEnter(e);
+    }
     // Rendered view: Backspace/Delete on a block edge should merge adjacent
     // blocks (which is how a blank line between markdown paragraphs is
     // removed). WKWebView/Safari only moves the caret there, so without this
@@ -2452,6 +2737,135 @@ let isSource = false;
       else { r.selectNodeContents(blockEl); r.collapse(false); }
       sel.removeAllRanges();
       sel.addRange(r);
+    }
+  }
+
+  // Rendered view: Enter inside a blockquote. Taken over from the browser
+  // because WKWebView's native Enter inserts <div>/<p> junk inside the quote
+  // (and on an empty quote line a NESTED blockquote). Those junk nodes then
+  // round-trip through turndown as stray "> " blank lines: the preview grows
+  // blank lines the source never had, and the source gains "> " lines the
+  // user never typed. Standard editor behavior implemented here:
+  //   - Enter on a non-empty quote line      -> new empty line inside the quote
+  //   - Enter on the last (empty) quote line -> leave the quote: the empty
+  //     line is removed and a new <p> is inserted after the blockquote
+  // Content after the caret moves into the new line (native split semantics).
+  // Note: like the merge helpers above, the manual DOM edit replaces the
+  // native undo entry for this keystroke.
+  function handleRenderedEnter(e) {
+    const content = document.getElementById('content');
+    if (!content || !content.contains(e.target)) return;
+    if (e.isComposing || e.keyCode === 229) return;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed) return; // selection replacement stays native
+    const startNode = range.startContainer;
+    const startEl = startNode.nodeType === Node.ELEMENT_NODE ? startNode : startNode.parentElement;
+    if (!startEl) return;
+    if (startEl.closest('pre, code, table, .mermaid-diagram, .math-block, .frontmatter')) return;
+    const quote = startEl.closest('blockquote');
+    if (!quote || !content.contains(quote)) return;
+    // The line block the caret sits in (innermost block inside the quote).
+    let line = startEl.closest('p, h1, h2, h3, h4, h5, h6, li, div');
+    if (line && (!quote.contains(line) || line === quote)) return; // bare text in quote: stay native
+    if (!line) return;
+    e.preventDefault();
+    // Extract the content after the caret: it moves into the new line.
+    const tail = range.cloneRange();
+    tail.setEnd(line, line.childNodes.length);
+    const frag = tail.extractContents();
+    const isBlankLine = !line.textContent.trim() && !line.querySelector('img');
+    if (isBlankLine && !line.nextElementSibling) {
+      // Leave the quote: drop this empty trailing line, then insert a fresh
+      // paragraph after the blockquote. If the quote has no content left,
+      // remove it entirely.
+      const quoteParent = quote.parentNode;
+      const quoteRef = quote.nextSibling;
+      line.parentNode.removeChild(line);
+      if (!quote.textContent.trim() && !quote.querySelector('img')) quoteParent.removeChild(quote);
+      const p = document.createElement('p');
+      p.appendChild(document.createElement('br'));
+      quoteParent.insertBefore(p, quoteRef);
+      placeCaretInRenderedBlock(p, false);
+      markRenderedContentEdited();
+      return;
+    }
+    // Continuation: a new line inside the quote, carrying the tail content.
+    const tag = line.tagName === 'DIV' ? 'P' : line.tagName;
+    const newLine = document.createElement(tag);
+    if (frag.hasChildNodes()) newLine.appendChild(frag);
+    else newLine.appendChild(document.createElement('br'));
+    line.parentNode.insertBefore(newLine, line.nextSibling);
+    placeCaretInRenderedBlock(newLine, false);
+    markRenderedContentEdited();
+  }
+
+  // Prepares the rendered DOM for markdown conversion (turndown), fixing two
+  // WebKit editing artifacts that would otherwise corrupt the round trip:
+  //   1. Empty <p>/<div> line blocks (only a <br>) at the END of a blockquote
+  //      get written back as stray "> " blank lines in the source — and those
+  //      lines then re-render as even more blank quote lines in the preview.
+  //      Trailing empty quote lines carry no information, so they are dropped.
+  //      Empty lines in the MIDDLE of a quote are preserved ("> " separator).
+  //   2. Paragraph-like <div>s inside a blockquote are inline content for
+  //      turndown, which merges quote lines together; they become <p> first.
+  //      Known wrapper divs (.table-wrap, .mermaid-diagram, ...) are excluded.
+  // Also strips trailing <br> inside quote lines (WebKit keeps a placeholder
+  // <br> after typing into an empty line).
+  // Operates on a detached clone; the live preview DOM is never touched.
+  function normalizeRenderedHtmlForTurndown(html) {
+    try {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      tmp.querySelectorAll('blockquote').forEach((quote) => {
+        // Nested quotes may already have been removed together with their
+        // ancestor (forEach iterates a static snapshot) — guard each removal.
+        quote.querySelectorAll('blockquote').forEach((nested) => {
+          if (!nested.parentNode) return;
+          if (!nested.textContent.trim() && !nested.querySelector('img')) nested.parentNode.removeChild(nested);
+        });
+        if (!quote.parentNode) return; // removed with an ancestor quote
+        let child = quote.lastElementChild;
+        while (child) {
+          const prev = child.previousElementSibling;
+          const isLineBlock = child.tagName === 'P' || child.tagName === 'DIV';
+          const isEmptyLine = isLineBlock && !child.textContent.trim() &&
+            !child.querySelector('img') && !child.querySelector('table, pre, ul, ol');
+          if (isEmptyLine) child.parentNode.removeChild(child);
+          else break;
+          child = prev;
+        }
+        if (!quote.parentNode) return;
+        if (!quote.textContent.trim() && !quote.querySelector('img')) {
+          quote.parentNode.removeChild(quote);
+          return;
+        }
+      });
+      // Strip trailing <br> from every line block: WebKit keeps a placeholder
+      // <br> after typing into an empty line, and a <br> at the very end of a
+      // block never carries meaning — but it round-trips as a "  " (trailing
+      // spaces) junk line in the markdown source.
+      tmp.querySelectorAll('p, div').forEach((line) => {
+        if (!line.parentNode) return;
+        if (line.closest('.table-wrap, .mermaid-diagram, .math-block, .frontmatter')) return;
+        while (line.lastElementChild && line.lastElementChild.tagName === 'BR') {
+          line.removeChild(line.lastElementChild);
+        }
+      });
+      // Paragraph-like <div>s inside a blockquote are inline content for
+      // turndown, which merges quote lines together; they become <p> first.
+      tmp.querySelectorAll('blockquote div').forEach((d) => {
+        if (!d.parentNode) return;
+        if (d.closest('.table-wrap, .mermaid-diagram, .math-block, .frontmatter')) return;
+        if (d.querySelector('p, div, ul, ol, table, pre, blockquote, h1, h2, h3, h4, h5, h6, img, .mermaid-diagram, .math-block')) return;
+        const p = document.createElement('p');
+        while (d.firstChild) p.appendChild(d.firstChild);
+        d.parentNode.replaceChild(p, d);
+      });
+      return tmp.innerHTML;
+    } catch (err) {
+      return html;
     }
   }
 
@@ -3006,6 +3420,7 @@ let isSource = false;
   }
 
   async function toggleView() {
+    if (imageViewer.isOpen()) imageViewer.close();
     if (!isSource) {
       // rendered → source: capture cursor, convert, position
       const content = document.getElementById('content');
@@ -3013,7 +3428,9 @@ let isSource = false;
       if (renderedDirty) {
         // Only round-trip the DOM when the user actually edited the rendered view.
         await ensureTurndown();
-        const html = content.innerHTML;
+        // Normalize WebKit editing junk (empty trailing quote lines, quote
+        // <div>s) before converting, so the source stays clean.
+        const html = normalizeRenderedHtmlForTurndown(content.innerHTML);
         textarea.value = turndownService ? turndownService.turndown(html) : html;
       }
       // Otherwise the textarea already holds the pristine markdown.
@@ -3131,7 +3548,7 @@ let isSource = false;
   function getCurrentMarkdown() {
     if (isSource) return document.getElementById('textarea').value;
     if (!renderedDirty) return document.getElementById('textarea').value;
-    const html = document.getElementById('content').innerHTML;
+    const html = normalizeRenderedHtmlForTurndown(document.getElementById('content').innerHTML);
     return turndownService ? turndownService.turndown(html) : html;
   }
 
@@ -3535,15 +3952,26 @@ let isSource = false;
     }
   }
 
-  function showUpdateDownloadFailed(message) {
+  function showUpdateDownloadFailed(code, detail) {
+    // `code` comes from the Python updater: 'network' | 'incomplete' |
+    // 'mount' | 'verify' | 'unknown'. `detail` is an already-localized
+    // sentence from Python (may be empty) for the status bar.
+    const reasons = {
+      network: t('Network error. Check your connection.', '网络错误，请检查网络连接。'),
+      incomplete: t('The downloaded file is incomplete.', '下载的文件不完整。'),
+      mount: t('Failed to open the update image.', '安装包无法打开。'),
+      verify: t('The update failed the version check.', '更新未通过版本校验。'),
+      unknown: t('Unexpected error.', '未知错误。'),
+    };
+    const reason = reasons[code] || reasons.unknown;
     const el = document.getElementById('updateBubble');
     if (el) {
       el.classList.remove('downloading', 'installing');
       el.classList.add('visible');
       setUpdateProgress(0);
-      setUpdateBubbleText(t('Download failed. Check your connection.', '下载失败，请检查网络。'));
+      setUpdateBubbleText(t('Download failed: ', '下载失败：') + reason);
     }
-    showStatus(t('Update download failed: ', '更新下载失败：') + (message || t('unknown', '未知')), true);
+    showStatus(t('Update download failed: ', '更新下载失败：') + (detail || reason), true);
   }
 
   function showManualInstallGuide(dmgPath, message) {

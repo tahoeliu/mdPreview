@@ -42,7 +42,28 @@
   </div>
   <button class="update-bubble-close" onclick="dismissUpdateBubble(event)" title="Dismiss" aria-label="Dismiss">&times;</button>
 </div>
-<div class="image-lightbox" id="imageLightbox"><img id="imageLightboxImg" alt="Preview"></div>
+<div class="image-lightbox" id="imageLightbox" role="dialog" aria-modal="true" aria-label="Image preview" aria-hidden="true" tabindex="-1">
+  <header class="image-lightbox-header">
+    <span id="imageLightboxTitle">Image preview</span>
+    <button type="button" id="imageClose" class="image-icon-button" aria-label="Close" title="Close (Esc)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button>
+  </header>
+  <div class="image-stage" id="imageStage">
+    <img id="imageLightboxImg" alt="" draggable="false">
+    <div id="imageLightboxVector" class="image-vector" aria-label="Diagram preview"></div>
+    <span id="imageLoadStatus" class="image-load-status" role="status"></span>
+  </div>
+  <footer class="image-lightbox-footer">
+    <div class="image-toolbar" role="group" aria-label="Image zoom">
+      <button type="button" id="imageZoomOut" class="image-icon-button" aria-label="Zoom out" title="Zoom out (−)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12"/></svg></button>
+      <output id="imageZoomValue" aria-label="Zoom relative to actual image size">100%</output>
+      <button type="button" id="imageZoomIn" class="image-icon-button" aria-label="Zoom in" title="Zoom in (+)"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 12h12M12 6v12"/></svg></button>
+      <span class="image-toolbar-divider" aria-hidden="true"></span>
+      <button type="button" id="imageFit" class="image-text-button">Fit</button>
+      <button type="button" id="imageActual" class="image-text-button" title="Actual size (1)">1:1</button>
+    </div>
+    <span id="imageZoomHint" class="image-zoom-hint">Scroll or pinch to zoom · Drag to move</span>
+  </footer>
+</div>
 
 <div class="modal-overlay" id="modalOverlay">
   <div class="modal-box">

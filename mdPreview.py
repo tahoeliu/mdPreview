@@ -3054,17 +3054,19 @@ def _set_update_available(remote_version):
             except Exception:
                 pass
         AppHelper.callAfter(_update_menu)
-    # Auto-download in background to hidden staging dir
+    # Auto-download in background to hidden staging dir (silent by design:
+    # no progress UI). When staging succeeds the install bubble appears.
     def _bg_download():
-        update = _download_and_extract(remote_version)
-        if update:
+        result = _download_and_extract(remote_version)
+        if result and 'staging_app' in result:
             cfg = load_config()
-            cfg['pending_staging_app'] = update['staging_app']
+            cfg['pending_staging_app'] = result['staging_app']
             cfg['pending_update_version'] = remote_version
             cfg.pop('pending_update_dmg', None)
             save_config(cfg)
             if HAS_COCOA:
                 AppHelper.callAfter(lambda: _dispatch_js('showUpdateBubble()'))
+        # Failures stay silent: already logged inside _download_and_extract.
     threading.Thread(target=_bg_download, daemon=True).start()
 
 
@@ -3109,12 +3111,39 @@ def _show_update_alert(remote_version):
         return False
 
 
+def _staged_version_acceptable(staged_version, local_version):
+    """Decide whether a staged (downloaded) update may be installed.
+
+    Accept when the staged app's version is known and NOT older than the
+    installed one:
+      - staged >  local : normal update case
+      - staged == local : allowed — "re-download latest" reinstalls the same
+        version on purpose
+      - staged <  local : stale/corrupt staging — reject
+    """
+    if not staged_version:
+        return False
+    return not _is_newer(local_version, staged_version)
+
+
 def _download_and_extract(version, progress_callback=None, keep_dmg=False):
-    """Download DMG to staging dir, extract .app, return staging and DMG paths."""
+    """Download DMG to staging dir, extract .app.
+
+    Returns {'staging_app': ..., 'dmg_path': ...} on success, or
+    {'error': <code>, 'detail': <localized message>} on failure, where code is
+    one of: 'network' | 'incomplete' | 'mount' | 'verify' | 'unknown'.
+    The 'version' argument is informational only; acceptance is decided by
+    _staged_version_acceptable against the locally installed version.
+    """
     import urllib.request
+    import urllib.error
     import subprocess
     mount_dir = None
     dmg_path = None
+
+    def _fail(code, en, zh):
+        return {'error': code, 'detail': _t(en, zh)}
+
     try:
         os.makedirs(UPDATE_STAGING_DIR, exist_ok=True)
         dmg_path = os.path.join(UPDATE_STAGING_DIR, 'mdPreview.dmg')
@@ -3122,39 +3151,58 @@ def _download_and_extract(version, progress_callback=None, keep_dmg=False):
         req = urllib.request.Request(url, headers={'User-Agent': 'mdPreview'})
         if progress_callback:
             progress_callback(0)
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            total = int(resp.headers.get('Content-Length') or 0)
-            done = 0
-            last_percent = -1
-            with open(dmg_path, 'wb') as f:
-                while True:
-                    chunk = resp.read(65536)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    done += len(chunk)
-                    if progress_callback and total > 0:
-                        percent = min(100, int(done * 100 / total))
-                        if percent != last_percent:
-                            last_percent = percent
-                            progress_callback(percent)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                total = int(resp.headers.get('Content-Length') or 0)
+                done = 0
+                last_percent = -1
+                with open(dmg_path, 'wb') as f:
+                    while True:
+                        chunk = resp.read(65536)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        done += len(chunk)
+                        if progress_callback and total > 0:
+                            percent = min(100, int(done * 100 / total))
+                            if percent != last_percent:
+                                last_percent = percent
+                                progress_callback(percent)
+        except urllib.error.HTTPError as e:
+            return _fail('network', 'Network error (HTTP %d).' % e.code,
+                         '网络错误（HTTP %d）。' % e.code)
+        except urllib.error.URLError as e:
+            return _fail('network', 'Cannot reach GitHub (%s).' % e.reason,
+                         '无法连接 GitHub（%s）。' % e.reason)
+        except OSError as e:
+            # socket.timeout / connection reset / disk write errors
+            return _fail('network', 'Connection failed (%s).' % e,
+                         '网络连接失败（%s）。' % e)
         if progress_callback:
             progress_callback(100)
         if os.path.getsize(dmg_path) < 1000000:
             os.remove(dmg_path)
-            return None
+            dmg_path = None
+            return _fail('incomplete', 'The downloaded file is incomplete.',
+                         '下载的文件不完整。')
         # Mount and copy .app to staging
         mount_dir = tempfile.mkdtemp()
-        subprocess.run(
-            ['hdiutil', 'attach', '-nobrowse', '-mountpoint', mount_dir, dmg_path],
-            capture_output=True, check=True
-        )
+        try:
+            subprocess.run(
+                ['hdiutil', 'attach', '-nobrowse', '-mountpoint', mount_dir, dmg_path],
+                capture_output=True, check=True
+            )
+        except subprocess.CalledProcessError as e:
+            return _fail('mount', 'Failed to mount the update image (%s).'
+                         % (e.stderr.decode('utf-8', 'replace').strip()[:120] if e.stderr else 'hdiutil error'),
+                         '安装包挂载失败。')
         src_app = os.path.join(mount_dir, 'mdPreview.app')
         staging_app = os.path.join(UPDATE_STAGING_DIR, 'mdPreview.app')
         if os.path.exists(staging_app):
             shutil.rmtree(staging_app)
         shutil.copytree(src_app, staging_app)
-        # Integrity check: the staged app must carry the expected version.
+        # Integrity check: the staged app must carry a version that is not
+        # OLDER than the installed one (equal is fine: re-download/reinstall).
         plist = os.path.join(staging_app, 'Contents', 'Info.plist')
         staged_version = None
         try:
@@ -3163,14 +3211,16 @@ def _download_and_extract(version, progress_callback=None, keep_dmg=False):
                 staged_version = plistlib.load(pf).get('CFBundleShortVersionString')
         except Exception:
             pass
-        if not staged_version or (version and _is_newer(version, staged_version)):
-            log_exception('staged update failed version check: got %r want %r' % (staged_version, version))
+        if not _staged_version_acceptable(staged_version, _get_current_version()):
+            log_exception('staged update failed version check: got %r, installed %r'
+                          % (staged_version, _get_current_version()))
             shutil.rmtree(staging_app, ignore_errors=True)
-            return None
+            return _fail('verify', 'The downloaded update failed the version check.',
+                         '下载的更新未通过版本校验。')
         return {'staging_app': staging_app, 'dmg_path': dmg_path if keep_dmg else ''}
-    except Exception:
+    except Exception as e:
         log_exception('download and extract failed')
-        return None
+        return _fail('unknown', 'Unexpected error: %s' % e, '未知错误：%s' % e)
     finally:
         if mount_dir and os.path.exists(mount_dir):
             subprocess.run(['hdiutil', 'detach', mount_dir], capture_output=True)
@@ -3183,21 +3233,32 @@ def _download_and_extract(version, progress_callback=None, keep_dmg=False):
 
 
 def _manual_download_update_with_progress(version):
-    """Download a manually requested update and report progress to the UI."""
+    """Download a manually requested update and report progress to the UI.
+
+    Progress (percent) is shown in the top-right bubble. On failure the bubble
+    shows a short reason and a status bar entry carries the detailed cause.
+    On success the same "click to install" bubble as the auto-download path
+    is shown.
+    """
     def _progress(percent):
         if HAS_COCOA:
             AppHelper.callAfter(lambda p=percent: _dispatch_js(f'showUpdateDownloadProgress({int(p)})'))
 
-    update = _download_and_extract(version, progress_callback=_progress, keep_dmg=True)
-    if not update:
+    result = _download_and_extract(version, progress_callback=_progress, keep_dmg=True)
+    if not result or 'staging_app' not in result:
+        err = (result or {}).get('error', 'unknown')
+        detail = (result or {}).get('detail', '')
         if HAS_COCOA:
-            AppHelper.callAfter(lambda: _dispatch_js("showUpdateDownloadFailed('download failed')"))
-        return {'success': False, 'error': 'Download failed'}
+            detail_js = json.dumps(detail or '')
+            AppHelper.callAfter(
+                lambda c=err, d=detail_js: _dispatch_js(f"showUpdateDownloadFailed('{c}', {d})")
+            )
+        return {'success': False, 'error': err, 'detail': detail}
 
     cfg = load_config()
-    cfg['pending_staging_app'] = update['staging_app']
+    cfg['pending_staging_app'] = result['staging_app']
     cfg['pending_update_version'] = version
-    cfg['pending_update_dmg'] = update.get('dmg_path', '')
+    cfg['pending_update_dmg'] = result.get('dmg_path', '')
     save_config(cfg)
     if HAS_COCOA:
         AppHelper.callAfter(lambda: _dispatch_js('showUpdateBubble()'))
@@ -3222,10 +3283,12 @@ def _schedule_startup_update_check():
             time.sleep(STARTUP_UPDATE_DELAY)
             if not _should_check_update():
                 return
-            _mark_update_checked()
             remote = _fetch_latest_version()
             if not remote:
+                # Network failure: do NOT consume the 7-day interval — the
+                # next launch retries (one lightweight request is cheap).
                 return
+            _mark_update_checked()
             local = _get_current_version()
             if _is_newer(remote, local):
                 _set_update_available(remote)
@@ -3238,7 +3301,12 @@ def _schedule_startup_update_check():
 
 
 def _manual_check_up_to_date():
-    """Alert for manual check when already on latest version."""
+    """Alert for manual check when already on latest version.
+
+    Also offers "Re-download Latest": reinstalls the current latest release
+    with the download progress shown in the update bubble (useful to repair
+    an installation or pick up a re-uploaded DMG).
+    """
     if not HAS_COCOA:
         return
     try:
@@ -3246,8 +3314,13 @@ def _manual_check_up_to_date():
         alert = NSAlert.alloc().init()
         alert.setMessageText_(_t("You're up to date!", "已是最新版本！"))
         alert.setInformativeText_(_t(f'mdPreview {local} is the latest version.', f'mdPreview {local} 已是最新版本。'))
+        alert.addButtonWithTitle_(_t('Re-download Latest', '重新下载最新版'))
         alert.addButtonWithTitle_(_t('OK', '好'))
-        alert.runModal()
+        response = alert.runModal()
+        if response == 1000:  # Re-download Latest
+            version_arg = json.dumps(local)
+            AppHelper.callAfter(lambda: _dispatch_js("showUpdateDownloadProgress(0)"))
+            AppHelper.callAfter(lambda: _dispatch_js(f"window.pywebview.api.download_update_with_progress({version_arg})"))
     except Exception:
         pass
 

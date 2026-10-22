@@ -180,9 +180,45 @@
   .frontmatter-toggle { float: right; border: none; background: transparent; color: #888; cursor: pointer; font-size: 12px; }
   .frontmatter.collapsed { max-height: 42px; overflow: hidden; }
   .mermaid-error { margin: 16px 0; padding: 12px 14px; border: 1px solid #f0c0c0; background: #fff5f5; color: #b00020; border-radius: 8px; font-family: "SF Mono", "Menlo", monospace; font-size: 13px; white-space: pre-wrap; }
-  .image-lightbox { display: none; position: fixed; inset: 0; z-index: 1200; background: rgba(0,0,0,0.82); align-items: center; justify-content: center; padding: 32px; }
-  .image-lightbox.visible { display: flex; }
-  .image-lightbox img { max-width: 96vw; max-height: 90vh; border-radius: 8px; box-shadow: 0 10px 48px rgba(0,0,0,0.4); }
+  /* Image viewer: layout is isolated from document typography and page zoom. */
+  .image-lightbox { display: none; position: fixed; inset: 0; z-index: 1500; background: rgba(246,246,248,.96); color: #242426; font: 13px -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; user-select: none; -webkit-user-select: none; touch-action: none; overscroll-behavior: contain; -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); }
+  .image-lightbox.visible { display: block; }
+  .image-lightbox-header { position: absolute; inset: 0 0 auto; height: 64px; padding: 0 24px; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+  #imageLightboxTitle { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .image-stage { position: absolute; inset: 64px 24px 112px; overflow: hidden; border-radius: 10px; touch-action: none; }
+  .image-stage img { position: absolute; left: 50%; top: 50%; max-width: none; max-height: none; margin: 0; border-radius: 4px; box-shadow: 0 4px 24px rgba(0,0,0,.08); transform-origin: center; -webkit-user-drag: none; visibility: hidden; }
+  .image-vector { display: none; position: absolute; left: 50%; top: 50%; transform-origin: center; background: #fff; border-radius: 8px; box-shadow: 0 4px 24px rgba(0,0,0,.06); overflow: hidden; }
+  .image-vector > svg { display: block; width: 100% !important; height: 100% !important; max-width: none !important; }
+  .image-vector > svg * { pointer-events: none; }
+  .markdown .mermaid-diagram { cursor: zoom-in; }
+  .markdown .mermaid-diagram:focus-visible { outline: 2px solid #007aff; outline-offset: 4px; border-radius: 8px; }
+  .image-stage.can-pan { cursor: grab; }
+  .image-stage.dragging { cursor: grabbing; }
+  .image-load-status { position: absolute; top: 50%; width: 100%; text-align: center; color: #737378; pointer-events: none; }
+  .image-lightbox-footer { position: absolute; inset: auto 0 0; height: 100px; display: flex; align-items: center; flex-direction: column; gap: 12px; }
+  .image-toolbar { display: flex; align-items: center; gap: 2px; padding: 5px; border: 1px solid rgba(0,0,0,.08); border-radius: 15px; background: rgba(255,255,255,.86); box-shadow: 0 6px 24px rgba(0,0,0,.07), 0 1px 3px rgba(0,0,0,.03); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); }
+  .image-lightbox button { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; height: 36px; min-width: 36px; padding: 0; border: none; border-radius: 9px; background: transparent; color: inherit; font: inherit; cursor: pointer; transition: background .12s ease; }
+  .image-lightbox button:hover:not(:disabled) { background: rgba(0,0,0,.055); }
+  .image-lightbox button:active:not(:disabled) { background: rgba(0,0,0,.10); }
+  .image-lightbox button:focus-visible { outline: 2px solid #007aff; outline-offset: 2px; }
+  .image-lightbox button:disabled { opacity: .28; cursor: default; }
+  .image-lightbox button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; }
+  .image-lightbox .image-text-button { padding: 0 12px; font-size: 12px; font-weight: 500; }
+  #imageZoomValue { min-width: 58px; text-align: center; font-size: 12px; font-variant-numeric: tabular-nums; }
+  .image-toolbar-divider { height: 18px; width: 1px; background: rgba(0,0,0,.09); margin: 0 6px; }
+  .image-zoom-hint { font-size: 11px; color: #86868b; opacity: 1; transition: opacity .6s ease; pointer-events: none; }
+  .image-zoom-hint.is-hidden { opacity: 0; }
+  .markdown img { cursor: zoom-in; }
+  @media (max-width: 480px) { .image-lightbox-header { padding: 0 14px; } .image-stage { left: 12px; right: 12px; } .image-lightbox button { min-width: 38px; height: 40px; } .image-lightbox .image-text-button { padding: 0 9px; } }
+  @media (prefers-reduced-motion: reduce) { .image-lightbox button, .image-zoom-hint { transition: none; } }
+  @media (prefers-color-scheme: dark) {
+    .image-lightbox { background: rgba(29,29,31,.97); color: #f5f5f7; }
+    .image-toolbar { background: rgba(54,54,57,.92); border-color: rgba(255,255,255,.10); }
+    .image-lightbox button:hover:not(:disabled) { background: rgba(255,255,255,.08); }
+    .image-lightbox button:active:not(:disabled) { background: rgba(255,255,255,.14); }
+    .image-toolbar-divider { background: rgba(255,255,255,.14); }
+    .image-zoom-hint, .image-load-status { color: #a1a1a6; }
+  }
   @media (max-width: 799px) { body:not(.has-toc) .page { margin: 0 auto; max-width: var(--page-width, 720px); } }
   /* ── Print ── */
   @media print {
