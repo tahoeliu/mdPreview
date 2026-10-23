@@ -13,6 +13,7 @@ import shutil
 import hashlib
 import logging
 import webview
+from capture_i18n import is_chinese_locale
 
 _START_T0 = time.time()  # cold-start profiling
 
@@ -47,8 +48,7 @@ _setup_logging()
 
 
 def _is_chinese_locale():
-    lang = os.environ.get('LANG', '') or os.environ.get('LC_ALL', '')
-    return lang.lower().startswith('zh')
+    return is_chinese_locale()
 
 
 def _t(en, zh):
@@ -1508,6 +1508,26 @@ _update_menu_item = None
 _available_update_version = None
 _properties_panel_ref = None
 _about_window_ref = None
+_capture_controller = None
+
+
+def _capture_context():
+    with _state_lock:
+        for identifier, api in list(_window_apis.items()):
+            if identifier in _windows_js_ready and api.window:
+                return api.window, api
+    return None
+
+
+def _ensure_capture_controller():
+    global _capture_controller
+    if _capture_controller is None:
+        from capture_controller import CaptureController
+        _capture_controller = CaptureController(
+            os.path.join(APP_SUPPORT_DIR, 'capture.json'), _capture_context,
+            _QUIT_REQUESTED.is_set)
+    return _capture_controller
+
 _window_count = [0]  # list-based counter so it stays mutable inside ObjC callbacks
 # Windows that were "closed" by the user but kept alive hidden so the app can
 # stay resident without a cold start. Each entry is id(window) -> window.
@@ -2132,6 +2152,11 @@ if HAS_COCOA:
                 update_item.setTarget_(_view_menu_handler)
                 app_menu.insertItem_atIndex_(update_item, 1)
                 _update_menu_item = update_item
+                capture_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
+                    _t('Config Paste as .MD…', '粘贴为MD配置…'), 'showCapturePanel:', ',')
+                capture_item.setTarget_(_view_menu_handler)
+                app_menu.insertItem_atIndex_(capture_item, 2)
+                _ensure_capture_controller()
                 _app_menu_setup = True
 
             # ── View menu: Increase/Decrease Width ──
@@ -2501,6 +2526,9 @@ if HAS_COCOA:
     from Foundation import NSObject
 
     class ViewMenuHandler(NSObject):
+        def showCapturePanel_(self, sender):
+            _ensure_capture_controller().show()
+
         def toggleView_(self, sender):
             _dispatch_js('toggleView()')
 
@@ -2543,6 +2571,9 @@ if HAS_COCOA:
 
         def closeWindow_(self, sender):
             global _properties_panel_ref, _about_window_ref
+            from capture_panel import close_capture_config_if_active
+            if close_capture_config_if_active():
+                return
             try:
                 if _properties_panel_ref and _properties_panel_ref.isVisible():
                     _properties_panel_ref.close()
@@ -2722,6 +2753,11 @@ if HAS_COCOA:
 
             def applicationShouldTerminate_(self, application):
                 _QUIT_REQUESTED.set()
+                if _capture_controller:
+                    try:
+                        _capture_controller.close()
+                    except Exception:
+                        log_exception('capture hotkey cleanup failed')
                 return 1  # NSTerminateNow; dirty windows are handled by close events.
 
             def applicationShouldHandleReopen_hasVisibleWindows_(self, application, flag):

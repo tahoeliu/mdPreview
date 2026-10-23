@@ -65,16 +65,24 @@ let isSource = false;
     });
   }
 
+  const _scriptPromises = new Map();
   function _loadScript(src) {
-    return new Promise((resolve, reject) => {
+    if (_scriptPromises.has(src)) return _scriptPromises.get(src);
+    const promise = new Promise((resolve, reject) => {
       const existing = document.querySelector('script[src="' + src + '"]');
-      if (existing) { resolve(); return; }
-      const s = document.createElement('script');
-      s.src = src;
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('Failed to load ' + src));
-      document.head.appendChild(s);
+      const s = existing || document.createElement('script');
+      if (s.dataset.loaded === 'true') { resolve(); return; }
+      let timer;
+      const loaded = () => { clearTimeout(timer); s.dataset.loaded = 'true'; resolve(); };
+      const failed = () => { clearTimeout(timer); s.remove(); reject(new Error('Failed to load ' + src)); };
+      s.addEventListener('load', loaded, { once: true });
+      s.addEventListener('error', failed, { once: true });
+      timer = setTimeout(failed, 10000);
+      if (!existing) { s.src = src; document.head.appendChild(s); }
     });
+    _scriptPromises.set(src, promise);
+    promise.catch(() => _scriptPromises.delete(src));
+    return promise;
   }
 
   function _initTurndown() {
@@ -171,10 +179,16 @@ let isSource = false;
     });
   }
 
+  let _turndownLoadingPromise = null;
   function ensureTurndown() {
-    if (_turndownLoaded) return Promise.resolve();
-    if (typeof TurndownService !== 'undefined') { _initTurndown(); _turndownLoaded = true; return Promise.resolve(); }
-    return _loadScript('turndown.js').then(() => { _initTurndown(); _turndownLoaded = true; });
+    if (turndownService) return Promise.resolve();
+    if (_turndownLoadingPromise) return _turndownLoadingPromise;
+    _turndownLoadingPromise = ensureLib('turndown.js', 'TurndownService').then(() => {
+      _initTurndown();
+      if (!turndownService) throw new Error('Markdown converter unavailable');
+      _turndownLoaded = true;
+    }).finally(() => { _turndownLoadingPromise = null; });
+    return _turndownLoadingPromise;
   }
 
   function getMermaidTheme() {
@@ -1940,6 +1954,20 @@ let isSource = false;
   // beforeinput with inputType "insertFromPaste" (menu-driven paste only fires
   // the latter). Both call pasteAsMarkdown; a short time window collapses them
   // into one while still allowing genuinely separate pastes.
+  async function convertClipboardToMarkdown(clip) {
+    if (!clip || clip.format === 'none') return { markdown: '', quality: null };
+    await ensureTurndown();
+    let md = clip.content || '';
+    let quality = null;
+    if (clip.format === 'html') {
+      const cleaned = normalizePastedHtml(clip.content);
+      md = turndownService ? turndownService.turndown(cleaned) : cleaned;
+      quality = checkPasteQuality(clip.content, md);
+    }
+    return { markdown: md, quality: quality };
+  }
+  // Shared conversion only: never touches document contents, selection or modal state.
+  window.convertClipboardToMarkdown = convertClipboardToMarkdown;
   let pasteLastTs = 0;
   async function pasteAsMarkdown() {
     const now = Date.now();
@@ -1966,17 +1994,9 @@ let isSource = false;
       showStatus(t('Clipboard is empty or unreadable', '剪贴板为空或无法读取'), true);
       return;
     }
-    let md;
-    let quality = null;
-    if (clip.format === 'markdown') {
-      md = clip.content;
-    } else if (clip.format === 'html') {
-      const cleaned = normalizePastedHtml(clip.content);
-      md = turndownService ? turndownService.turndown(cleaned) : cleaned;
-      quality = checkPasteQuality(clip.content, md);
-    } else {
-      md = clip.content;
-    }
+    const converted = await convertClipboardToMarkdown(clip);
+    const md = converted.markdown;
+    const quality = converted.quality;
     if (!md || !md.trim()) {
       showStatus(t('Nothing to paste', '没有可粘贴的内容'), true);
       return;
@@ -2303,16 +2323,33 @@ let isSource = false;
     let drag = null, dragged = false, gestureBase = null;
     let pendingImage = null, hintTimer = null, loadTimer = null;
     const hint = document.getElementById('imageZoomHint');
-    function showHint() {
-      clearTimeout(hintTimer);
-      hint.classList.remove('is-hidden');
-      hintTimer = setTimeout(() => {
-        if (opened) hint.classList.add('is-hidden');
-        hintTimer = null;
-      }, 5000);
+    let hintDeadline = 0;
+    function hideHint() {
+      clearTimeout(hintTimer); hintTimer = null;
+      hint.hidden = true;
+      hint.classList.remove('is-showing');
+      hintDeadline = 0;
     }
+    function showHint() {
+      hideHint();
+      hint.hidden = false;
+      void hint.offsetWidth; // Restart the CSS clock on each opening, even a rapid reopen.
+      hint.classList.add('is-showing');
+      const duration = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 5000 : 5600;
+      hintDeadline = Date.now() + duration;
+      const token = generation;
+      // CSS handles the five-second hold and fade independently of image loading.
+      // The timer also removes the element if WebKit misses animationend.
+      hintTimer = setTimeout(() => { if (opened && token === generation) hideHint(); }, duration);
+    }
+    hint.addEventListener('animationend', e => {
+      if (e.animationName === 'image-viewer-hint-dismiss' && hintDeadline && Date.now() >= hintDeadline - 50) hideHint();
+    });
+    const syncHint = () => { if (hintDeadline && Date.now() >= hintDeadline) hideHint(); };
+    document.addEventListener('visibilitychange', syncHint);
+    window.addEventListener('focus', syncHint);
     const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
-    const fitScale = () => Math.min(1, Math.max(1, stage.clientWidth - 24) / width, Math.max(1, stage.clientHeight - 24) / height);
+    const fitScale = () => Math.min(1, Math.max(1, stage.clientWidth) / width, Math.max(1, stage.clientHeight) / height);
     const minScale = () => Math.min(.1, fitScale());
 
     function render() {
@@ -2358,9 +2395,8 @@ let isSource = false;
     function close() {
       if (!opened) return;
       opened = false; ready = false; generation++;
-      clearTimeout(hintTimer); hintTimer = null;
+      hideHint();
       clearTimeout(loadTimer); loadTimer = null;
-      hint.classList.remove('is-hidden');
       if (pendingImage) { pendingImage.onload = pendingImage.onerror = null; pendingImage.src = 'data:,'; pendingImage = null; }
       vector.replaceChildren(); vector.style.display = 'none';
       surface = image;
@@ -2396,7 +2432,7 @@ let isSource = false;
       box.setAttribute('aria-hidden', 'false');
       box.setAttribute('aria-label', t('Image preview', '图片预览'));
       const title = svg ? (svg.querySelector('title')?.textContent || t('Mermaid · Diagram preview', 'Mermaid · 流程图预览')) : (source.alt || t('Image preview', '图片预览'));
-      document.getElementById('imageLightboxTitle').textContent = title;
+      box.setAttribute('aria-label', title);
       image.alt = title;
       image.style.visibility = 'hidden';
       status.textContent = t('Loading image…', '正在载入图片…');
@@ -2405,6 +2441,7 @@ let isSource = false;
       box.querySelector('.image-toolbar').setAttribute('aria-label', t('Image zoom', '图片缩放'));
       out.setAttribute('aria-label', t('Zoom relative to actual image size', '相对于图片实际尺寸的缩放比例'));
       document.getElementById('imageZoomHint').textContent = t('Scroll or pinch to zoom · Drag to move', '滚轮或双指捏合缩放 · 拖动查看细节');
+      showHint();
       render(); closeButton.focus({ preventScroll: true });
       if (svg) {
         // Keep Mermaid's SVG/foreignObject text as vector DOM, not a bitmap.
@@ -2437,7 +2474,7 @@ let isSource = false;
         copy.setAttribute('width', String(width)); copy.setAttribute('height', String(height));
         copy.style.maxWidth = 'none'; copy.style.width = '100%'; copy.style.height = '100%';
         vector.replaceChildren(copy); vector.style.display = 'block';
-        ready = true; status.textContent = ''; fit(); showHint();
+        ready = true; status.textContent = ''; fit();
         return;
       }
       // Load directly into the visible element: no canvas, CORS fetch, or second
@@ -2458,7 +2495,7 @@ let isSource = false;
         if (!width || !height) { loader.onerror(); return; }
         settle();
         ready = true; image.style.visibility = 'visible';
-        status.textContent = ''; fit(); showHint();
+        status.textContent = ''; fit();
       };
       loader.onerror = () => {
         if (!opened || token !== generation) return;
