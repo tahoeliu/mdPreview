@@ -1223,7 +1223,7 @@ class MarkdownAPI:
         try:
             if fmt == 'pdf' and ((page or {}).get('options') or self.get_output_settings()).get('pdf_layout', 'paged') != 'continuous':
                 return self._export_paged_pdf(path, page)
-            if fmt == 'pdf':
+            if fmt in ('pdf', 'png'):
                 from PyObjCTools import AppHelper
                 from WebKit import WKPDFConfiguration
                 from mdpreview_core.export.print_engine import Completion
@@ -1250,7 +1250,7 @@ class MarkdownAPI:
                             h = int(page.get('height') or 0)
                             if w > 0 and h > 0:
                                 from AppKit import NSMakeRect
-                                config.setRect_(NSMakeRect(0, 0, w, h))
+                                config.setRect_(NSMakeRect(float(page.get('x') or 0), float(page.get('y') or 0), w, h))
 
                         def handler(data, error):
                             try:
@@ -1279,6 +1279,11 @@ class MarkdownAPI:
                         return completed.result
                     if not result['success']:
                         return result
+                    if fmt == 'png':
+                        from mdpreview_core.export import snapshot
+                        paths = snapshot.render(result_holder['data'], path)
+                        _remember_save_directory(path)
+                        return {'success': True, 'path': paths[0], 'paths': paths, 'split': len(paths) > 1}
                     with tempfile.TemporaryDirectory() as directory:
                         source = os.path.join(directory, 'source.pdf')
                         converted = os.path.join(directory, 'continuous.pdf')
@@ -1295,7 +1300,7 @@ class MarkdownAPI:
                     self._output_completion = None
                     self._output_lock.release()
 
-            if fmt in ('docx', 'png'):
+            if fmt == 'docx':
                 # JS produces base64 payloads for these binary formats.
                 import base64
                 try:

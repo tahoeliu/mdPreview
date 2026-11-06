@@ -1948,65 +1948,6 @@ let isSource = false;
     }
   }
 
-  // html2canvas 1.4.1 cannot parse modern CSS color() functions (e.g.
-  // `color(display-p3 ...)` produced when a CSS variable expands into a color
-  // value). Before rendering we normalize every color property in the clone
-  // back to rgb/rgba so export never fails on it.
-  function convertColorFunction(v) {
-    const m = v.match(/color\(\s*([a-z0-9-]+)\s+([\d.]+%?)\s+([\d.]+%?)\s+([\d.]+%?)(?:\s*\/\s*([\d.]+%?))?\s*\)/);
-    if (!m) return '#000000';
-    const toFrac = (s) => s.endsWith('%') ? parseFloat(s) / 100 : parseFloat(s);
-    const r = Math.max(0, Math.min(255, Math.round(toFrac(m[2]) * 255)));
-    const g = Math.max(0, Math.min(255, Math.round(toFrac(m[3]) * 255)));
-    const b = Math.max(0, Math.min(255, Math.round(toFrac(m[4]) * 255)));
-    const a = m[5] !== undefined ? toFrac(m[5]) : 1;
-    return a >= 1 ? 'rgb(' + r + ',' + g + ',' + b + ')' : 'rgba(' + r + ',' + g + ',' + b + ',' + a + ')';
-  }
-
-  function sanitizeCloneColors(doc) {
-    const props = [
-      'color', 'backgroundColor', 'borderTopColor', 'borderRightColor',
-      'borderBottomColor', 'borderLeftColor', 'borderBlockStartColor',
-      'borderBlockEndColor', 'borderInlineStartColor', 'borderInlineEndColor',
-      'outlineColor', 'textDecorationColor', 'caretColor', 'columnRuleColor',
-      'textEmphasisColor', 'WebkitTextFillColor', 'WebkitTextStrokeColor',
-      'boxShadow', 'textShadow',
-    ];
-    doc.querySelectorAll('*').forEach(el => {
-      const cs = getComputedStyle(el);
-      for (const p of props) {
-        const v = cs.getPropertyValue(p);
-        if (v && v.indexOf('color(') >= 0) {
-          el.style.setProperty(p, convertColorFunction(v));
-        }
-      }
-    });
-  }
-
-  // PNG long image via html2canvas: render the whole content area to a bitmap.
-  async function buildPng() {
-    try {
-      if (typeof html2canvas === 'undefined') {
-        showStatus(t('PNG export is not ready yet', 'PNG 导出功能尚未就绪'), true);
-        return null;
-      }
-      const contentEl = document.getElementById('content');
-      if (!contentEl) return null;
-      showStatus(t('Rendering image…', '正在渲染图片…'));
-      const canvas = await html2canvas(contentEl, {
-        backgroundColor: '#ffffff',
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        onclone: sanitizeCloneColors,
-      });
-      return canvas.toDataURL('image/png');
-    } catch (err) {
-      showStatus(t('PNG export failed: ', 'PNG 导出失败：') + (err && err.message ? err.message : err), true);
-      return null;
-    }
-  }
-
   // ── Export As (File menu): one native panel with a format popup ──
   async function exportAs() {
     if (!Bridge.ready()) {
@@ -2018,7 +1959,7 @@ let isSource = false;
       if (!res || !res.success) return;
       const writeRes = await exportAsWrite(res.path, res.format);
       if (writeRes && writeRes.success) {
-        showStatus(writeRes.split ? t('Exported in multiple pages/files', '已分段导出多页或多个文件') : t('Exported', '已导出'));
+        showStatus(writeRes.paths ? t('Exported: ', '已导出：') + writeRes.paths.map(p => p.split('/').pop()).join('、') : (writeRes.split ? t('Exported in multiple pages/files', '已分段导出多页或多个文件') : t('Exported', '已导出')));
       } else {
         showStatus(t('Export failed: ', '导出失败：') + ((writeRes && writeRes.error) || ''), true);
       }
@@ -2048,12 +1989,14 @@ let isSource = false;
       else if (format === 'docx') {
         await ensureLib('html-docx-js.js', 'htmlDocx');
         content = await buildDocx();
-      } else if (format === 'png') {
-        await ensureLib('html2canvas.min.js', 'html2canvas');
-        content = await buildPng();
       }
       if (content === null) return { success: false, error: 'conversion-failed' };
       let pageSize = null;
+      if (format === 'png') {
+        const el = document.querySelector('.page');
+        const box = el.getBoundingClientRect();
+        pageSize = { x: box.left + window.scrollX, y: box.top + window.scrollY, width: Math.ceil(box.width), height: Math.ceil(el.scrollHeight), options };
+      }
       if (format === 'pdf') {
         // createPDF defaults to the visible viewport; pass the full document
         // size so everything is captured. +100px keeps the last line off the

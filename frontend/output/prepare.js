@@ -53,7 +53,13 @@ window.OutputPrep = (() => {
         }
         await Promise.all([...document.images].map(image => image.decode ? image.decode().catch(() => {}) : Promise.resolve()));
         if (document.fonts) await document.fonts.ready;
-        await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+        await new Promise(resolve => {
+          let frame, done = false;
+          const finish = () => { if (done) return; done = true; clearTimeout(timer); cancelAnimationFrame(frame); void document.body.offsetHeight; resolve(); };
+          // 被遮挡的 WKWebView 可能暂停动画帧；布局就绪不应无限阻塞原生输出。
+          const timer = setTimeout(finish, 500);
+          frame = requestAnimationFrame(() => { frame = requestAnimationFrame(finish); });
+        });
         return restore;
       } catch (error) { restore(); throw error; }
     }

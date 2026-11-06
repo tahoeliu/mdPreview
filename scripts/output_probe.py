@@ -32,6 +32,7 @@ def options():
     parser.add_argument('--font-size', default=None)
     parser.add_argument('--json', action='store_true')
     parser.add_argument('--native-engine', action='store_true')
+    parser.add_argument('--snapshot', action='store_true')
     args = parser.parse_args()
     args.out = args.out.resolve()
     if not args.out.is_relative_to(WORKSPACE.resolve()):
@@ -209,6 +210,8 @@ def run(args):
                 setup = ('window.pywebview={api:{set_dirty:()=>true,store_content:()=>({success:true}),startup_ready:()=>true}};'
                          'await window.loadContent(' + json.dumps(str(source)) + ','
                          + json.dumps(source.read_text(encoding='utf-8')) + ',720,false,true);')
+            if args.snapshot:
+                setup += "await OutputPrep.prepare('png',{png_width:'mobile'});"
             font = json.dumps(args.font_size)
             script = '''(async()=>{try{
                 SETUP
@@ -256,6 +259,9 @@ def run(args):
 
         def doPrint(self):
             try:
+                if args.snapshot:
+                    self.wv.evaluateJavaScript_completionHandler_("JSON.stringify((()=>{const e=document.querySelector('.page'),r=e.getBoundingClientRect();return {x:r.left+scrollX,y:r.top+scrollY,w:r.width,h:e.scrollHeight}})())", self.snapshotSize)
+                    return
                 if args.native_engine:
                     sys.path.insert(0, str(ROOT))
                     from mdpreview_core.export import print_engine
@@ -282,6 +288,28 @@ def run(args):
             except Exception as error:
                 finish(error)
 
+        @objc.python_method
+        def snapshotSize(self, result, error):
+            if error:
+                finish(error); return
+            box = json.loads(result)
+            config = WebKit.WKPDFConfiguration.alloc().init()
+            config.setRect_(Foundation.NSMakeRect(box['x'],box['y'],box['w'],box['h']))
+            self.wv.createPDFWithConfiguration_completionHandler_(config,self.snapshotDone)
+
+        @objc.python_method
+        def snapshotDone(self, data, error):
+            if error:
+                finish(error); return
+            try:
+                sys.path.insert(0,str(ROOT))
+                from mdpreview_core.export.snapshot import render
+                paths = render(bytes(data),args.out)
+                state['result'] = {'paths':paths,'render':state['render'],'engine':'WKWebView createPDF + CoreGraphics PNG 2x'}
+                finish()
+            except Exception as exc:
+                finish(exc)
+
         def done_success_ctx_(self, operation, success, context):
             if not success:
                 finish('NSPrintOperation 返回失败')
@@ -301,7 +329,7 @@ def run(args):
     appearance = AppKit.NSAppearanceNameDarkAqua if args.dark else AppKit.NSAppearanceNameAqua
     app.setAppearance_(AppKit.NSAppearance.appearanceNamed_(appearance))
     window = AppKit.NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
-        Foundation.NSMakeRect(-3000, 0, 1000, 800), AppKit.NSWindowStyleMaskBorderless,
+        Foundation.NSMakeRect(0 if args.snapshot else -3000, 0, 1000, 800), AppKit.NSWindowStyleMaskBorderless,
         AppKit.NSBackingStoreBuffered, False)
     config = WebKit.WKWebViewConfiguration.alloc().init()
     config.setWebsiteDataStore_(WebKit.WKWebsiteDataStore.nonPersistentDataStore())
@@ -309,6 +337,9 @@ def run(args):
     webview.setAppearance_(AppKit.NSAppearance.appearanceNamed_(appearance))
     window.setContentView_(webview)
     window.orderFront_(None)
+    if args.snapshot:
+        window.makeKeyAndOrderFront_(None)
+        app.activateIgnoringOtherApps_(True)
     delegate = Delegate.alloc().init()
     delegate.wv, delegate.win = webview, window
     webview.setNavigationDelegate_(delegate)
