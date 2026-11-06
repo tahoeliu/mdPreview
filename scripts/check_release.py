@@ -19,7 +19,7 @@ def check_source():
     checks=json.loads((ROOT/'vendor/checksums.json').read_text())
     for file,digest in checks.items():
         if hashlib.sha256((ROOT/file).read_bytes()).hexdigest()!=digest:raise ValueError('Vendored asset differs: '+file)
-    for file in ['app.js','frontend/document-session.js','frontend/markdown-pipeline.js','frontend/image-viewer.js']:subprocess.run(['node','--check',str(ROOT/file)],check=True)
+    for file in ['app.js','frontend/bridge.js','frontend/document-session.js','frontend/markdown-pipeline.js','frontend/image-viewer.js']:subprocess.run(['node','--check',str(ROOT/file)],check=True)
     for file in ['index.html','styles.css','release-policy.json','VERSION']:
         if not (ROOT/file).is_file():raise ValueError('Missing resource: '+file)
     print('Source release gates PASS')
@@ -27,7 +27,7 @@ def check_source():
 def check_app(path):
     path=Path(path);verify_bundle(path,expected_version=(ROOT/'VERSION').read_text().strip())
     resources=path/'Contents/Resources'
-    for file in ['index.html','styles.css','app.js','purify.min.js','marked-footnote.umd.js','frontend/document-session.js','frontend/markdown-pipeline.js','frontend/image-viewer.js','release-policy.json','VERSION']:
+    for file in ['index.html','styles.css','app.js','purify.min.js','marked-footnote.umd.js','frontend/bridge.js','frontend/document-session.js','frontend/markdown-pipeline.js','frontend/image-viewer.js','release-policy.json','VERSION']:
         if not (resources/file).is_file():raise ValueError('Missing packaged resource: '+file)
     with (path/'Contents/Info.plist').open('rb') as stream:info=plistlib.load(stream)
     if info.get('NSAppTransportSecurity',{}).get('NSAllowsArbitraryLoads'):raise ValueError('ATS is globally disabled')

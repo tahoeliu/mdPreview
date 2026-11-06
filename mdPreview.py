@@ -402,13 +402,14 @@ if HAS_COCOA:
 
         Formats: list of (display_label, extension_key). On OK, holder gets
         'path' + 'format' (the extension key); on cancel, 'cancelled'; on
-        failure, 'error'. Runs the panel on the main thread and polls here
-        (15s cap) — same pattern as the other native dialogs.
+        failure, 'error'. 面板在主线程执行，等待用户完成，不设交互超时。
         """
         try:
             from AppKit import (NSSavePanel, NSPopUpButton, NSView, NSTextField,
                                 NSMakeRect, NSColor, NSFont, NSOKButton)
             from PyObjCTools import AppHelper
+
+            completed = threading.Event()
 
             def _do():
                 try:
@@ -483,16 +484,11 @@ if HAS_COCOA:
                     holder['cancelled'] = True
                 except Exception as e:
                     holder['error'] = str(e)
+                finally:
+                    completed.set()
 
             AppHelper.callAfter(_do)
-            # Poll for a RESULT key: holder is pre-populated with 'formats' and
-            # 'panel' before the modal runs, so a non-empty check is not enough.
-            for _ in range(150):
-                if 'path' in holder or 'cancelled' in holder or 'error' in holder:
-                    break
-                time.sleep(0.1)
-            if not ('path' in holder or 'cancelled' in holder or 'error' in holder):
-                holder['cancelled'] = True
+            completed.wait()
         except Exception as e:
             holder['error'] = str(e)
 
@@ -694,6 +690,44 @@ class MarkdownAPI:
         else:
             os._exit(4)
         return True
+
+    def log_js_error(self, scope, what, stack):
+        """仅记录白名单诊断字段；不信任前端传入的文本或原始堆栈。"""
+        try:
+            safe_scope = scope if isinstance(scope, str) and scope in ('bridge', 'window', 'promise') else 'unknown'
+            safe_what = 'unhandled' if safe_scope == 'promise' else 'error'
+            if (safe_scope == 'bridge' and isinstance(what, str) and not what.startswith('_')
+                    and what in MarkdownAPI.__dict__ and callable(MarkdownAPI.__dict__[what])):
+                safe_what = what
+            payload = {}
+            if isinstance(stack, str) and len(stack) <= 16384:
+                try:
+                    payload = json.loads(stack)
+                except (ValueError, RecursionError):
+                    pass
+            if not isinstance(payload, dict):
+                payload = {}
+            types = ('Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'URIError', 'EvalError', 'AggregateError')
+            error_type = payload.get('type') if payload.get('type') in types else 'Error'
+            scripts = {'app.js', 'frontend/bridge.js', 'frontend/document-session.js',
+                       'frontend/markdown-pipeline.js', 'frontend/image-viewer.js',
+                       'marked.min.js', 'purify.min.js', 'marked-footnote.umd.js',
+                       'turndown.js', 'mermaid.min.js', 'html-docx-js.js', 'html2canvas.min.js'}
+            frames = []
+            raw_frames = payload.get('frames', [])
+            for frame in raw_frames[:16] if isinstance(raw_frames, list) else []:
+                if not isinstance(frame, dict):
+                    continue
+                file, line, column = frame.get('file'), frame.get('line'), frame.get('column')
+                if (isinstance(file, str) and file in scripts and type(line) is int and type(column) is int
+                        and 0 <= line <= 9999999 and 0 <= column <= 9999999):
+                    frames.append({'file': file, 'line': line, 'column': column})
+            message = '[js] ' + json.dumps({'scope': safe_scope, 'what': safe_what,
+                                           'type': error_type, 'frames': frames}, separators=(',', ':'))
+            logging.error('%s', message.encode('utf-8')[:4096].decode('utf-8', errors='ignore'))
+            return True
+        except Exception:
+            return False
 
     def startup_ready(self, ms):
         """JS calls this once the first screen has rendered (cold-start perf)."""
@@ -1022,6 +1056,7 @@ class MarkdownAPI:
                 from PyObjCTools import AppHelper
                 from WebKit import WKPDFConfiguration
                 result_holder = {}
+                completed = threading.Event()
 
                 def _run_pdf():
                     try:
@@ -1030,6 +1065,7 @@ class MarkdownAPI:
                         webview_native = bv.webview if bv is not None else None
                         if webview_native is None:
                             result_holder['error'] = 'No webview available'
+                            completed.set()
                             return
                         config = WKPDFConfiguration.alloc().init()
                         if page:
@@ -1065,19 +1101,19 @@ class MarkdownAPI:
                                 result_holder['done'] = True
                             except Exception as e:
                                 result_holder['error'] = str(e)
+                            finally:
+                                completed.set()
 
                         webview_native.createPDFWithConfiguration_completionHandler_(config, handler)
                     except Exception as e:
                         result_holder['error'] = str(e)
+                        completed.set()
 
                 AppHelper.callAfter(_run_pdf)
-                for _ in range(150):
-                    if 'done' in result_holder or 'error' in result_holder:
-                        break
-                    time.sleep(0.1)
+                completed.wait()
                 if result_holder.get('done'):
                     return {'success': True, 'path': path}
-                return {'success': False, 'error': result_holder.get('error', 'PDF generation timed out')}
+                return {'success': False, 'error': result_holder.get('error', 'PDF generation failed')}
 
             if fmt in ('docx', 'png'):
                 # JS produces base64 payloads for these binary formats.
@@ -1117,6 +1153,7 @@ class MarkdownAPI:
             from PyObjCTools import AppHelper
 
             result_holder = {}
+            completed = threading.Event()
 
             def _run_panel():
                 try:
@@ -1137,16 +1174,12 @@ class MarkdownAPI:
                     result_holder['paths'] = paths
                 except Exception as e:
                     result_holder['error'] = str(e)
+                finally:
+                    completed.set()
 
-            # NSOpenPanel must be created and run on the main thread
+            # NSOpenPanel 必须在主线程运行，等待用户选择或取消。
             AppHelper.callAfter(_run_panel)
-            # 15s timeout: if the panel never responds, treat it as a cancel
-            for _ in range(150):
-                if result_holder:
-                    break
-                time.sleep(0.1)
-            if not result_holder:
-                result_holder['cancelled'] = True
+            completed.wait()
 
             if 'error' in result_holder:
                 log_exception('open file dialog failed')
@@ -1226,6 +1259,7 @@ class MarkdownAPI:
             from PyObjCTools import AppHelper
 
             result_holder = {}
+            completed = threading.Event()
             is_untitled = self.is_untitled or not self.file_path
             if is_untitled:
                 base_name = 'untitled'
@@ -1252,6 +1286,8 @@ class MarkdownAPI:
                 except Exception:
                     log_exception('native save panel failed')
                     result_holder['action'] = 'cancel'
+                finally:
+                    completed.set()
 
             def handler(code):
                 try:
@@ -1270,6 +1306,9 @@ class MarkdownAPI:
                         result_holder['action'] = 'cancel'
                 except Exception:
                     result_holder['action'] = 'cancel'
+                finally:
+                    if 'action' in result_holder:
+                        completed.set()
 
             def _run():
                 try:
@@ -1310,13 +1349,11 @@ class MarkdownAPI:
                     log_exception('native save alert run failed')
                     result_holder['action'] = 'cancel'
                     result_holder['error'] = str(e)
+                    completed.set()
 
             AppHelper.callAfter(_run)
-            for _ in range(150):  # 15s timeout; fall back to cancel
-                if result_holder:
-                    break
-                time.sleep(0.1)
-            return result_holder or {'action': 'cancel'}
+            completed.wait()
+            return result_holder
         except Exception:
             log_exception('native save prompt failed')
             return {'action': 'cancel'}
@@ -1338,6 +1375,7 @@ class MarkdownAPI:
             from PyObjCTools import AppHelper
 
             result_holder = {}
+            completed = threading.Event()
             name = os.path.basename(path or self.file_path or '') or 'Untitled.md'
 
             def handler(code):
@@ -1351,6 +1389,9 @@ class MarkdownAPI:
                         result_holder['action'] = 'cancel'
                 except Exception:
                     result_holder['action'] = 'cancel'
+                finally:
+                    if 'action' in result_holder:
+                        completed.set()
 
             def _run():
                 try:
@@ -1390,13 +1431,11 @@ class MarkdownAPI:
                     log_exception('native conflict alert run failed')
                     result_holder['action'] = 'cancel'
                     result_holder['error'] = str(e)
+                    completed.set()
 
             AppHelper.callAfter(_run)
-            for _ in range(150):  # 15s timeout; fall back to cancel
-                if result_holder:
-                    break
-                time.sleep(0.1)
-            return result_holder or {'action': 'cancel'}
+            completed.wait()
+            return result_holder
         except Exception:
             log_exception('native conflict prompt failed')
             return {'action': 'cancel'}

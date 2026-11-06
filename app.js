@@ -1293,13 +1293,13 @@ let isSource = false;
     pageWidthPct = normalizePageWidthPct(pageWidthPct + deltaPct);
     applyPageWidth();
     showSizeHint('width');
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.save_page_width(BASE_WIDTH * pageWidthPct / 100);
+    if (Bridge.ready()) Bridge.callSafe('save_page_width', BASE_WIDTH * pageWidthPct / 100);
   }
   function resetPageWidth() {
     pageWidthPct = 100;
     applyPageWidth();
     showSizeHint('width');
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.save_page_width(BASE_WIDTH);
+    if (Bridge.ready()) Bridge.callSafe('save_page_width', BASE_WIDTH);
     showStatus(t('Width reset', '宽度已重置'));
   }
   // ── Font size (View menu: ⌘= / ⌘-) ──
@@ -1324,14 +1324,14 @@ let isSource = false;
     showSizeHint('font');
   }
   function openFile() {
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.open_file_dialog();
+    if (Bridge.ready()) Bridge.callSafe('open_file_dialog');
   }
   async function closeWindow() {
     if (isDirty) {
       promptBeforeClose();
       return;
     }
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.close_window();
+    if (Bridge.ready()) Bridge.callSafe('close_window');
   }
   function insertMarkdownSnippet(snippet) {
     const textarea = document.getElementById('textarea');
@@ -1411,8 +1411,8 @@ let isSource = false;
   }
 
   function readClipboardBest() {
-    if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.read_clipboard === 'function') {
-      return window.pywebview.api.read_clipboard();
+    if (Bridge.ready()) {
+      return Bridge.callSafe('read_clipboard');
     }
     return Promise.resolve({ format: 'none', content: '', plain: '' });
   }
@@ -1887,8 +1887,8 @@ let isSource = false;
     const clone = document.getElementById('content').cloneNode(true);
     clone.querySelectorAll('.frontmatter-toggle, .colgroup, colgroup').forEach(el => el.remove());
     for (const image of clone.querySelectorAll('img[data-original-src]')) {
-      if (!window.pywebview || !window.pywebview.api.read_image_for_export) throw new Error(t('Local images cannot be embedded yet. Please retry.', '本地图片尚无法嵌入，请重试。'));
-      const result = await window.pywebview.api.read_image_for_export(image.getAttribute('data-original-src'), documentSession.id);
+      if (!Bridge.ready()) throw new Error(t('Local images cannot be embedded yet. Please retry.', '本地图片尚无法嵌入，请重试。'));
+      const result = await Bridge.call('read_image_for_export', image.getAttribute('data-original-src'), documentSession.id);
       if (!result.success) throw new Error(t('Image export failed: ', '图片导出失败：') + result.error);
       image.setAttribute('src', result.data);
     }
@@ -2005,12 +2005,12 @@ let isSource = false;
 
   // ── Export As (File menu): one native panel with a format popup ──
   async function exportAs() {
-    if (!window.pywebview || !window.pywebview.api) {
+    if (!Bridge.ready()) {
       showStatus(t('Export is not ready yet', '导出功能尚未就绪'), true);
       return;
     }
     try {
-      const res = await window.pywebview.api.export_as_choose(currentDocTitle() + '.md');
+      const res = await Bridge.call('export_as_choose', currentDocTitle() + '.md');
       if (!res || !res.success) return;
       const writeRes = await exportAsWrite(res.path, res.format);
       if (writeRes && writeRes.success) {
@@ -2096,7 +2096,7 @@ let isSource = false;
           height: document.body.scrollHeight + 100,
         };
       }
-      return await window.pywebview.api.export_as_write(path, format, content, pageSize);
+      return await Bridge.call('export_as_write', path, format, content, pageSize);
     } finally {
       savedLayout.forEach(([el, p, v]) => {
         if (v) el.style.setProperty(p, v);
@@ -2691,7 +2691,7 @@ let isSource = false;
     isDirty = !!draftRecovered || documentSession.revision > loadRevision;
     renderedDirty = !isSource && documentSession.revision > loadRevision;
     document.getElementById('content').setAttribute('aria-busy', 'false');
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(isDirty, documentSession.revision, documentSession.id);
+    if (Bridge.ready()) Bridge.callSafe('set_dirty', isDirty, documentSession.revision, documentSession.id);
     // Opening an EXISTING document (double-click, Cmd+O, Finder, reopen) shows
     // the rendered Preview by default. Only a brand-new blank document (path
     // still 'Untitled.md') starts in Source mode so the user can type right in.
@@ -2716,7 +2716,7 @@ let isSource = false;
     }
     if (draftRecovered) showDraftRecoveredBanner();
     if (meta.externalConflict) showStatus(t('The original file changed after this draft. Saving will ask how to resolve it.', '原文件在草稿之后发生变化，保存时将询问如何处理。'), true);
-    if (window.pywebview && window.pywebview.api.startup_ready) window.pywebview.api.startup_ready(Math.round(performance.now() - _jsT0));
+    if (Bridge.ready()) Bridge.callSafe('startup_ready', Math.round(performance.now() - _jsT0));
     // Preload turndown.js in background (non-blocking) so it's ready
     // when the user first toggles to source mode.
     ensureTurndown().catch((error) => showStatus(error.message, true));
@@ -2740,9 +2740,9 @@ let isSource = false;
     const remove = () => { if (banner.parentNode) banner.parentNode.removeChild(banner); };
     discard.addEventListener('click', async (e) => {
       e.preventDefault();
-      if (window.pywebview && window.pywebview.api) await window.pywebview.api.discard_draft();
-      if (window.pywebview && window.pywebview.api) {
-        window.pywebview.api.get_initial_content().then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
+      if (Bridge.ready()) await Bridge.call('discard_draft');
+      if (Bridge.ready()) {
+        Bridge.call('get_initial_content').then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
       }
       remove();
     });
@@ -2751,8 +2751,8 @@ let isSource = false;
   }
 
   function reloadContent() {
-    if (window.pywebview && window.pywebview.api) {
-      window.pywebview.api.get_initial_content().then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
+    if (Bridge.ready()) {
+      Bridge.call('get_initial_content').then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
     }
   }
 
@@ -3229,14 +3229,14 @@ let isSource = false;
       isDirty = true;
       schedulePythonSync(0);
     }
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(!clean, documentSession.revision, documentSession.id);
+    if (Bridge.ready()) Bridge.callSafe('set_dirty', !clean, documentSession.revision, documentSession.id);
     return clean;
   }
 
   function forceCloseWindow(discard = false) {
     closePromptVisible = false;
-    if (window.pywebview && window.pywebview.api) {
-      return window.pywebview.api.force_close_window(!!discard);
+    if (Bridge.ready()) {
+      return Bridge.call('force_close_window', !!discard);
     }
   }
 
@@ -3273,8 +3273,8 @@ let isSource = false;
       ta.focus();
       ta.setSelectionRange(0, 0);
     }
-    if (window.pywebview && window.pywebview.api) {
-      return window.pywebview.api.reset_to_untitled().then(() => reloadContent());
+    if (Bridge.ready()) {
+      return Bridge.call('reset_to_untitled').then(() => reloadContent());
     }
   }
 
@@ -3290,8 +3290,8 @@ let isSource = false;
     // Native TextEdit-style dialog (keep question + name/location + red
     // Delete / gray Cancel / blue Save) shown from the Python side. The
     // in-page modal below is only a fallback for non-Cocoa environments.
-    if (window.pywebview && window.pywebview.api && window.pywebview.api.native_save_prompt) {
-      window.pywebview.api.native_save_prompt()
+    if (Bridge.ready()) {
+      Bridge.call('native_save_prompt')
         .then(async (res) => {
           closePromptVisible = false;
           if (!res || !res.action) return;
@@ -3349,8 +3349,8 @@ let isSource = false;
     };
     // Native macOS sheet (Save Current / Save As / Cancel); the HTML modal
     // below stays as a fallback for non-Cocoa environments.
-    if (window.pywebview && window.pywebview.api && window.pywebview.api.native_conflict_prompt) {
-      window.pywebview.api.native_conflict_prompt(path)
+    if (Bridge.ready()) {
+      Bridge.call('native_conflict_prompt', path)
         .then((res) => {
           if (!res || !res.action) return finishCancel();
           if (res.action === 'overwrite') return finishOverwrite();
@@ -3387,7 +3387,7 @@ let isSource = false;
   }
 
   async function saveFile(force = false, suppliedMarkdown = null, options = {}) {
-    if (!window.pywebview || !window.pywebview.api) {
+    if (!Bridge.ready()) {
       showStatus(t('Save is not ready yet', '保存功能尚未就绪'), true);
       return { saved: false, error: 'not-ready' };
     }
@@ -3399,7 +3399,7 @@ let isSource = false;
       return await saveAsFile(markdown);
     }
     try {
-      saveInFlight = window.pywebview.api.save_file(filePath, markdown, !!force, snapshot.revision, snapshot.id);
+      saveInFlight = Bridge.call('save_file', filePath, markdown, !!force, snapshot.revision, snapshot.id);
       const result = await saveInFlight;
       if (!documentSession.isCurrent(snapshot)) return { saved: false, stale: true };
       if (result.success) {
@@ -3420,21 +3420,21 @@ let isSource = false;
   }
 
   async function saveAsFile(suppliedMarkdown = null) {
-    if (!window.pywebview || !window.pywebview.api) {
+    if (!Bridge.ready()) {
       showStatus(t('Save is not ready yet', '保存功能尚未就绪'), true);
       return { saved: false, error: 'not-ready' };
     }
     await ensureTurndown();
     const identity = documentSession.id;
     try {
-      const result = await window.pywebview.api.save_as_choose(currentDocTitle() + '.md');
+      const result = await Bridge.call('save_as_choose', currentDocTitle() + '.md');
       if (result && result.success) {
         if (identity !== documentSession.id) return { saved: false, stale: true };
         const markdown = getCurrentMarkdown();
         const snapshot = documentSession.snapshot(markdown);
         const { path, format } = result;
         if (format === 'md') {
-          const saveRes = await window.pywebview.api.save_file(path, markdown, true, snapshot.revision, snapshot.id);
+          const saveRes = await Bridge.call('save_file', path, markdown, true, snapshot.revision, snapshot.id);
           if (saveRes && saveRes.success) {
             if (!documentSession.isCurrent(snapshot)) return { saved: false, stale: true };
             filePath = path;
@@ -3688,8 +3688,8 @@ let isSource = false;
       el.classList.add('installing');
     }
     showStatus(t('Installing update...', '正在安装更新…'));
-    if (window.pywebview && window.pywebview.api) {
-      window.pywebview.api.perform_auto_install().then(function(result) {
+    if (Bridge.ready()) {
+      Bridge.call('perform_auto_install').then(function(result) {
         if (result && result.success) {
           showStatus(t('Update prepared. Finish saving to restart.', '更新已准备，请完成保存以重启。'));
         } else {
@@ -3954,7 +3954,7 @@ let isSource = false;
     }
     if (isExternalHref(href)) {
       e.preventDefault();
-      if (window.pywebview && window.pywebview.api) window.pywebview.api.open_external_link(href);
+      if (Bridge.ready()) Bridge.callSafe('open_external_link', href);
       return;
     }
     // Keep relative document links from navigating the editor webview away.
@@ -3987,13 +3987,13 @@ let isSource = false;
   let pythonSyncTimer = null;
 
   async function pushContentToPython(force = false) {
-    if (closing || !window.pywebview || !window.pywebview.api) return false;
+    if (closing || !Bridge.ready()) return false;
     if (!force && !isDirty) return true;
     if (syncInFlight) { await syncInFlight; return pushContentToPython(force); }
     const markdown = getCurrentMarkdown();
     const snapshot = documentSession.snapshot(markdown);
     if (!force && markdown === lastPushedHash && snapshot.revision <= documentSession.ackRevision) return true;
-    syncInFlight = Promise.resolve(window.pywebview.api.store_content(markdown, snapshot.revision, snapshot.id));
+    syncInFlight = Promise.resolve(Bridge.call('store_content', markdown, snapshot.revision, snapshot.id));
     try {
       const result = await syncInFlight;
       if (result === false || (result && result.success === false)) throw new Error((result && result.error) || 'Draft sync rejected');
@@ -4021,7 +4021,7 @@ let isSource = false;
   function setDirty(dirty) {
     if (dirty) documentSession.edit();
     isDirty = !!dirty;
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(dirty, documentSession.revision, documentSession.id);
+    if (Bridge.ready()) Bridge.callSafe('set_dirty', dirty, documentSession.revision, documentSession.id);
   }
 
   document.getElementById('content').addEventListener('input', () => { renderedDirty = true; setDirty(true); schedulePythonSync(PYTHON_SYNC_DEBOUNCE_MS); dismissWelcomeOverlay(); });
@@ -4048,8 +4048,8 @@ let isSource = false;
     const inPreviewEditor = content && target && target.nodeType === 1 && content.contains(target);
     if (!inSourceEditor && !inPreviewEditor) return;
     if (isSource) {
-      if (window.pywebview && window.pywebview.api && typeof window.pywebview.api.read_clipboard === 'function') {
-        window.pywebview.api.read_clipboard().then(function (clip) {
+      if (Bridge.ready()) {
+        Bridge.callSafe('read_clipboard').then(function (clip) {
           if (shouldShowSourcePasteHint(clip)) showPasteHint();
         }).catch(function () {});
       }
@@ -4062,7 +4062,7 @@ let isSource = false;
   keepAliveTimer = setInterval(() => { if (!closing && isSource) pushContentToPython(false); }, 5000);
 
   window.addEventListener('pywebviewready', () => {
-    window.pywebview.api.get_initial_content().then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
+    Bridge.call('get_initial_content').then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
   });
 
   function showRecoveryManager(drafts) {
@@ -4070,7 +4070,7 @@ let isSource = false;
       drafts.map((draft, index) => '<button class="modal-button secondary recover-draft" data-index="' + index + '">' + escHtml(draft.preview || t('Untitled document', '未命名文档')) + '</button>').join('');
     setModal(t('Recover documents', '恢复文档'), body);
     document.querySelectorAll('.recover-draft').forEach(button => button.addEventListener('click', async () => {
-      const result = await window.pywebview.api.recover_untitled(drafts[Number(button.dataset.index)].documentId);
+      const result = await Bridge.call('recover_untitled', drafts[Number(button.dataset.index)].documentId);
       if (!result.success) return showStatus(result.error, true);
       closeModal();
       const data = result.data;
@@ -4081,22 +4081,22 @@ let isSource = false;
   async function confirmQuitDocument() {
     try {
       await ensureTurndown();
-      if (!isDirty) return window.pywebview.api.finish_quit_document(true, documentSession.id);
+      if (!isDirty) return Bridge.call('finish_quit_document', true, documentSession.id);
       const flushed = await pushContentToPython(true);
-      const result = await window.pywebview.api.native_save_prompt();
-      if (!result || result.action === 'cancel') return window.pywebview.api.finish_quit_document(false, documentSession.id);
+      const result = await Bridge.call('native_save_prompt');
+      if (!result || result.action === 'cancel') return Bridge.call('finish_quit_document', false, documentSession.id);
       if (result.action === 'delete') {
-        await window.pywebview.api.discard_draft();
+        await Bridge.call('discard_draft');
         isDirty = false;
       } else if (result.action === 'save') {
         if (result.path) filePath = result.path;
         const saved = await saveFile();
-        if (!saved.saved || isDirty) return window.pywebview.api.finish_quit_document(false, documentSession.id);
-      } else return window.pywebview.api.finish_quit_document(false, documentSession.id);
-      return window.pywebview.api.finish_quit_document(!isDirty, documentSession.id);
+        if (!saved.saved || isDirty) return Bridge.call('finish_quit_document', false, documentSession.id);
+      } else return Bridge.call('finish_quit_document', false, documentSession.id);
+      return Bridge.call('finish_quit_document', !isDirty, documentSession.id);
     } catch (error) {
       showStatus(error.message, true);
-      return window.pywebview.api.finish_quit_document(false, documentSession.id);
+      return Bridge.call('finish_quit_document', false, documentSession.id);
     }
   }
 
