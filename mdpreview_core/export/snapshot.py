@@ -6,7 +6,7 @@ import tempfile
 from mdpreview_core.storage import atomic_write
 
 
-def render(pdf_data, destination, scale=2, max_pixels=120_000_000):
+def render(pdf_data, destination, scale=2, max_pixels=120_000_000, commit_guard=None):
     import Foundation
     import Quartz as Q
     data = Foundation.NSData.dataWithBytes_length_(pdf_data, len(pdf_data))
@@ -51,17 +51,19 @@ def render(pdf_data, destination, scale=2, max_pixels=120_000_000):
             atomic_write(stage,bytes(encoded))
             staged.append(stage)
             del context, image, encoded
-        if count == 1:
-            atomic_write(target,staged[0].read_bytes())
-        else:
-            try:
-                for stage, path in zip(staged,paths):
-                    # 同目录硬链接保证不覆盖意外出现的同名文件。
-                    os.link(stage,path)
-                    committed.append((path,path.stat().st_ino))
-            except Exception:
-                for path, inode in committed:
-                    if path.exists() and path.stat().st_ino == inode:
-                        path.unlink()
-                raise
+        from contextlib import nullcontext
+        with commit_guard() if commit_guard else nullcontext():
+            if count == 1:
+                atomic_write(target,staged[0].read_bytes())
+            else:
+                try:
+                    for stage, path in zip(staged,paths):
+                        # 同目录硬链接保证不覆盖意外出现的同名文件。
+                        os.link(stage,path)
+                        committed.append((path,path.stat().st_ino))
+                except Exception:
+                    for path, inode in committed:
+                        if path.exists() and path.stat().st_ino == inode:
+                            path.unlink()
+                    raise
     return [str(path) for path in paths]

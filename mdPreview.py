@@ -1172,8 +1172,7 @@ class MarkdownAPI:
             return {'success': False, 'error': 'output-busy'}
         state = print_engine.Completion()
         self._output_completion = state
-        fd, temporary = tempfile.mkstemp(suffix='.pdf')
-        os.close(fd)
+        temporary = None
         options = (page or {}).get('options') or self.get_output_settings()
         def start():
             if state.result is not None:
@@ -1192,6 +1191,8 @@ class MarkdownAPI:
             except Exception:
                 state.finish(False, 'pdf-generation-failed')
         try:
+            fd, temporary = tempfile.mkstemp(suffix='.pdf')
+            os.close(fd)
             AppHelper.callAfter(start)
             result = state.wait(600)
             if result is None:
@@ -1201,16 +1202,18 @@ class MarkdownAPI:
                 return result
             meta = dict((page or {}).get('meta') or {})
             meta['pageNumbers'] = options.get('page_numbers', True)
-            pdf_post.finalize(temporary, path, meta)
+            pdf_post.finalize(temporary, path, meta, state.commit_guard)
             _remember_save_directory(path)
             return {'success': True, 'path': path}
         except Exception:
             return {'success': False, 'error': 'pdf-write-failed'}
         finally:
-            if os.path.exists(temporary):
-                os.unlink(temporary)
-            self._output_completion = None
-            self._output_lock.release()
+            try:
+                if temporary and os.path.exists(temporary):
+                    os.unlink(temporary)
+            finally:
+                self._output_completion = None
+                self._output_lock.release()
 
     def export_as_write(self, path, fmt, content='', page=None):
         """Write the exported document. md/html/txt are written as text; pdf is
@@ -1281,7 +1284,7 @@ class MarkdownAPI:
                         return result
                     if fmt == 'png':
                         from mdpreview_core.export import snapshot
-                        paths = snapshot.render(result_holder['data'], path)
+                        paths = snapshot.render(result_holder['data'], path, commit_guard=completed.commit_guard)
                         _remember_save_directory(path)
                         return {'success': True, 'path': paths[0], 'paths': paths, 'split': len(paths) > 1}
                     with tempfile.TemporaryDirectory() as directory:
@@ -1293,7 +1296,7 @@ class MarkdownAPI:
                         from mdpreview_core.export import pdf_post
                         meta = dict((page or {}).get('meta') or {})
                         meta['pageNumbers'] = False
-                        pdf_post.finalize(converted, path, meta)
+                        pdf_post.finalize(converted, path, meta, completed.commit_guard)
                     _remember_save_directory(path)
                     return {'success': True, 'path': path, 'pages': count, 'split': count > 1}
                 finally:
@@ -1392,7 +1395,7 @@ class MarkdownAPI:
             if window is None:
                 return {'success': False}
             if self._output_completion is not None:
-                self._output_completion.finish(False, 'closed')
+                self._output_completion.close()
             if _is_last_window(window):
                 _hide_last_window(window, self)
                 return {'success': True}

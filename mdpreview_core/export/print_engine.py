@@ -1,5 +1,6 @@
 """主线程原生打印及单次完成状态；交互面板不设置固定超时。"""
 import threading
+from contextlib import contextmanager
 
 PAPER = {'a4': (595.28, 841.89), 'letter': (612.0, 792.0)}
 MARGINS_MM = {'narrow': (12, 12, 14, 12), 'normal': (18, 16, 20, 16), 'wide': (25, 25, 25, 25)}
@@ -9,8 +10,21 @@ _active = {}
 class Completion:
     def __init__(self):
         self.event = threading.Event()
-        self.lock = threading.Lock()
+        self.lock = threading.RLock()
         self.result = None
+        self.closed = False
+
+    def close(self):
+        with self.lock:
+            self.closed = True
+            self.finish(False, 'closed')
+
+    @contextmanager
+    def commit_guard(self):
+        with self.lock:
+            if self.closed or (self.result is not None and not self.result['success']):
+                raise RuntimeError('output-closed')
+            yield
 
     def finish(self, success, error='cancelled'):
         with self.lock:

@@ -3,7 +3,7 @@ from pathlib import Path
 from mdpreview_core.storage import atomic_write
 
 
-def finalize(src, dst, meta):
+def finalize(src, dst, meta, commit_guard=None):
     import AppKit
     import Foundation
     import Quartz
@@ -87,4 +87,6 @@ def finalize(src, dst, meta):
     data = doc.dataRepresentation()
     if data is None:
         raise OSError('pdf-serialization-failed')
-    atomic_write(dst, bytes(data))
+    from contextlib import nullcontext
+    with commit_guard() if commit_guard else nullcontext():
+        atomic_write(dst, bytes(data))
