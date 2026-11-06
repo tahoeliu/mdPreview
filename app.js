@@ -198,6 +198,7 @@ let isSource = false;
   }
 
   function getMermaidTheme() {
+    if (document.documentElement.hasAttribute('data-output')) return 'default';
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
   }
   function initMermaid() {
@@ -2031,49 +2032,12 @@ let isSource = false;
   // restore the UI after the write completes.
   async function exportAsWrite(path, format) {
     await ensureTurndown();
-    const needPreview = isSource && ['html', 'docx', 'pdf', 'png'].includes(format);
-    if (needPreview) await showPreviewForCapture();
-    // PDFs must not contain the fixed-position TOC sidebar. Hide it (and drop
-    // the has-toc layout class so the page goes back to full-width centering)
-    // for the duration of the write, then restore.
-    const toc = document.querySelector('.toc-sidebar');
-    const hideToc = format === 'pdf' && !!toc;
-    const tocPrevDisplay = hideToc ? toc.style.display : null;
-    const wasHasToc = hideToc && document.body.classList.contains('has-toc');
-    if (hideToc) {
-      toc.style.display = 'none';
-      document.body.classList.remove('has-toc');
-    }
-    // WKWebView only paints what the document actually contains: body is
-    // height:100vh with the scrolling happening inside .scroll-wrap, so
-    // createPDF would capture just one viewport (the rest of the PDF comes
-    // out blank). Temporarily un-clamp the document to its full content
-    // height for the duration of the write, then restore the layout.
-    const savedLayout = [];
-    const stash = (el, p) => savedLayout.push([el, p, el.style.getPropertyValue(p)]);
-    const body = document.body;
-    const sw = document.querySelector('.scroll-wrap');
-    if (format === 'pdf') {
-      // Native PDF capture uses screen media: hide all interface overlays.
-      for (const element of body.children) {
-        if (element !== sw && !['SCRIPT', 'STYLE', 'LINK'].includes(element.tagName)) {
-          stash(element, 'display');
-          element.style.display = 'none';
-        }
-      }
-      stash(body, 'height');
-      stash(body, 'overflow');
-      if (sw) { stash(sw, 'position'); stash(sw, 'height'); stash(sw, 'overflow'); }
-      body.style.height = 'auto';
-      body.style.overflow = 'visible';
-      if (sw) {
-        sw.style.position = 'static';
-        sw.style.height = 'auto';
-        sw.style.overflow = 'visible';
-      }
-      void body.offsetHeight;  // force reflow before measuring
-    }
+    if (outputBusy || closing) return { success: false, error: 'output-busy' };
+    outputBusy = true;
+    let restore;
     try {
+      const options = await Bridge.call('get_output_settings');
+      if (format !== 'md') restore = await OutputPrep.prepare(format, options);
       let content = '';
       if (format === 'md' || format === 'txt') content = getCurrentMarkdown();
       else if (format === 'html') content = await buildHtml();
@@ -2097,7 +2061,6 @@ let isSource = false;
         };
       }
       if (format === 'pdf') {
-        const options = await Bridge.call('get_output_settings');
         pageSize.options = options;
         pageSize.meta = { title: currentDocTitle(), author: '', pageNumbers: options.page_numbers,
           links: [...document.querySelectorAll('#content a[href]')].filter(el => /^https?:/.test(el.href)).map(el => ({text: el.textContent.trim(), url: el.href})),
@@ -2105,17 +2068,27 @@ let isSource = false;
       }
       return await Bridge.call('export_as_write', path, format, content, pageSize);
     } finally {
-      savedLayout.forEach(([el, p, v]) => {
-        if (v) el.style.setProperty(p, v);
-        else el.style.removeProperty(p);
-      });
-      if (hideToc) {
-        toc.style.display = tocPrevDisplay;
-        if (wasHasToc) document.body.classList.add('has-toc');
-      }
-      if (needPreview) restoreSourceMode();
+      if (restore) restore();
+      outputBusy = false;
     }
   }
+
+  OutputPrep.configure({
+    isSource: () => isSource,
+    showPreview: showPreviewForCapture,
+    restoreSource: restoreSourceMode,
+    resetTheme: () => { mermaidSvgCache.clear(); initMermaid(); },
+    renderLight: async () => {
+      const diagrams = [...document.querySelectorAll('.mermaid-diagram[data-source]')];
+      if (!diagrams.length) return;
+      await ensureMermaid();
+      mermaidSvgCache.clear(); initMermaid();
+      for (const el of diagrams) {
+        const result = await mermaid.render('output-' + Math.random().toString(36).slice(2), el.dataset.source);
+        el.innerHTML = sanitizeMermaidSvg(result.svg);
+      }
+    }
+  });
 
   // Temporarily render the Preview DOM for a capture while staying logically
   // in Source mode; restoreSourceMode() puts the UI back afterwards.
@@ -2152,25 +2125,10 @@ let isSource = false;
   async function printDocument() {
     if (outputBusy || closing) return { success: false, error: 'output-busy' };
     outputBusy = true;
-    const root = document.documentElement;
-    const previousOutput = root.getAttribute('data-output');
-    const previousFont = root.style.getPropertyValue('--print-font-size');
-    const wasSource = isSource;
-    const marks = [];
+    let restore;
     try {
       const opts = await Bridge.call('get_output_settings');
-      if (wasSource) await showPreviewForCapture();
-      root.dataset.output = 'print';
-      root.style.setProperty('--print-font-size', { small: '9.5pt', normal: '10.75pt', large: '12pt' }[opts.font] || '10.75pt');
-      for (const [key, cls] of [['show_urls','print-show-urls'], ['hide_frontmatter','print-hide-frontmatter'], ['h1_new_page','print-h1-new-page']]) {
-        marks.push([root, cls, root.classList.contains(cls)]);
-        root.classList.toggle(cls, !!opts[key]);
-      }
-      document.querySelectorAll('.markdown pre').forEach(el => {
-        marks.push([el, 'print-short', el.classList.contains('print-short')]);
-        el.classList.toggle('print-short', el.textContent.split('\n').length <= 25);
-      });
-      await document.fonts.ready;
+      restore = await OutputPrep.prepare('print', opts);
       const result = await Bridge.call('print_document', opts);
       if (!result.success && !result.cancelled) showStatus(t('Print failed', '打印失败'), true);
       return result;
@@ -2178,10 +2136,7 @@ let isSource = false;
       showStatus(t('Print failed', '打印失败'), true);
       return { success: false, error: 'print-failed' };
     } finally {
-      if (previousOutput === null) root.removeAttribute('data-output'); else root.setAttribute('data-output', previousOutput);
-      if (previousFont) root.style.setProperty('--print-font-size', previousFont); else root.style.removeProperty('--print-font-size');
-      marks.forEach(([el, cls, present]) => el.classList.toggle(cls, present));
-      if (wasSource) restoreSourceMode();
+      if (restore) restore();
       outputBusy = false;
     }
   }

@@ -343,6 +343,55 @@ if HAS_COCOA:
             disclaimer.setHidden_(True)
         acc.setFrame_(NSMakeRect(0, 0, acc_w, acc_h))
 
+    def _layout_output_controls(holder, ext):
+        from AppKit import NSMakeRect
+        acc = holder['acc']
+        rows = holder.get('output_controls', [])
+        visible = [row for row in rows if ext in row[3]]
+        offset = len(visible) * 28
+        if not rows:
+            return
+        for key in ('label', 'popup', 'disclaimer'):
+            control = holder[key]
+            frame = control.frame()
+            control.setFrame_(NSMakeRect(frame.origin.x, frame.origin.y + offset, frame.size.width, frame.size.height))
+        width = acc.frame().size.width
+        for row in rows:
+            key, label, control, formats, choices = row
+            hidden = row not in visible
+            label.setHidden_(hidden); control.setHidden_(hidden)
+            if not hidden:
+                y = offset - (visible.index(row)+1)*28 + 8
+                label.setFrame_(NSMakeRect(0,y+3,holder['label_w']-4,20))
+                control.setFrame_(NSMakeRect(holder['label_w'],y,width-holder['label_w']-20,25))
+        acc.setFrame_(NSMakeRect(0,0,width,acc.frame().size.height+offset))
+
+    def _make_output_controls(holder):
+        from AppKit import NSPopUpButton, NSButton, NSTextField, NSSwitchButton, NSMakeRect, NSRightTextAlignment
+        from mdpreview_core.export.settings import CHOICES
+        specs = [('paper','纸张',('pdf',)), ('margins','边距',('pdf',)), ('font','字号',('pdf',)),
+                 ('pdf_layout','PDF布局',('pdf',)), ('page_numbers','页码',('pdf',)),
+                 ('show_urls','显示链接',('pdf',)), ('hide_frontmatter','隐藏元数据',('pdf','html','png')),
+                 ('h1_new_page','一级标题换页',('pdf',)), ('png_width','图片宽度',('png',))]
+        names = {'auto':'自动','a4':'A4','letter':'Letter','narrow':'窄','normal':'标准','wide':'宽',
+                 'small':'小','large':'大','paged':'分页','continuous':'连续长页','original':'当前宽度','mobile':'手机 540px'}
+        values = MarkdownAPI().get_output_settings()
+        rows = []
+        for key, title, formats in specs:
+            label = NSTextField.labelWithString_(title)
+            label.setAlignment_(NSRightTextAlignment)
+            choices = CHOICES.get(key)
+            if choices:
+                control = NSPopUpButton.alloc().initWithFrame_(NSMakeRect(0,0,240,25))
+                for value in choices: control.addItemWithTitle_(names[value])
+                control.selectItemAtIndex_(choices.index(values[key]))
+            else:
+                control = NSButton.alloc().initWithFrame_(NSMakeRect(0,0,240,25))
+                control.setButtonType_(NSSwitchButton); control.setTitle_(''); control.setState_(int(values[key]))
+            holder['acc'].addSubview_(label); holder['acc'].addSubview_(control)
+            rows.append((key,label,control,formats,choices))
+        holder['output_controls'] = rows
+
     class _FormatPopupActions(NSObject):
         """Action target for the save panel's format popup: switches the panel's
         allowed file type and renames the file field's extension."""
@@ -368,6 +417,7 @@ if HAS_COCOA:
                 if acc is not None and label is not None and popup is not None and disclaimer is not None:
                     try:
                         _layout_format_acc(acc, label, popup, disclaimer, ext, label_w)
+                        _layout_output_controls(h, ext)
                         panel = h.get('panel')
                         if panel is not None:
                             try:
@@ -466,6 +516,8 @@ if HAS_COCOA:
                     holder['popup'] = popup
                     holder['disclaimer'] = disclaimer
                     holder['label_w'] = label_w
+                    _make_output_controls(holder)
+                    _layout_output_controls(holder, formats[0][1])
 
                     actions = _FormatPopupActions.alloc().initWithHolder_(holder)
                     popup.setTarget_(actions)
@@ -480,6 +532,12 @@ if HAS_COCOA:
                             holder['path'] = url.path()
                             idx = popup.indexOfSelectedItem()
                             holder['format'] = formats[idx][1] if 0 <= idx < len(formats) else formats[0][1]
+                            options = {}
+                            for key, label, control, supported, choices in holder['output_controls']:
+                                if holder['format'] in supported:
+                                    options[key] = choices[control.indexOfSelectedItem()] if choices else bool(control.state())
+                            if not MarkdownAPI().set_output_settings(options)['success']:
+                                holder['error'] = 'output-settings-write-failed'
                             return
                     holder['cancelled'] = True
                 except Exception as e:
@@ -1051,9 +1109,25 @@ class MarkdownAPI:
             _format_panel_lock.release()
 
     def get_output_settings(self):
-        return {'paper': 'auto', 'margins': 'normal', 'font': 'normal',
-                'page_numbers': True, 'show_urls': False, 'hide_frontmatter': True,
-                'h1_new_page': False, 'pdf_layout': 'paged', 'png_width': 'original'}
+        from mdpreview_core.export.settings import defaults, validate
+        with _config_lock:
+            values = defaults()
+            saved = load_config().get('output', {})
+            if isinstance(saved, dict):
+                for key, value in saved.items():
+                    if validate({key: value}):
+                        values[key] = value
+            return values
+
+    def set_output_settings(self, options):
+        from mdpreview_core.export.settings import validate
+        if not validate(options):
+            return {'success': False, 'error': 'invalid-output-options'}
+        with _config_lock:
+            values = self.get_output_settings()
+            values.update(options)
+            update_config({'output': values})
+            return {'success': load_config().get('output') == values}
 
     def print_document(self, options=None):
         from mdpreview_core.export import print_engine
