@@ -2042,7 +2042,8 @@ let isSource = false;
       const options = await Bridge.call('get_output_settings');
       if (format !== 'md') restore = await OutputPrep.prepare(format, options);
       let content = '';
-      if (format === 'md' || format === 'txt') content = getCurrentMarkdown();
+      if (format === 'md') content = getCurrentMarkdown();
+      else if (format === 'txt') content = toPlainText(document.getElementById('content'));
       else if (format === 'html') content = await buildHtml();
       else if (format === 'docx') {
         await ensureLib('html-docx-js.js', 'htmlDocx');

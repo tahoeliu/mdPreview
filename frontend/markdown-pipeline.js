@@ -69,7 +69,8 @@
     // A fresh extension state per document prevents cross-document footnote leakage.
     const parser = new marked.Marked({ breaks: true, gfm: true },
       markedFootnote({ refMarkers: true, keepLabels: true, prefixId: 'fn-' }),
-      { tokenizer: { emStrong: cjkEmStrong }, extensions: mathExtensions, walkTokens(token) {
+      { renderer: { checkbox(checked) { return checked ? '[x] ' : '[ ] '; } },
+        tokenizer: { emStrong: cjkEmStrong }, extensions: mathExtensions, walkTokens(token) {
         if (token.type === 'footnote') definitions.push(token.raw.trimEnd());
         if (token.type === 'html') {
           const holder = document.createElement('div'); holder.innerHTML = clean(token.text);

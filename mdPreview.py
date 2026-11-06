@@ -1094,6 +1094,7 @@ class MarkdownAPI:
                 (_t('PNG Image (.png)', 'PNG 图片 (.png)'), 'png'),
                 (_t('PDF', 'PDF'), 'pdf'),
                 (_t('Plain Text (.txt)', '纯文本 (.txt)'), 'txt'),
+                (_t('Markdown Source (.md)', 'Markdown 源文件 (.md)'), 'md'),
             ]
             holder = {}
             _run_format_panel(holder, base, formats, _t('Export As', '导出为'), _t('Export As:', '导出为：'))
