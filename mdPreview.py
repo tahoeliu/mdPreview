@@ -1108,6 +1108,15 @@ class MarkdownAPI:
         finally:
             _format_panel_lock.release()
 
+    def get_export_css(self):
+        with open(resource_path('VERSION'), encoding='utf-8') as stream:
+            version = stream.read().strip()
+        chunks = []
+        for name in ('tokens', 'content', 'print'):
+            with open(resource_path('css/' + name + '.css'), encoding='utf-8') as stream:
+                chunks.append(stream.read())
+        return {'css': '\n'.join(chunks), 'version': version}
+
     def get_output_settings(self):
         from mdpreview_core.export.settings import defaults, validate
         with _config_lock:

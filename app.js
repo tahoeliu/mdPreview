@@ -1901,23 +1901,26 @@ let isSource = false;
         if (attr.name.startsWith('data-')) el.removeAttribute(attr.name);
       });
     });
-    const styles = document.querySelector('link[href*="styles.css"]') ? '<link rel="stylesheet" href="styles.css">' : '';
-    const html = '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n<title>' + escHtml(title) + '</title>\n' +
-      '<style>\n' +
-      'body { font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; max-width: 720px; margin: 40px auto; padding: 0 24px; color: #333; line-height: 1.8; }\n' +
-      'h1 { font-size: 30px; font-weight: 700; } h2 { font-size: 23px; font-weight: 600; } h3 { font-size: 18px; font-weight: 600; }\n' +
-      'code { font-family: "SF Mono", Menlo, monospace; background: #f5f5f7; padding: 2px 6px; border-radius: 4px; font-size: 14px; }\n' +
-      'pre { padding: 14px 18px; background: #f5f5f7; border-radius: 8px; overflow-x: auto; }\n' +
-      'pre code { background: none; padding: 0; }\n' +
-      'blockquote { border-left: 3px solid #e0e0e0; padding-left: 20px; color: #666; }\n' +
-      'table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #e0e0e0; padding: 8px 14px; } th { background: #f5f5f7; }\n' +
-      'img { max-width: 100%; border-radius: 10px; }\n' +
-      'a { color: #007aff; }\n' +
-      '.math-inline, .math-block { font-family: "SF Mono", Menlo, monospace; background: #f8f8fa; border: 1px solid #ececf0; border-radius: 6px; color: #5a3b8f; }\n' +
-      '.math-block { display: block; padding: 12px 14px; overflow-x: auto; text-align: center; }\n' +
-      '.frontmatter { font-family: "SF Mono", Menlo, monospace; font-size: 13px; background: #f5f5f7; border-radius: 8px; padding: 14px 18px; white-space: pre-wrap; }\n' +
-      '.mermaid-diagram { text-align: center; }\n' +
-      '</style>\n</head>\n<body>\n' + MarkdownPipeline.cleanExport(clone.innerHTML) + '\n</body>\n</html>';
+    const resources = await Bridge.call('get_export_css');
+    const text = clone.textContent || '';
+    const front = getCurrentMarkdown().match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
+    const declared = front && front[1].match(/^lang:\s*["']?([a-zA-Z]{2,8}(?:-[a-zA-Z0-9]{1,8})*)["']?\s*$/m);
+    const lang = declared ? declared[1] : ((text.match(/[㐀-鿿]/g) || []).length / Math.max(1,text.length) > 0.1 ? 'zh-CN' : 'en');
+    const headings = [...clone.querySelectorAll('h1,h2,h3')];
+    let toc = '';
+    if (headings.length >= 5) {
+      toc = '<nav class="export-toc"><details><summary>' + t('Contents','目录') + '</summary><ul>' + headings.map((el,i) => {
+        if (!el.id) el.id = 'export-heading-' + i;
+        return '<li><a href="#' + escHtml(el.id) + '">' + escHtml(el.textContent) + '</a></li>';
+      }).join('') + '</ul></details></nav>';
+    }
+    const options = await Bridge.call('get_output_settings');
+    if (options.hide_frontmatter) clone.querySelectorAll('.frontmatter').forEach(el => el.remove());
+    const html = '<!doctype html>\n<html lang="' + lang + '"><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+      '<meta name="generator" content="mdPreview ' + escHtml(resources.version) + '"><title>' + escHtml(title) + '</title>' +
+      '<style>' + resources.css + '\nbody{margin:0;background:var(--bg);font-family:var(--font-sans)}.page{max-width:720px;margin:40px auto;padding:0 40px}.export-toc{margin-bottom:24px}</style>' +
+      '</head><body><main class="page">' + toc + '<article class="markdown">' + MarkdownPipeline.cleanExport(clone.innerHTML) + '</article></main></body></html>';
     return html;
   }
 
