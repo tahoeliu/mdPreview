@@ -7,7 +7,8 @@ from PyObjCTools import AppHelper
 ROOT = sys.argv[1]
 OUT = sys.argv[2]
 EXTRA_CSS = sys.argv[3] if len(sys.argv) > 3 else ''
-css = open(os.path.join(ROOT, 'styles.css'), encoding='utf-8').read()
+css = '\n'.join(open(os.path.join(ROOT, 'css', part + '.css'), encoding='utf-8').read()
+                for part in ('tokens', 'content', 'app', 'print'))
 html = """<!doctype html><html><head><meta charset=utf-8><style>%s</style><style>%s</style></head><body>
 <div class=scroll-wrap><div class=page><div class=markdown>
 <h1>HHeading One</h1><h2>HHeading Two</h2><h3>HHeading Three</h3>
@@ -38,17 +39,8 @@ class Delegate(AppKit.NSObject):
         AppHelper.callLater(0.3, self.measure)
     done_success_ctx_ = objc.selector(done_success_ctx_, signature=b'v@:@Z^v')
     def measure(self):
-        doc = Quartz.PDFDocument.alloc().initWithURL_(Foundation.NSURL.fileURLWithPath_(OUT))
-        page = doc.pageAtIndex_(0)
-        s = page.string()
-        print('pages:', doc.pageCount(), 'mediabox:', page.boundsForBox_(Quartz.kPDFDisplayBoxMediaBox).size)
-        for label in ('HHeading One', 'HHeading Two', 'HHeading Three', 'HBody', 'HCode', 'HTh', 'HTd'):
-            i = s.find(label)
-            if i < 0:
-                print(label, 'not found'); continue
-            r = page.characterBoundsAtIndex_(i)  # bounds of 'H' glyph (cap height-ish box)
-            # PDFKit returns the font line box; report its height (≈ font size * ~1.2)
-            print('%-15s glyph box h=%.1fpt  (≈font %.1fpt)' % (label, r.size.height, r.size.height / 1.2))
+        from output_probe import measure_pdf
+        print(measure_pdf(OUT))
         AppKit.NSApp.terminate_(None)
 
 app = AppKit.NSApplication.sharedApplication()

@@ -1,0 +1,29 @@
+@media print {
+  /* 10.75pt 的实际 H 字形约 8.09pt；与屏幕字号隔离。 */
+  :root { --content-font-size: var(--print-font-size, 10.75pt) !important; --content-line-height: 1.6 !important; }
+  html, body { background: #fff !important; color: #000 !important; height: auto !important; overflow: visible !important; }
+  .toc-sidebar, .toc-toggle, .find-bar, .status, .modal-overlay, .image-lightbox, .mode-indicator,
+  .edit-hint-bubble, .update-bubble, .welcome-overlay, .code-lang-label, .code-copy-btn, .remote-image-bar { display: none !important; }
+  .scroll-wrap { position: static !important; overflow: visible !important; }
+  .page { max-width: none !important; width: auto !important; margin: 0 !important; padding: 0 !important; }
+  .markdown { font-size: var(--content-font-size) !important; line-height: var(--content-line-height) !important; min-height: 0 !important; color: #000 !important; orphans: 3; widows: 3; }
+  .markdown h1 { font-size: calc(var(--content-font-size) * 1.75); }
+  .markdown h2 { font-size: calc(var(--content-font-size) * 1.4); }
+  .markdown h3 { font-size: calc(var(--content-font-size) * 1.2); }
+  .markdown h4 { font-size: calc(var(--content-font-size) * 1.05); }
+  .markdown h1, .markdown h2, .markdown h3, .markdown h4 { break-after: avoid; page-break-after: avoid; }
+  .print-h1-new-page .markdown h1:not(:first-child) { break-before: page; }
+  .markdown pre, .markdown code, .markdown th, .markdown .math-block, .mermaid-diagram, .markdown-alert { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .markdown pre { break-inside: auto; white-space: pre-wrap !important; }
+  .markdown pre.print-short { break-inside: avoid; }
+  .markdown pre code { white-space: pre-wrap !important; overflow: visible !important; }
+  .markdown .math-block, .markdown .frontmatter, .mermaid-diagram { overflow: visible !important; white-space: pre-wrap !important; }
+  .markdown table { break-inside: auto; }
+  .markdown tr { break-inside: avoid; }
+  .markdown thead { display: table-header-group; }
+  .markdown img, .mermaid-diagram, .math-block { break-inside: avoid; }
+  .markdown img { max-height: 240mm; object-fit: contain; }
+  .markdown a { color: #0645ad !important; text-decoration: none !important; }
+  .print-show-urls .markdown a[href^="http"]::after { content: " (" attr(href) ")"; font-size: .85em; color: #555; word-break: break-all; }
+  .print-hide-frontmatter .markdown .frontmatter { display: none !important; }
+}

@@ -1,7 +1,7 @@
 """基于 print_probe 的 WKWebView 原生打印探针，仅在 WorkSpace 写出测试产物。
 
 用法：.venv/bin/python -I -B scripts/output_probe.py --html sample.html
-      --css styles.css --out WorkSpace/outputs/sample.pdf --json
+      --css css/tokens.css,css/content.css,css/app.css,css/print.css --out WorkSpace/outputs/sample.pdf --json
 也可用 --markdown 加载当前应用渲染器；所有远程资源一律禁止访问。
 字形框为 PDFKit 实测框，并非 CSS 字号；亮度由 PDF 栅格像素计算。
 """
@@ -79,7 +79,7 @@ def measure_pdf(path):
     sizes, outside_examples = [], []
     outside = links = characters = total_pixels = 0
     luminance_sum = dark_ink = ink = 0
-    code_luminance = []
+    code_luminance, code_background = [], []
     for number in range(doc.pageCount()):
         page = doc.pageAtIndex_(number)
         bounds = page.boundsForBox_(Quartz.kPDFDisplayBoxMediaBox)
@@ -90,12 +90,10 @@ def measure_pdf(path):
         if not text.strip():
             raise RuntimeError(f'第 {number + 1} 页没有可提取文字，不能建立字形基线')
         rectangles = []
-        # PDFKit 按 UTF-16 索引；不能直接使用 Python 的 Unicode 码点偏移。
-        index = 0
-        for char in text:
+        # PDFKit 字形索引不包含 string() 插入的换行，逐个枚举真实字形。
+        for index in range(page.numberOfCharacters()):
             rect = page.characterBoundsAtIndex_(index)
-            index += len(char.encode('utf-16-le')) // 2
-            if char.isspace() or rect.size.width <= 0 or rect.size.height <= 0:
+            if rect.size.width <= 0 or rect.size.height <= 0:
                 continue
             x, y, w, h = rect.origin.x, rect.origin.y, rect.size.width, rect.size.height
             rectangles.append((x, y, w, h))
@@ -109,10 +107,20 @@ def measure_pdf(path):
             start = 0
             while (position := text.find(marker, start)) >= 0:
                 offset = len(text[:position].encode('utf-16-le')) // 2
-                rect = page.characterBoundsAtIndex_(offset)
-                heights[key].append(float(rect.size.height))
+                # selection 使用文本索引，先取首字符排版框，再按位置匹配真实墨迹框。
+                selection = page.selectionForRange_(Foundation.NSMakeRange(offset, 1))
+                layout = selection.boundsForPage_(page)
+                lx, ly = layout.origin.x, layout.origin.y
+                lw, lh = layout.size.width, layout.size.height
+                candidates = [(x, y, w, h) for x, y, w, h in rectangles
+                              if lx - .5 <= x <= lx + lw and ly - .5 <= y
+                              and y + h <= ly + lh + .5 and x + w > lx]
+                if not candidates:
+                    raise RuntimeError(f'无法定位标记字形：{key}')
+                x, y, w, h = min(candidates, key=lambda r: abs(r[0] - lx))
+                heights[key].append(h)
                 if key == 'code':
-                    code_rects.append(rect)
+                    code_rects.append(Quartz.CGRectMake(x, y, w, h))
                 start = position + len(marker)
         for annotation in page.annotations() or []:
             if str(annotation.type()) == 'Link':
@@ -155,15 +163,23 @@ def measure_pdf(path):
             values = [luminances[row * pw + col] for row in range(top, bottom) for col in range(left, right)]
             if values:
                 code_luminance.append(round(statistics.mean(values), 3))
+            # 采样首个代码字形左侧的内边距，避免把文字墨迹当作背景证据。
+            padding_left, padding_right = max(0, left - 6), max(0, left - 2)
+            padding = [luminances[row * pw + col] for row in range(top + 4, bottom - 4)
+                       for col in range(padding_left, padding_right)]
+            if padding:
+                code_background.append(round(statistics.mean(padding), 3))
     return {'pages': int(doc.pageCount()), 'page_size': sizes[0], 'page_sizes': sizes,
             'glyph_heights': {k: round(statistics.median(v), 3) if v else None for k, v in heights.items()},
             'text_bboxes_outside_margin': outside, 'outside_examples': outside_examples,
             'link_count': links, 'dark_text_ratio': round(dark_ink / ink, 5) if ink else None,
             'mean_luminance': round(luminance_sum / total_pixels, 3),
-            'code_region_luminance': code_luminance, 'text_characters': characters,
+            'code_region_luminance': code_luminance, 'code_background_luminance': code_background,
+            'text_characters': characters,
             'measurement': {'margin_pt': MARGIN, 'bbox_tolerance_pt': .5, 'raster_scale': 1,
                             'dark_text_ratio': '字符框内亮度<128像素 / 字符框内亮度<245像素',
-                            'glyph_heights': 'PDFKit 标记首字符框的中位高度(pt)，缺失标记为 null'}}
+                            'glyph_heights': 'PDFKit 文本选区定位首字符墨迹框的中位高度(pt)，缺失标记为 null',
+                            'version': 2, 'code_background': '代码首字形左侧内边距的平均亮度'}}
 
 
 def run(args):

@@ -22,7 +22,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ('index.html', '.'),
-        ('styles.css', '.'),
+        ('css', 'css'),
         ('app.js', '.'),
         ('frontend', 'frontend'),
         ('WorkSpace/tests/native-check.js', 'tests'),
