@@ -1,0 +1,16 @@
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+WorkSpace/
+outputs/
+.workbuddy/
+WORKFLOW.md.bak
+playwright-report/
+test-results/
+*.egg-info/
+.coverage*
+.pytest_cache/
+.ruff_cache/
+.metadata_never_index

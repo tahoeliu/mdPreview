@@ -1,0 +1,8 @@
+{
+  "bundleIdentifier": "tahoeliu.mdpreview",
+  "teamId": null,
+  "minimumMacOS": "13.0",
+  "requireNotarization": false,
+  "requireGitHubAssetDigest": true,
+  "repository": "tahoeliu/mdPreview"
+}

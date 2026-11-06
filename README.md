@@ -275,7 +275,9 @@ Not exactly. VS Code is a full development environment. mdPreview is for people 
 
 mdPreview is built with:
 
-- Python 3.13+
+- Python 3.13
+- macOS 13 or later (architecture/OS combinations must be tested before claiming support)
+- Node 22+ for development tests; no Node runtime needed in the app
 - pywebview
 - WKWebView on macOS
 - marked.js
@@ -285,8 +287,12 @@ mdPreview is built with:
 ### Build from source
 
 ```bash
-pip install pywebview
-./build.sh
+python3.13 -m venv .venv
+.venv/bin/python -m pip install -r requirements-lock.txt
+npm ci
+npm test
+.venv/bin/python scripts/test-python.py
+./build_dmg.sh
 ./install.sh
 ```
 
@@ -348,3 +354,24 @@ Made by [Tahoe Liu](https://github.com/tahoeliu)
 ---
 
 **Keywords:** macOS Markdown viewer, Markdown reader for Mac, free Markdown editor for Mac, minimal Markdown app, open .md files on Mac, AI Markdown viewer, ChatGPT Markdown viewer, Claude Markdown export, Typora alternative, MacDown alternative, open source Markdown viewer, Mermaid Markdown viewer
+
+
+## Reliability work in 1.5.0
+
+Revision-aware saves preserve edits made while disk writes are pending. Each
+untitled document has its own recoverable draft. Markdown math/footnotes and
+formatted table cells retain their source when editing the rendered document.
+HTML and Word exports render the current document revision; local raster images
+inside the document directory are embedded in HTML for portable sharing.
+PDF exports remain continuous pages; mathematical expressions are source text,
+not a TeX typesetting engine.
+
+The renderer uses vendored DOMPurify and rejects unsafe URLs and UI-ID shadowing.
+Updates verify the exact versioned GitHub asset size/SHA-256, app identity, and
+code signature; installation keeps a recoverable previous app until UI readiness.
+Distribution intentionally uses ad-hoc signing, without Developer ID notarization.
+
+Run `./verify-all.sh` from an ordinary macOS Terminal to perform regressions,
+Chromium/WebKit tests, packaging, and native WKWebView save/PDF/quit verification.
+Builds are generated under WorkSpace/; tests never replace /Applications or use
+real application drafts. Successful unit tests alone are not release certification.

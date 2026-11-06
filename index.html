@@ -23,16 +23,16 @@
 
 <div class="scroll-wrap">
   <div class="page" id="page">
-    <div class="markdown" id="content" contenteditable="true" spellcheck="false"></div>
+    <div aria-label="Markdown document" class="markdown" id="content" contenteditable="true" spellcheck="false"></div>
     <div class="source" id="source">
       <pre class="highlight-layer" id="highlightLayer" aria-hidden="true"></pre>
-      <textarea id="textarea" spellcheck="false"></textarea>
+      <textarea aria-label="Markdown source" id="textarea" spellcheck="false"></textarea>
     </div>
   </div>
 </div>
 
 <div class="mode-indicator" id="modeIndicator"></div>
-<div class="status" id="status"></div>
+<div role="status" aria-live="polite" class="status" id="status"></div>
 <div class="edit-hint-bubble" id="editHintBubble" role="status" aria-live="polite"></div>
 <div class="edit-hint-bubble size-hint-bubble" id="sizeHintBubble" role="status" aria-live="polite"></div>
 <div class="update-bubble" id="updateBubble" onclick="installUpdate()" role="alert">
@@ -42,10 +42,24 @@
   </div>
   <button class="update-bubble-close" onclick="dismissUpdateBubble(event)" title="Dismiss" aria-label="Dismiss">&times;</button>
 </div>
-<div class="image-lightbox" id="imageLightbox"><img id="imageLightboxImg" alt="Preview"></div>
+<div class="image-lightbox" id="imageLightbox" role="dialog" aria-modal="true" aria-labelledby="imageViewerTitle" aria-describedby="imageViewerHelp" aria-hidden="true">
+  <div class="image-viewer-toolbar">
+    <span id="imageViewerTitle">Image preview</span>
+    <div class="image-viewer-controls">
+      <button type="button" data-viewer="out" aria-label="Zoom out">−</button>
+      <output class="image-viewer-scale" aria-label="Zoom level">100%</output>
+      <button type="button" data-viewer="in" aria-label="Zoom in">+</button>
+      <button type="button" data-viewer="fit">Fit</button>
+      <button type="button" data-viewer="actual">100%</button>
+      <button type="button" data-viewer="close">Close</button>
+    </div>
+  </div>
+  <div class="image-viewer-stage"><div class="image-viewer-surface"></div></div>
+  <div class="image-viewer-help" id="imageViewerHelp">Scroll to zoom · Drag to pan · Esc to close</div>
+</div>
 
 <div class="modal-overlay" id="modalOverlay">
-  <div class="modal-box">
+  <div class="modal-box" role="dialog" aria-modal="true" aria-labelledby="modalHeader">
     <div class="modal-header" id="modalHeader">File Properties</div>
     <div class="modal-body" id="modalBody"></div>
     <div class="modal-actions" id="modalActions">
@@ -55,6 +69,11 @@
 </div>
 
 <script src="marked.min.js" defer></script>
+<script src="purify.min.js" defer></script>
+<script src="marked-footnote.umd.js" defer></script>
+<script src="frontend/document-session.js" defer></script>
+<script src="frontend/markdown-pipeline.js" defer></script>
+<script src="frontend/image-viewer.js" defer></script>
 <script src="app.js" defer></script>
 </body>
 </html>

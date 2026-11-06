@@ -12,14 +12,25 @@ import tempfile
 import shutil
 import hashlib
 import logging
+import uuid
+from logging.handlers import RotatingFileHandler
+from urllib.parse import urlsplit
+from mdpreview_core.storage import atomic_write, DraftStore
+from mdpreview_core.images import export_image
+if '--install-update-helper' in sys.argv:
+    from scripts.install_update import main as install_helper
+    sys.argv.remove('--install-update-helper')
+    install_helper()
+    sys.exit(0)
 import webview
+from mdpreview_core.release import version_tuple, verify_bundle, verify_asset
 
 _START_T0 = time.time()  # cold-start profiling
 
-APP_SUPPORT_DIR = os.path.expanduser('~/Library/Application Support/mdPreview')
+APP_SUPPORT_DIR = os.environ.get('MDPREVIEW_DATA_DIR') or os.path.expanduser('~/Library/Application Support/mdPreview')
 CONFIG_FILE = os.path.join(APP_SUPPORT_DIR, 'config.json')
 LEGACY_CONFIG_FILE = os.path.expanduser('~/.mdviewer_config.json')
-LOG_FILE = os.path.expanduser('~/Library/Logs/mdPreview.log')
+LOG_FILE = os.path.join(APP_SUPPORT_DIR, 'Logs', 'mdPreview.log') if os.environ.get('MDPREVIEW_DATA_DIR') else os.path.expanduser('~/Library/Logs/mdPreview.log')
 DRAFT_DIR = os.path.join(APP_SUPPORT_DIR, 'Drafts')
 UPDATE_STAGING_DIR = os.path.join(APP_SUPPORT_DIR, 'UpdateStaging')
 
@@ -27,12 +38,9 @@ UPDATE_STAGING_DIR = os.path.join(APP_SUPPORT_DIR, 'UpdateStaging')
 def _setup_logging():
     try:
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
-        logging.basicConfig(
-            filename=LOG_FILE,
-            level=logging.INFO,
-            format='%(asctime)s %(levelname)s %(message)s',
-        )
-    except Exception:
+        logging.basicConfig(handlers=[RotatingFileHandler(LOG_FILE, maxBytes=2_000_000, backupCount=3)],
+                            level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    except OSError:
         pass
 
 
@@ -47,8 +55,14 @@ _setup_logging()
 
 
 def _is_chinese_locale():
-    lang = os.environ.get('LANG', '') or os.environ.get('LC_ALL', '')
-    return lang.lower().startswith('zh')
+    language = os.environ.get('MDPREVIEW_LANGUAGE')
+    if not language:
+        try:
+            from Foundation import NSLocale
+            language = str(NSLocale.preferredLanguages()[0])
+        except Exception:
+            language = os.environ.get('LC_ALL') or os.environ.get('LANG', '')
+    return language.lower().startswith('zh')
 
 
 def _t(en, zh):
@@ -108,18 +122,8 @@ def _default_save_directory(preferred=None):
 
 
 def _remember_save_directory(path):
-    """Remember successful explicit save locations for future panels."""
-    if not path:
-        return
-    try:
-        directory = os.path.dirname(os.path.abspath(path))
-        if not directory:
-            return
-        cfg = load_config()
-        cfg['last_save_dir'] = directory
-        save_config(cfg)
-    except Exception:
-        log_exception('remember save directory failed')
+    if path:
+        update_config({'last_save_dir': os.path.dirname(os.path.abspath(path))})
 
 
 def _fsync_directory(directory):
@@ -135,33 +139,12 @@ def _fsync_directory(directory):
 
 
 def _safe_write_text(path, content, encoding='utf-8'):
-    """Safely write text via temp file + fsync + atomic replace."""
-    target = os.path.abspath(path)
-    directory = os.path.dirname(target) or os.getcwd()
-    os.makedirs(directory, exist_ok=True)
-    fd = None
-    tmp_path = None
-    try:
-        fd, tmp_path = tempfile.mkstemp(prefix='.' + os.path.basename(target) + '.', suffix='.tmp', dir=directory)
-        with os.fdopen(fd, 'w', encoding=encoding, newline='') as f:
-            fd = None
-            f.write(content)
-            f.flush()
-            os.fsync(f.fileno())
-        os.replace(tmp_path, target)
-        tmp_path = None
-        _fsync_directory(directory)
-    finally:
-        if fd is not None:
-            try:
-                os.close(fd)
-            except Exception:
-                pass
-        if tmp_path and os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except Exception:
-                pass
+    raw = content.encode(encoding)
+    if encoding == 'utf-16-le':
+        raw = b'\xff\xfe' + raw
+    elif encoding == 'utf-16-be':
+        raw = b'\xfe\xff' + raw
+    atomic_write(path, raw)
 
 
 def _detect_text_encoding(path):
@@ -175,7 +158,7 @@ def _detect_text_encoding(path):
         # byte-corrupted files). Fall back to the generic detectors rather than
         # crashing the viewer when a file with a UTF-16 BOM is unreadable.
         try:
-            return raw.decode('utf-16'), 'utf-16'
+            return raw.decode('utf-16'), 'utf-16-le' if raw.startswith(b'\xff\xfe') else 'utf-16-be'
         except UnicodeDecodeError:
             pass
     for enc in ('utf-8', 'gb18030', 'latin-1'):
@@ -197,14 +180,17 @@ def _draft_key(path):
     return hashlib.sha256(label.encode('utf-8')).hexdigest()[:24]
 
 
-def _write_draft(path, content):
-    """Persist an autosave draft under Application Support without touching originals."""
+def _write_draft(path, content, document_id=None, revision=0, baseline_digest=None):
     try:
-        os.makedirs(DRAFT_DIR, exist_ok=True)
-        name = _draft_key(path) + '.md'
-        draft_path = os.path.join(DRAFT_DIR, name)
-        _safe_write_text(draft_path, content, encoding='utf-8')
-        return draft_path
+        if document_id:
+            DraftStore(DRAFT_DIR).write(path, document_id, revision, content, baseline_digest)
+            return os.path.join(DRAFT_DIR, DraftStore.key(path, document_id) + '.json')
+        # Compatibility with named drafts made by releases before 1.5.
+        if not path:
+            raise ValueError('Untitled drafts require document identity')
+        destination = os.path.join(DRAFT_DIR, _draft_key(path) + '.md')
+        _safe_write_text(destination, content)
+        return destination
     except Exception:
         log_exception('write draft failed')
         return None
@@ -223,21 +209,16 @@ def _read_draft(path):
     return None, None
 
 
-def _check_draft_for_file(file_path):
-    """Check if a draft exists that is newer than the file.
-    Returns draft content if recovery is needed, None otherwise."""
-    if not file_path or not os.path.exists(file_path):
+def _check_draft_for_file(file_path, document_id=None):
+    if not file_path:
         return None
-    draft_content, draft_mtime = _read_draft(file_path)
-    if draft_content is None:
-        return None
-    file_mtime = os.path.getmtime(file_path)
-    # Only offer recovery if draft is newer than the file
-    if draft_mtime > file_mtime:
-        # Verify the draft is actually different from the file
-        file_content, _ = _detect_text_encoding(file_path)
-        if draft_content != file_content:
-            return draft_content
+    record = DraftStore(DRAFT_DIR).read(file_path, document_id)
+    original = _safe_read_text(file_path) if os.path.exists(file_path) else None
+    if record and record['content'] != original:
+        return record['content']
+    legacy, modified = _read_draft(file_path)
+    if legacy is not None and legacy != original and (original is None or modified > os.path.getmtime(file_path)):
+        return legacy
     return None
 
 
@@ -246,11 +227,13 @@ def _edited_title(name, dirty):
     return (name or 'Untitled.md') + (' - ' + _t('Edited', '已编辑') if dirty else '')
 
 
-def _remove_draft(path):
+def _remove_draft(path, document_id=None):
     try:
-        draft_path = os.path.join(DRAFT_DIR, _draft_key(path) + '.md')
-        if os.path.exists(draft_path):
-            os.remove(draft_path)
+        if document_id:
+            DraftStore(DRAFT_DIR).remove(path, document_id)
+        legacy = os.path.join(DRAFT_DIR, _draft_key(path) + '.md')
+        if path and os.path.exists(legacy):
+            os.remove(legacy)
     except Exception:
         log_exception('remove draft failed')
 
@@ -656,12 +639,19 @@ def _pdf_to_a4_longpage(src_path, dst_path):
 
 class MarkdownAPI:
     def __init__(self, file_path=None):
+        self.document_id = str(uuid.uuid4())
+        self.revision = 0
+        self.saved_revision = 0
+        self._session_lock = threading.RLock()
+        self._save_lock = threading.Lock()
         self.file_path = file_path
         self.cached_content = ''  # JS pushes content here periodically
         self.file_content = ''    # Last known file content
         self.window = None        # Set after window creation
         self.is_dirty = False     # JS-maintained dirty flag
         self.is_untitled = not file_path  # True for blank "New File" documents
+        self.read_error = None
+        self.recovery_conflict = False
         self.encoding = 'utf-8'    # Preserve the source file encoding on save
         self.baseline_mtime_ns = None
         self.baseline_size = None
@@ -676,67 +666,148 @@ class MarkdownAPI:
             self.baseline_mtime_ns = None
             self.baseline_size = None
 
+    def finish_quit_document(self, approved, document_id=None):
+        if document_id and document_id != self.document_id:
+            return False
+        _finish_quit_confirmation(self, bool(approved))
+        return True
+
+    def read_image_for_export(self, src, document_id=None):
+        if document_id and document_id != self.document_id:
+            return {'success': False, 'error': 'Document changed'}
+        try:
+            return {'success': True, 'data': export_image(self.file_path, src)}
+        except (OSError, ValueError) as exc:
+            return {'success': False, 'error': str(exc)}
+
+    def selftest_paths(self):
+        if '--selftest-integrity' not in sys.argv or not os.environ.get('MDPREVIEW_DATA_DIR'):
+            raise PermissionError('Native test mode is disabled')
+        return {'html': os.path.join(APP_SUPPORT_DIR, 'export.html'),
+                'pdf': os.path.join(APP_SUPPORT_DIR, 'export.pdf')}
+
+    def native_integrity_completed(self, result):
+        self.selftest_paths()
+        _safe_write_text(os.path.join(APP_SUPPORT_DIR, 'native-result.json'), json.dumps(result))
+        if result.get('success'):
+            AppHelper.callAfter(lambda: NSApplication.sharedApplication().terminate_(None))
+        else:
+            os._exit(4)
+        return True
+
     def startup_ready(self, ms):
         """JS calls this once the first screen has rendered (cold-start perf)."""
         try:
             logging.info('[startup] js first screen ready: %dms' % int(ms))
         except Exception:
             pass
+        _UI_READY.set()
+        if '--update-ready' in sys.argv:
+            try:
+                marker = sys.argv[sys.argv.index('--update-ready') + 1]
+                if os.path.commonpath([os.path.realpath(marker), os.path.realpath(UPDATE_STAGING_DIR)]) == os.path.realpath(UPDATE_STAGING_DIR):
+                    _safe_write_text(marker, json.dumps({'pid': os.getpid(), 'version': _get_current_version()}))
+            except Exception:
+                log_exception('ready marker failed')
         return True
 
     def get_initial_content(self):
         cfg = load_config()
         page_width = cfg.get('page_width', 720)
-        base = {'pageWidth': page_width, 'isZh': _is_chinese_locale()}
+        base = {'pageWidth': page_width, 'isZh': _is_chinese_locale(),
+                'documentId': self.document_id, 'revision': self.revision,
+                'recoverableDrafts': [draft for draft in DraftStore(DRAFT_DIR).recoverable()
+                                      if draft['documentId'] not in {api.document_id for api in _window_apis.values()}]}
         if self.file_path and os.path.exists(self.file_path):
             try:
                 content, encoding = _detect_text_encoding(self.file_path)
+                self.read_error = None
+                self.recovery_conflict = False
                 self.encoding = encoding
                 self.file_content = content
                 self._record_baseline_stat(self.file_path)
                 # Check for a newer draft (unsaved changes from a previous session)
-                draft_content = _check_draft_for_file(self.file_path)
+                draft_content = _check_draft_for_file(self.file_path, self.document_id)
                 if draft_content is not None:
                     # Draft is newer and different — load it so the user
                     # doesn't lose unsaved work from a crash/quit.
                     self.cached_content = draft_content
                     self.is_dirty = True
+                    self.saved_revision = -1
+                    record = DraftStore(DRAFT_DIR).read(self.file_path, self.document_id)
+                    if record and record.get('baselineHash'):
+                        self.recovery_conflict = record['baselineHash'] != hashlib.sha256(content.encode('utf-8')).hexdigest()
                     add_recent_file(self.file_path)
                     return {**base, 'path': self.file_path, 'content': draft_content,
-                            'encoding': encoding, 'draftRecovered': True}
+                            'encoding': encoding, 'draftRecovered': True, 'externalConflict': self.recovery_conflict}
                 self.cached_content = content
                 self.is_dirty = False
+                self.saved_revision = self.revision
                 add_recent_file(self.file_path)
                 return {**base, 'path': self.file_path, 'content': content, 'encoding': encoding}
             except Exception as e:
                 log_exception('read file failed')
-                return {**base, 'path': self.file_path, 'content': f'# Error\n\nCould not read file: {e}', 'encoding': self.encoding}
+                self.read_error = str(e)
+                return {**base, 'path': self.file_path, 'content': '', 'readError': str(e), 'encoding': self.encoding}
         else:
-            return {**base, 'path': 'Untitled.md', 'content': '', 'encoding': self.encoding}
+            return {**base, 'path': 'Untitled.md', 'content': self.cached_content if self.is_dirty else '', 'encoding': self.encoding,
+                    'draftRecovered': self.is_dirty}
 
-    def store_content(self, content):
-        """Called by JS to keep Python in sync — avoids evaluate_js on close"""
-        self.cached_content = content
-        if self.is_dirty:
-            _write_draft(self.file_path, content)
-        return True
+    def store_content(self, content, revision=None, document_id=None):
+        with self._session_lock:
+            if document_id and document_id != self.document_id:
+                return {'success': False, 'stale': True}
+            revision = self.revision + 1 if revision is None else int(revision)
+            if revision < self.revision:
+                return {'success': False, 'stale': True, 'revision': self.revision}
+            self.revision = revision
+            self.cached_content = content
+            self.is_dirty = revision > self.saved_revision or content != self.file_content
+            if self.is_dirty and not _write_draft(self.file_path, content, self.document_id, revision, hashlib.sha256(self.file_content.encode('utf-8')).hexdigest()):
+                return {'success': False, 'error': 'draft-write-failed'}
+            return {'success': True, 'revision': revision, 'documentId': self.document_id}
 
     def discard_draft(self):
-        """Discard the autosave draft for the current file (user chose to ignore recovered draft)."""
-        if self.file_path:
-            _remove_draft(self.file_path)
+        with self._session_lock:
+            _remove_draft(self.file_path, self.document_id)
+            self.is_dirty = False
         return True
 
-    def set_dirty(self, dirty):
-        """Called by JS whenever the document dirty state changes"""
-        self.is_dirty = bool(dirty)
-        try:
-            if self.window:
-                name = os.path.basename(self.file_path) if self.file_path and not self.is_untitled else 'Untitled.md'
-                self.window.set_title(_edited_title(name, self.is_dirty))
-        except Exception:
-            log_exception('set dirty title failed')
-        return True
+    def recover_untitled(self, document_id):
+        with self._session_lock:
+            if not self.is_untitled or self.is_dirty:
+                return {'success': False, 'error': 'Close or save the current document first'}
+            if any(api is not self and api.document_id == document_id for api in _window_apis.values()):
+                return {'success': False, 'error': 'This draft is already open'}
+            record = DraftStore(DRAFT_DIR).read(None, document_id)
+            if not record:
+                return {'success': False, 'error': 'Draft not found'}
+            self.document_id = document_id
+            self.revision = record['revision']
+            self.saved_revision = -1
+            self.cached_content = record['content']
+            self.is_dirty = True
+            return {'success': True, 'data': self.get_initial_content()}
+
+    def set_dirty(self, dirty, revision=None, document_id=None):
+        with self._session_lock:
+            if document_id and document_id != self.document_id:
+                return False
+            if revision is not None:
+                if int(revision) < self.revision:
+                    return False
+                self.revision = int(revision)
+                if not dirty and self.revision > self.saved_revision:
+                    # Only save_file is allowed to acknowledge a revision.
+                    return False
+            self.is_dirty = bool(dirty)
+            try:
+                if self.window:
+                    name = os.path.basename(self.file_path) if self.file_path else 'Untitled.md'
+                    self.window.set_title(_edited_title(name, self.is_dirty))
+            except Exception:
+                log_exception('set dirty title failed')
+            return True
 
     def read_clipboard(self):
         """Read the best available clipboard flavor for 'Paste as Markdown'.
@@ -798,6 +869,12 @@ class MarkdownAPI:
             if self.file_path:
                 with _state_lock:
                     _opened_files.discard(os.path.abspath(self.file_path))
+            self.document_id = str(uuid.uuid4())
+            self.revision = 0
+            self.saved_revision = 0
+            self.encoding = 'utf-8'
+            self.read_error = None
+            self.recovery_conflict = False
             self.file_path = None
             self.is_untitled = True
             self.is_dirty = False
@@ -811,51 +888,62 @@ class MarkdownAPI:
         return True
 
     def _has_external_save_conflict(self, path):
-        """Return True when the on-disk file differs from our last clean baseline."""
-        if not path or self.is_untitled:
+        if not path or self.is_untitled or not self.file_path:
             return False
-        target = os.path.abspath(path)
-        current = os.path.abspath(self.file_path) if self.file_path else None
-        if not current or target != current or not os.path.exists(target):
+        if os.path.realpath(path) != os.path.realpath(self.file_path) or not os.path.exists(path):
             return False
-        try:
-            stat = os.stat(target)
-            mtime_ns = getattr(stat, 'st_mtime_ns', int(stat.st_mtime * 1_000_000_000))
-            if self.baseline_mtime_ns == mtime_ns and self.baseline_size == stat.st_size:
-                return False
-        except Exception:
-            pass
-        disk_content, disk_encoding = _detect_text_encoding(target)
-        self.encoding = disk_encoding
+        if self.recovery_conflict:
+            return True
+        # mtime/size are not proof of equality (sync tools may preserve both).
+        disk_content, _ = _detect_text_encoding(path)
         return disk_content != self.file_content
 
-    def save_file(self, path, content, force=False):
-        try:
-            previous_path = self.file_path
-            encoding = self.encoding or 'utf-8'
-            if not force and self._has_external_save_conflict(path):
-                return {
-                    'success': False,
-                    'conflict': True,
-                    'path': path,
-                    'message': 'The file has changed on disk since it was opened or last saved.',
-                }
-            _safe_write_text(path, content, encoding=encoding)
-            self.file_path = path
-            self.file_content = content
-            self.cached_content = content
-            self._record_baseline_stat(path)
-            self.is_dirty = False
-            self.is_untitled = False
-            _remove_draft(previous_path or path)
-            if previous_path and previous_path != path:
-                _remove_draft(path)
-            add_recent_file(path)
-            _remember_save_directory(path)
-            return {'success': True, 'encoding': encoding}
-        except Exception as e:
-            log_exception('save file failed')
-            return {'success': False, 'error': str(e)}
+    def save_file(self, path, content, force=False, revision=None, document_id=None):
+        with self._save_lock:
+            try:
+                with self._session_lock:
+                    identity = self.document_id
+                    if document_id and document_id != identity:
+                        return {'success': False, 'stale': True, 'error': 'Document changed'}
+                    save_revision = self.revision if revision is None else int(revision)
+                    if save_revision < self.saved_revision:
+                        return {'success': False, 'stale': True, 'error': 'Older save snapshot'}
+                    previous_path = self.file_path
+                    if self.read_error and previous_path and os.path.realpath(path) == os.path.realpath(previous_path):
+                        return {'success': False, 'error': 'Original file could not be read; use Save As to a new path'}
+                    encoding = self.encoding or 'utf-8'
+                    if not force and self._has_external_save_conflict(path):
+                        return {'success': False, 'conflict': True, 'path': path,
+                                'message': 'The file has changed on disk.'}
+                _safe_write_text(path, content, encoding=encoding)
+                with self._session_lock:
+                    if identity != self.document_id:
+                        return {'success': False, 'stale': True, 'error': 'Document changed during save'}
+                    self.file_path = path
+                    self.file_content = content
+                    self.saved_revision = save_revision
+                    if self.revision <= save_revision:
+                        self.revision = save_revision
+                        self.cached_content = content
+                    self.is_dirty = self.revision > save_revision or self.cached_content != content
+                    self.is_untitled = False
+                    self.recovery_conflict = False
+                    self._record_baseline_stat(path)
+                    _remove_draft(previous_path, identity)
+                    if previous_path != path:
+                        _remove_draft(path, identity)
+                    if self.is_dirty:
+                        _write_draft(path, self.cached_content, identity, self.revision, hashlib.sha256(content.encode('utf-8')).hexdigest())
+                    with _state_lock:
+                        if previous_path: _opened_files.discard(os.path.abspath(previous_path))
+                        _opened_files.add(os.path.abspath(path))
+                add_recent_file(path)
+                _remember_save_directory(path)
+                return {'success': True, 'encoding': encoding, 'revision': save_revision,
+                        'documentId': identity, 'dirty': self.is_dirty}
+            except Exception as exc:
+                log_exception('save file failed')
+                return {'success': False, 'error': str(exc)}
 
     def save_as_choose(self, default_name=''):
         """Save As with a native format popup (md/html/pdf/txt).
@@ -1004,8 +1092,7 @@ class MarkdownAPI:
                     return {'success': False, 'error': 'Invalid payload: %s' % str(e)}
                 if len(raw) == 0:
                     return {'success': False, 'error': 'Empty file data'}
-                with open(path, 'wb') as f:
-                    f.write(raw)
+                atomic_write(path, raw)
                 _remember_save_directory(path)
                 return {'success': True, 'path': path}
 
@@ -1018,9 +1105,7 @@ class MarkdownAPI:
 
     def save_page_width(self, width):
         """Persist the user's preferred page width"""
-        cfg = load_config()
-        cfg['page_width'] = int(width)
-        save_config(cfg)
+        update_config({'page_width': max(360, min(2016, int(width)))})
         return True
 
     def open_file_dialog(self):
@@ -1114,8 +1199,7 @@ class MarkdownAPI:
                 except Exception:
                     pass
                 try:
-                    if self.file_path:
-                        _remove_draft(self.file_path)
+                    _remove_draft(self.file_path, self.document_id)
                 except Exception:
                     pass
             return self.close_window()
@@ -1321,7 +1405,10 @@ class MarkdownAPI:
         """Open a URL with the system default handler."""
         try:
             import webbrowser
-            webbrowser.open(url)
+            normalized = ''.join(ch for ch in str(url) if ord(ch) > 32 and ord(ch) != 127)
+            if urlsplit(normalized).scheme.lower() not in ('http', 'https', 'mailto', 'tel'):
+                return {'success': False, 'error': 'Unsupported link protocol'}
+            webbrowser.open(normalized)
             return {'success': True}
         except Exception as e:
             return {'success': False, 'error': str(e)}
@@ -1471,6 +1558,16 @@ def save_config(cfg):
             _safe_write_text(CONFIG_FILE, json.dumps(cfg))
         except Exception:
             log_exception('save config failed')
+
+
+def update_config(changes=None, remove=()):
+    with _config_lock:
+        cfg = load_config()
+        cfg.update(changes or {})
+        for key in remove:
+            cfg.pop(key, None)
+        save_config(cfg)
+        return cfg
 
 
 def add_recent_file(path):
@@ -1658,15 +1755,12 @@ def _hide_last_window(window, api):
       - the red close button / Cmd+W visibly "close" the window;
       - Dock click or a later Finder double-click un-hides it (or reuses it).
     """
+    if api:
+        api.reset_to_untitled()
     try:
-        _dispatch_js_to(window, 'convertToBlankDocument()')
+        _dispatch_js_to(window, 'reloadContent()')
     except Exception:
         log_exception('blank window dispatch failed')
-    if api:
-        try:
-            api.reset_to_untitled()
-        except Exception:
-            log_exception('blank window reset failed')
     try:
         with _state_lock:
             _hidden_windows[id(window)] = window
@@ -1731,7 +1825,7 @@ def on_window_closing(window):
         if api and api.is_dirty and not api.close_confirmed:
             if api.cached_content is not None:
                 try:
-                    _write_draft(api.file_path, api.cached_content)
+                    _write_draft(api.file_path, api.cached_content, api.document_id, api.revision, hashlib.sha256(api.file_content.encode('utf-8')).hexdigest())
                 except Exception:
                     log_exception('write draft during close prompt failed')
             try:
@@ -1754,7 +1848,7 @@ def on_window_closing(window):
             pass
         if api and api.is_dirty and api.cached_content is not None:
             try:
-                _write_draft(api.file_path, api.cached_content)
+                _write_draft(api.file_path, api.cached_content, api.document_id, api.revision, hashlib.sha256(api.file_content.encode('utf-8')).hexdigest())
             except Exception:
                 log_exception('write draft during close failed')
         return _allow_close(window)
@@ -1950,6 +2044,7 @@ def _create_window_safely(file_path=None, x=None, y=None):
 def update_main_window(main_window, main_api, file_path):
     """Update the main window with a new file (reused hidden window path)."""
     file_path = os.path.abspath(file_path)
+    main_api.reset_to_untitled()
     main_api.file_path = file_path
     main_api.is_untitled = False
     with _state_lock:
@@ -2721,8 +2816,11 @@ if HAS_COCOA:
                 return False
 
             def applicationShouldTerminate_(self, application):
-                _QUIT_REQUESTED.set()
-                return 1  # NSTerminateNow; dirty windows are handled by close events.
+                if _QUIT_APPROVED.is_set():
+                    _QUIT_REQUESTED.set()
+                    return 1
+                _begin_quit_confirmation()
+                return 0  # NSTerminateCancel until each document has approved.
 
             def applicationShouldHandleReopen_hasVisibleWindows_(self, application, flag):
                 """Dock icon click.
@@ -2908,21 +3006,13 @@ def main():
             except Exception:
                 pass
             try:
-                _try_set_default_handler()
+                if not os.environ.get('MDPREVIEW_DATA_DIR'):
+                    pass  # Default-file associations are changed only by explicit user action.
             except Exception:
                 pass
         threading.Thread(target=_post_startup, daemon=True).start()
-        _schedule_startup_update_check()
-        # Clear leftover staging files from an interrupted update (only when no
-        # update is pending — a pending install must keep its staged app).
-        try:
-            cfg0 = load_config()
-            if not cfg0.get('pending_update_version'):
-                if os.path.isdir(UPDATE_STAGING_DIR):
-                    shutil.rmtree(UPDATE_STAGING_DIR, ignore_errors=True)
-        except Exception:
-            pass
-
+        if not os.environ.get('MDPREVIEW_DISABLE_UPDATES'):
+            _schedule_startup_update_check()
     _start_quit_watchdog()
     _maybe_run_selftest(main_window)
 
@@ -2967,7 +3057,15 @@ def _maybe_run_selftest(main_window):
         except Exception:
             os._exit(3)
 
-    if '--selftest-close' in sys.argv:
+    if '--selftest-integrity' in sys.argv:
+        def run_integrity():
+            if not _UI_READY.wait(30):
+                os._exit(5)
+            with open(get_resource_path('tests/native-check.js')) as stream:
+                script = stream.read()
+            _dispatch_js_to(main_window, script)
+        threading.Thread(target=run_integrity, daemon=True).start()
+    elif '--selftest-close' in sys.argv:
         threading.Thread(target=_close_after, args=(4.0,), daemon=True).start()
     elif '--selftest-quit' in sys.argv:
         threading.Thread(target=_quit_after, args=(4.0,), daemon=True).start()
@@ -2984,9 +3082,15 @@ def _get_current_version():
     try:
         from Foundation import NSBundle
         info = NSBundle.mainBundle().infoDictionary()
-        return info.get('CFBundleShortVersionString', '0.0.0')
+        value = info.get('CFBundleShortVersionString') if info else None
+        if value:
+            return value
+        return open(get_resource_path('VERSION')).read().strip()
     except Exception:
-        return '0.0.0'
+        try:
+            return open(get_resource_path('VERSION')).read().strip()
+        except OSError:
+            return '0.0.0'
 
 
 def _fetch_latest_version():
@@ -3038,8 +3142,7 @@ def _should_check_update():
 
 def _mark_update_checked():
     cfg = load_config()
-    cfg['last_update_check'] = time.time()
-    save_config(cfg)
+    update_config({'last_update_check': time.time()})
 
 
 def _set_update_available(remote_version):
@@ -3054,17 +3157,15 @@ def _set_update_available(remote_version):
             except Exception:
                 pass
         AppHelper.callAfter(_update_menu)
-    # Auto-download in background to hidden staging dir
+    # Auto-download in background to hidden staging dir (silent by design:
+    # no progress UI). When staging succeeds the install bubble appears.
     def _bg_download():
-        update = _download_and_extract(remote_version)
-        if update:
-            cfg = load_config()
-            cfg['pending_staging_app'] = update['staging_app']
-            cfg['pending_update_version'] = remote_version
-            cfg.pop('pending_update_dmg', None)
-            save_config(cfg)
+        result = _download_and_extract(remote_version)
+        if result and 'staging_app' in result:
+            update_config({'pending_staging_app': result['staging_app'], 'pending_update_version': result['version']}, remove=('pending_update_dmg',))
             if HAS_COCOA:
                 AppHelper.callAfter(lambda: _dispatch_js('showUpdateBubble()'))
+        # Failures stay silent: already logged inside _download_and_extract.
     threading.Thread(target=_bg_download, daemon=True).start()
 
 
@@ -3109,52 +3210,109 @@ def _show_update_alert(remote_version):
         return False
 
 
-def _download_and_extract(version, progress_callback=None, keep_dmg=False):
-    """Download DMG to staging dir, extract .app, return staging and DMG paths."""
+def _staged_version_acceptable(staged_version, local_version):
+    try:
+        return version_tuple(staged_version) >= version_tuple(local_version)
+    except ValueError:
+        return False
+
+
+def _download_and_extract_unlocked(version, progress_callback=None, keep_dmg=False):
+    """Download DMG to staging dir, extract .app.
+
+    Returns {'staging_app': ..., 'dmg_path': ...} on success, or
+    {'error': <code>, 'detail': <localized message>} on failure, where code is
+    one of: 'network' | 'incomplete' | 'mount' | 'verify' | 'unknown'.
+    The 'version' argument is informational only; acceptance is decided by
+    _staged_version_acceptable against the locally installed version.
+    """
     import urllib.request
+    import urllib.error
     import subprocess
     mount_dir = None
     dmg_path = None
+
+    def _fail(code, en, zh):
+        return {'error': code, 'detail': _t(en, zh)}
+
     try:
         os.makedirs(UPDATE_STAGING_DIR, exist_ok=True)
-        dmg_path = os.path.join(UPDATE_STAGING_DIR, 'mdPreview.dmg')
-        url = 'https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg'
+        job_dir = tempfile.mkdtemp(prefix='download-', dir=UPDATE_STAGING_DIR)
+        dmg_path = os.path.join(job_dir, 'mdPreview.dmg')
+        if version:
+            version_tuple(version)
+        tag = ('v' + version) if version else 'latest'
+        url = f'https://github.com/tahoeliu/mdPreview/releases/download/{tag}/mdPreview.dmg' if version else 'https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg'
         req = urllib.request.Request(url, headers={'User-Agent': 'mdPreview'})
         if progress_callback:
             progress_callback(0)
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            total = int(resp.headers.get('Content-Length') or 0)
-            done = 0
-            last_percent = -1
-            with open(dmg_path, 'wb') as f:
-                while True:
-                    chunk = resp.read(65536)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-                    done += len(chunk)
-                    if progress_callback and total > 0:
-                        percent = min(100, int(done * 100 / total))
-                        if percent != last_percent:
-                            last_percent = percent
-                            progress_callback(percent)
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                total = int(resp.headers.get('Content-Length') or 0)
+                done = 0
+                last_percent = -1
+                digest = hashlib.sha256()
+                with open(dmg_path, 'wb') as f:
+                    while True:
+                        chunk = resp.read(65536)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        digest.update(chunk)
+                        done += len(chunk)
+                        if done > 300 * 1024 * 1024:
+                            raise ValueError('Update exceeds the package size limit')
+                        if progress_callback and total > 0:
+                            percent = min(100, int(done * 100 / total))
+                            if percent != last_percent:
+                                last_percent = percent
+                                progress_callback(percent)
+        except urllib.error.HTTPError as e:
+            return _fail('network', 'Network error (HTTP %d).' % e.code,
+                         '网络错误（HTTP %d）。' % e.code)
+        except urllib.error.URLError as e:
+            return _fail('network', 'Cannot reach GitHub (%s).' % e.reason,
+                         '无法连接 GitHub（%s）。' % e.reason)
+        except OSError as e:
+            # socket.timeout / connection reset / disk write errors
+            return _fail('network', 'Connection failed (%s).' % e,
+                         '网络连接失败（%s）。' % e)
         if progress_callback:
             progress_callback(100)
-        if os.path.getsize(dmg_path) < 1000000:
+        if (total and done != total) or os.path.getsize(dmg_path) < 1000000:
             os.remove(dmg_path)
-            return None
+            dmg_path = None
+            return _fail('incomplete', 'The downloaded file is incomplete.',
+                         '下载的文件不完整。')
+        try:
+            metadata_url = f'https://api.github.com/repos/tahoeliu/mdPreview/releases/tags/v{version}'
+            metadata_req = urllib.request.Request(metadata_url, headers={'User-Agent': 'mdPreview', 'Accept': 'application/vnd.github+json'})
+            with urllib.request.urlopen(metadata_req, timeout=15) as metadata_response:
+                release = json.loads(metadata_response.read(2_000_000))
+            if release.get('tag_name') != 'v' + version or release.get('draft') or release.get('prerelease'):
+                raise ValueError('Unexpected release metadata')
+            asset = next(asset for asset in release.get('assets', []) if asset.get('name') == 'mdPreview.dmg')
+            verify_asset(digest.hexdigest(), done, asset)
+        except Exception as exc:
+            return _fail('verify', str(exc), 'GitHub 发布摘要校验失败：' + str(exc))
         # Mount and copy .app to staging
         mount_dir = tempfile.mkdtemp()
-        subprocess.run(
-            ['hdiutil', 'attach', '-nobrowse', '-mountpoint', mount_dir, dmg_path],
-            capture_output=True, check=True
-        )
+        try:
+            subprocess.run(
+                ['hdiutil', 'attach', '-nobrowse', '-mountpoint', mount_dir, dmg_path],
+                capture_output=True, check=True, timeout=30
+            )
+        except subprocess.CalledProcessError as e:
+            return _fail('mount', 'Failed to mount the update image (%s).'
+                         % (e.stderr.decode('utf-8', 'replace').strip()[:120] if e.stderr else 'hdiutil error'),
+                         '安装包挂载失败。')
         src_app = os.path.join(mount_dir, 'mdPreview.app')
-        staging_app = os.path.join(UPDATE_STAGING_DIR, 'mdPreview.app')
+        staging_app = os.path.join(job_dir, 'mdPreview.app')
         if os.path.exists(staging_app):
             shutil.rmtree(staging_app)
-        shutil.copytree(src_app, staging_app)
-        # Integrity check: the staged app must carry the expected version.
+        shutil.copytree(src_app, staging_app, symlinks=True)
+        # Integrity check: the staged app must carry a version that is not
+        # OLDER than the installed one (equal is fine: re-download/reinstall).
         plist = os.path.join(staging_app, 'Contents', 'Info.plist')
         staged_version = None
         try:
@@ -3163,17 +3321,24 @@ def _download_and_extract(version, progress_callback=None, keep_dmg=False):
                 staged_version = plistlib.load(pf).get('CFBundleShortVersionString')
         except Exception:
             pass
-        if not staged_version or (version and _is_newer(version, staged_version)):
-            log_exception('staged update failed version check: got %r want %r' % (staged_version, version))
+        if not _staged_version_acceptable(staged_version, _get_current_version()):
+            log_exception('staged update failed version check: got %r, installed %r'
+                          % (staged_version, _get_current_version()))
             shutil.rmtree(staging_app, ignore_errors=True)
-            return None
-        return {'staging_app': staging_app, 'dmg_path': dmg_path if keep_dmg else ''}
-    except Exception:
+            return _fail('verify', 'The downloaded update failed the version check.',
+                         '下载的更新未通过版本校验。')
+        try:
+            verify_bundle(staging_app, _publisher_team_id(), version or staged_version)
+        except Exception as exc:
+            shutil.rmtree(staging_app, ignore_errors=True)
+            return _fail('verify', str(exc), '更新未通过发布者身份及公证校验：' + str(exc))
+        return {'staging_app': staging_app, 'version': staged_version, 'dmg_path': dmg_path if keep_dmg else ''}
+    except Exception as e:
         log_exception('download and extract failed')
-        return None
+        return _fail('unknown', 'Unexpected error: %s' % e, '未知错误：%s' % e)
     finally:
         if mount_dir and os.path.exists(mount_dir):
-            subprocess.run(['hdiutil', 'detach', mount_dir], capture_output=True)
+            subprocess.run(['hdiutil', 'detach', mount_dir], capture_output=True, timeout=30)
             shutil.rmtree(mount_dir, ignore_errors=True)
         try:
             if dmg_path and os.path.exists(dmg_path) and not keep_dmg:
@@ -3183,22 +3348,29 @@ def _download_and_extract(version, progress_callback=None, keep_dmg=False):
 
 
 def _manual_download_update_with_progress(version):
-    """Download a manually requested update and report progress to the UI."""
+    """Download a manually requested update and report progress to the UI.
+
+    Progress (percent) is shown in the top-right bubble. On failure the bubble
+    shows a short reason and a status bar entry carries the detailed cause.
+    On success the same "click to install" bubble as the auto-download path
+    is shown.
+    """
     def _progress(percent):
         if HAS_COCOA:
             AppHelper.callAfter(lambda p=percent: _dispatch_js(f'showUpdateDownloadProgress({int(p)})'))
 
-    update = _download_and_extract(version, progress_callback=_progress, keep_dmg=True)
-    if not update:
+    result = _download_and_extract(version, progress_callback=_progress, keep_dmg=True)
+    if not result or 'staging_app' not in result:
+        err = (result or {}).get('error', 'unknown')
+        detail = (result or {}).get('detail', '')
         if HAS_COCOA:
-            AppHelper.callAfter(lambda: _dispatch_js("showUpdateDownloadFailed('download failed')"))
-        return {'success': False, 'error': 'Download failed'}
+            detail_js = json.dumps(detail or '')
+            AppHelper.callAfter(
+                lambda c=err, d=detail_js: _dispatch_js(f"showUpdateDownloadFailed('{c}', {d})")
+            )
+        return {'success': False, 'error': err, 'detail': detail}
 
-    cfg = load_config()
-    cfg['pending_staging_app'] = update['staging_app']
-    cfg['pending_update_version'] = version
-    cfg['pending_update_dmg'] = update.get('dmg_path', '')
-    save_config(cfg)
+    update_config({'pending_staging_app': result['staging_app'], 'pending_update_version': result['version'], 'pending_update_dmg': result.get('dmg_path', '')})
     if HAS_COCOA:
         AppHelper.callAfter(lambda: _dispatch_js('showUpdateBubble()'))
     return {'success': True}
@@ -3222,10 +3394,12 @@ def _schedule_startup_update_check():
             time.sleep(STARTUP_UPDATE_DELAY)
             if not _should_check_update():
                 return
-            _mark_update_checked()
             remote = _fetch_latest_version()
             if not remote:
+                # Network failure: do NOT consume the 7-day interval — the
+                # next launch retries (one lightweight request is cheap).
                 return
+            _mark_update_checked()
             local = _get_current_version()
             if _is_newer(remote, local):
                 _set_update_available(remote)
@@ -3238,7 +3412,12 @@ def _schedule_startup_update_check():
 
 
 def _manual_check_up_to_date():
-    """Alert for manual check when already on latest version."""
+    """Alert for manual check when already on latest version.
+
+    Also offers "Re-download Latest": reinstalls the current latest release
+    with the download progress shown in the update bubble (useful to repair
+    an installation or pick up a re-uploaded DMG).
+    """
     if not HAS_COCOA:
         return
     try:
@@ -3246,8 +3425,13 @@ def _manual_check_up_to_date():
         alert = NSAlert.alloc().init()
         alert.setMessageText_(_t("You're up to date!", "已是最新版本！"))
         alert.setInformativeText_(_t(f'mdPreview {local} is the latest version.', f'mdPreview {local} 已是最新版本。'))
+        alert.addButtonWithTitle_(_t('Re-download Latest', '重新下载最新版'))
         alert.addButtonWithTitle_(_t('OK', '好'))
-        alert.runModal()
+        response = alert.runModal()
+        if response == 1000:  # Re-download Latest
+            version_arg = json.dumps(local)
+            AppHelper.callAfter(lambda: _dispatch_js("showUpdateDownloadProgress(0)"))
+            AppHelper.callAfter(lambda: _dispatch_js(f"window.pywebview.api.download_update_with_progress({version_arg})"))
     except Exception:
         pass
 
@@ -3277,15 +3461,14 @@ def _try_set_default_handler():
         api = MarkdownAPI()
         result = api.set_as_default_for_md()
         if result.get('success'):
-            cfg['default_handler_set'] = True
-            save_config(cfg)
+            update_config({'default_handler_set': True})
     except Exception:
         log_exception('set default handler failed')
 
 
 def _check_pending_install():
     """On app launch, check if a staged update exists and show the bubble."""
-    if not HAS_COCOA:
+    if not HAS_COCOA or os.environ.get('MDPREVIEW_DISABLE_UPDATES'):
         return
     try:
         cfg = load_config()
@@ -3297,8 +3480,9 @@ def _check_pending_install():
                 # Already updated — clean up staging
                 cfg.pop('pending_staging_app', None)
                 cfg.pop('pending_update_version', None)
-                save_config(cfg)
-                shutil.rmtree(staging_app, ignore_errors=True)
+                update_config(remove=('pending_staging_app', 'pending_update_version', 'pending_update_dmg'))
+                if os.path.commonpath([os.path.realpath(staging_app), os.path.realpath(UPDATE_STAGING_DIR)]) == os.path.realpath(UPDATE_STAGING_DIR):
+                    shutil.rmtree(staging_app, ignore_errors=True)
                 return
             # Show the update bubble (non-blocking)
             global _available_update_version
@@ -3317,132 +3501,154 @@ def _check_pending_install():
                 cfg.pop('pending_staging_app', None)
                 cfg.pop('pending_update_version', None)
                 cfg.pop('pending_update_dmg', None)
-                save_config(cfg)
+                update_config(remove=('pending_staging_app', 'pending_update_version', 'pending_update_dmg'))
     except Exception:
-        pass
+        log_exception('pending update recovery failed')
 
 
-def _smoke_test_app(app_path, timeout=5):
-    """Launch an .app, verify its process stays alive, then quit it.
-
-    Used before replacing the installed app so a broken update never lands on
-    the user's machine. Only the smoke-test process (matched by app_path) is
-    killed — the running old app is never touched.
-    """
+def _smoke_test_app(app_path, timeout=20):
     import subprocess
+    process = None
     try:
-        subprocess.run(['open', '-a', app_path], capture_output=True, timeout=5)
-        marker = os.path.join(app_path, 'Contents', 'MacOS')
-        deadline = time.time() + timeout
-        while time.time() < deadline:
-            r = subprocess.run(['pgrep', '-f', marker], capture_output=True)
-            if r.returncode == 0:
-                subprocess.run(['pkill', '-f', marker], capture_output=True)
-                return True
-            time.sleep(0.3)
-        # Didn't survive: kill anything left from the smoke run
-        subprocess.run(['pkill', '-f', marker], capture_output=True)
-        return False
+        with tempfile.TemporaryDirectory(prefix='mdpreview-smoke-') as temporary:
+            marker = os.path.join(temporary, 'UpdateStaging', 'ready.json')
+            environment = dict(os.environ, MDPREVIEW_DATA_DIR=temporary, MDPREVIEW_DISABLE_UPDATES='1')
+            process = subprocess.Popen([os.path.join(app_path, 'Contents/MacOS/mdPreview'),
+                                        '--update-ready', marker], env=environment,
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            deadline = time.monotonic() + timeout
+            while time.monotonic() < deadline:
+                if process.poll() is not None:
+                    return False
+                if os.path.exists(marker):
+                    with open(marker) as stream:
+                        return json.load(stream).get('pid') == process.pid
+                time.sleep(0.1)
+            return False
     except Exception:
         log_exception('smoke test failed')
         return False
+    finally:
+        if process and process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
 
 
 def _perform_auto_install():
-    """Execute auto-install: write helper script, quit app, let script replace + restart.
-
-    Hardened: the staged app is smoke-tested BEFORE any replacement; the helper
-    script keeps the old app until the new one has launched successfully, and
-    rolls back on failure.
-    """
+    global _pending_install_plan
     import subprocess
     try:
         cfg = load_config()
-        staging_app = cfg.get('pending_staging_app', '')
-        version = cfg.get('pending_update_version', '')
-        manual_dmg_path = cfg.get('pending_update_dmg', '')
-        if not staging_app or not os.path.exists(staging_app):
-            return {'success': False, 'error': 'No staged update found', 'manual_dmg_path': manual_dmg_path}
-
-        app_dir = '/Applications'
-        app_path = os.path.join(app_dir, 'mdPreview.app')
-        if not os.access(app_dir, os.W_OK) or (os.path.exists(app_path) and not os.access(app_path, os.W_OK)):
-            return {
-                'success': False,
-                'error': 'Permission denied while replacing /Applications/mdPreview.app',
-                'manual_install': True,
-                'manual_dmg_path': manual_dmg_path,
-            }
-
-        # Smoke-test the staged app first: never replace a working install
-        # with a package that fails to launch.
-        if not _smoke_test_app(staging_app):
-            shutil.rmtree(staging_app, ignore_errors=True)
-            cfg.pop('pending_staging_app', None)
-            cfg.pop('pending_update_version', None)
-            save_config(cfg)
-            return {'success': False, 'error': 'Staged update failed launch test', 'manual_install': True, 'manual_dmg_path': manual_dmg_path}
-
-        # Write helper script that runs after app exits. It keeps the old app
-        # until the new one has been verified running (launch + pgrep), and
-        # rolls back if the new app dies.
-        script = (
-            '#!/bin/bash\n'
-            'sleep 2\n'
-            f'APP=/Applications/mdPreview.app\n'
-            f'OLD=/Applications/mdPreview.app.old\n'
-            f'STAGING="{staging_app}"\n'
-            'mv "$APP" "$OLD" 2>/dev/null\n'
-            'cp -R "$STAGING" "$APP"\n'
-            'if [ $? -eq 0 ]; then\n'
-            '  xattr -cr "$APP"\n'
-            '  open "$APP"\n'
-            '  sleep 3\n'
-            '  if pgrep -f "$APP/Contents/MacOS" >/dev/null 2>&1; then\n'
-            '    echo "mdPreview update OK"\n'
-            '    rm -rf "$OLD"\n'
-            '  else\n'
-            '    echo "mdPreview update FAILED to launch - rolling back"\n'
-            '    rm -rf "$APP"\n'
-            '    mv "$OLD" "$APP" 2>/dev/null\n'
-            '  fi\n'
-            'else\n'
-            '  mv "$OLD" "$APP" 2>/dev/null\n'
-            'fi\n'
-            'rm -rf "$STAGING"\n'
-        )
-        script_path = os.path.join(UPDATE_STAGING_DIR, 'install_update.sh')
-        os.makedirs(UPDATE_STAGING_DIR, exist_ok=True)
-        with open(script_path, 'w') as f:
-            f.write(script)
-        os.chmod(script_path, 0o755)
-
-        # Launch helper detached from this process
-        subprocess.Popen(
-            ['nohup', 'bash', script_path],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-            start_new_session=True
-        )
-
-        # Clean up config
-        cfg.pop('pending_staging_app', None)
-        cfg.pop('pending_update_version', None)
-        cfg.pop('pending_update_dmg', None)
-        save_config(cfg)
-
-        # Quit the app so the helper can replace it
-        if HAS_COCOA:
-            from AppKit import NSApplication
-            NSApplication.sharedApplication().terminate_(None)
-
+        staged = cfg.get('pending_staging_app')
+        version = cfg.get('pending_update_version')
+        if not staged or os.path.commonpath([os.path.realpath(staged), os.path.realpath(UPDATE_STAGING_DIR)]) != os.path.realpath(UPDATE_STAGING_DIR):
+            raise ValueError('No trusted staged application')
+        team_id = _publisher_team_id()
+        verify_bundle(staged, team_id, version)
+        if not _smoke_test_app(staged):
+            raise RuntimeError('Update did not reach a ready UI')
+        if not os.access('/Applications', os.W_OK):
+            raise PermissionError('Applications directory is not writable')
+        job = os.path.dirname(staged)
+        plan = {'pid': os.getpid(), 'staging': staged, 'destination': '/Applications/mdPreview.app',
+                'teamId': team_id, 'version': version,
+                'ready': os.path.join(UPDATE_STAGING_DIR, 'install-ready.json'),
+                'log': os.path.join(UPDATE_STAGING_DIR, 'install.log')}
+        plan_path = os.path.join(job, 'install-plan.json')
+        _safe_write_text(plan_path, json.dumps(plan))
+        def launch_helper():
+            subprocess.Popen([os.path.join(staged, 'Contents/MacOS/mdPreview'),
+                              '--install-update-helper', '--plan', plan_path],
+                             start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            update_config(remove=('pending_staging_app', 'pending_update_version', 'pending_update_dmg'))
+        _pending_install_plan = launch_helper
+        AppHelper.callAfter(_begin_quit_confirmation)
         return {'success': True}
-    except Exception as e:
+    except Exception as exc:
         log_exception('auto install failed')
-        try:
-            manual_dmg_path = load_config().get('pending_update_dmg', '')
-        except Exception:
-            manual_dmg_path = ''
-        return {'success': False, 'error': str(e), 'manual_install': True, 'manual_dmg_path': manual_dmg_path}
+        return {'success': False, 'error': str(exc), 'manual_install': True,
+                'manual_dmg_path': load_config().get('pending_update_dmg', '')}
+
+
+
+
+
+_QUIT_APPROVED = threading.Event()
+_UI_READY = threading.Event()
+_quit_confirmation_queue = []
+_quit_confirmation_active = False
+
+
+def _begin_quit_confirmation():
+    global _quit_confirmation_active
+    if _quit_confirmation_active:
+        return
+    _quit_confirmation_active = True
+    for api in _window_apis.values():
+        _dispatch_js_to(api.window, 'setQuitFrozen(true)')
+    _quit_confirmation_queue[:] = list(_window_apis.values())
+    _advance_quit_confirmation()
+
+
+def _advance_quit_confirmation():
+    if _quit_confirmation_queue:
+        api = _quit_confirmation_queue[0]
+        _dispatch_js_to(api.window, 'confirmQuitDocument()')
+    else:
+        global _pending_install_plan
+        if _pending_install_plan:
+            try:
+                _pending_install_plan()
+            except Exception:
+                log_exception('update helper launch failed')
+                _cancel_quit_confirmation()
+                return
+            _pending_install_plan = None
+        _QUIT_APPROVED.set()
+        AppHelper.callAfter(lambda: NSApplication.sharedApplication().terminate_(None))
+
+
+def _finish_quit_confirmation(api, approved):
+    global _quit_confirmation_active, _pending_install_plan
+    if not _quit_confirmation_queue or _quit_confirmation_queue[0] is not api:
+        return
+    if not approved:
+        _cancel_quit_confirmation()
+        return
+    _quit_confirmation_queue.pop(0)
+    _advance_quit_confirmation()
+
+
+_update_download_lock = threading.Lock()
+_pending_install_plan = None
+
+
+def _publisher_team_id():
+    with open(get_resource_path('release-policy.json')) as stream:
+        return json.load(stream).get('teamId')
+
+
+def _download_and_extract(version, progress_callback=None, keep_dmg=False):
+    if not _update_download_lock.acquire(blocking=False):
+        return {'error': 'busy', 'detail': _t('An update is already downloading.', '更新正在下载中。')}
+    try:
+        return _download_and_extract_unlocked(version, progress_callback, keep_dmg)
+    finally:
+        _update_download_lock.release()
+
+
+def _cancel_quit_confirmation():
+    global _quit_confirmation_active, _pending_install_plan
+    _quit_confirmation_queue.clear()
+    _quit_confirmation_active = False
+    _pending_install_plan = None
+    _QUIT_APPROVED.clear()
+    for api in _window_apis.values():
+        _dispatch_js_to(api.window, 'setQuitFrozen(false)')
 
 
 if __name__ == '__main__':

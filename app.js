@@ -1,3 +1,7 @@
+const documentSession = new DocumentSession();
+let saveInFlight = null;
+let syncInFlight = null;
+let syncRetryCount = 0;
 let isSource = false;
   let isDirty = false;
   let filePath = '';
@@ -20,7 +24,6 @@ let isSource = false;
   let isZh = false;
   let renderJobId = 0;
   let deferredRenderTimer = null;
-  const FIRST_SCREEN_MARKDOWN_CHARS = 18000;
   // Centralized tuning knobs (kept together so they are easy to find/adjust).
   const TOC_AUTO_HIDE_WIDTH = 800;   // below this window width the TOC auto-hides
   const TOC_WIDTH = 200;
@@ -43,6 +46,11 @@ let isSource = false;
 
   if (typeof marked !== 'undefined') marked.setOptions({ breaks: true, gfm: true });
 
+  // Make native Enter create <p> paragraphs (not <div>s) in the rendered
+  // contenteditable. WebKit's <div> paragraph junk otherwise corrupts the
+  // markdown round trip (turndown treats bare <div>s as inline content).
+  try { document.execCommand('defaultParagraphSeparator', false, 'p'); } catch (err) {}
+
   const _jsT0 = performance.now();  // cold-start profiling
 
   // These are loaded on-demand to speed up cold start by ~300-500ms.
@@ -60,16 +68,18 @@ let isSource = false;
     });
   }
 
+  const libraryLoads = new Map();
   function _loadScript(src) {
-    return new Promise((resolve, reject) => {
-      const existing = document.querySelector('script[src="' + src + '"]');
-      if (existing) { resolve(); return; }
-      const s = document.createElement('script');
-      s.src = src;
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error('Failed to load ' + src));
-      document.head.appendChild(s);
-    });
+    if (libraryLoads.has(src)) return libraryLoads.get(src);
+    const task = new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = () => resolve();
+      script.onerror = () => { script.remove(); reject(new Error('Failed to load ' + src)); };
+      document.head.appendChild(script);
+    }).catch((error) => { libraryLoads.delete(src); throw error; });
+    libraryLoads.set(src, task);
+    return task;
   }
 
   function _initTurndown() {
@@ -91,6 +101,21 @@ let isSource = false;
       replacement: function (content, node) {
         const source = node.getAttribute('data-source') || '';
         return source ? '```mermaid\n' + source.trim() + '\n```' : '';
+      }
+    });
+    turndownService.addRule('preservedExtension', {
+      filter: (node) => node.hasAttribute && node.hasAttribute('data-raw') && !node.classList.contains('frontmatter'),
+      replacement: (content, node) => {
+        const raw = node.getAttribute('data-raw') || '';
+        return node.classList.contains('math-block') || node.classList.contains('footnotes') || node.classList.contains('markdown-definitions') ? '\n\n' + raw + '\n\n' : raw;
+      }
+    });
+    turndownService.addRule('relativeImage', {
+      filter: 'img',
+      replacement: (content, node) => {
+        const src = node.getAttribute('data-original-src') || node.getAttribute('src') || '';
+        const alt = (node.getAttribute('alt') || '').replace(/\]/g, '\\]');
+        return src ? '![' + alt + '](' + src.replace(/\)/g, '\\)') + ')' : '';
       }
     });
     turndownService.addRule('listItem', {
@@ -142,7 +167,7 @@ let isSource = false;
         var lines = [];
         var headerCells = [];
         for (var c = 0; c < colCount; c++) {
-          headerCells.push(escPipe((rows[0].cells[c] || {}).textContent || ''));
+          headerCells.push(escPipe(rows[0].cells[c] ? turndownService.turndown(rows[0].cells[c].innerHTML) : ''));
         }
         lines.push('| ' + headerCells.join(' | ') + ' |');
         var sepCells = [];
@@ -157,7 +182,7 @@ let isSource = false;
         for (var r2 = 1; r2 < rows.length; r2++) {
           var cells = [];
           for (var c3 = 0; c3 < colCount; c3++) {
-            cells.push(escPipe((rows[r2].cells[c3] || {}).textContent || ''));
+            cells.push(escPipe(rows[r2].cells[c3] ? turndownService.turndown(rows[r2].cells[c3].innerHTML) : ''));
           }
           lines.push('| ' + cells.join(' | ') + ' |');
         }
@@ -181,7 +206,9 @@ let isSource = false;
       startOnLoad: false,
       theme: getMermaidTheme(),
       securityLevel: 'strict',
-      flowchart: { useMaxWidth: true, htmlLabels: true },
+      // Native SVG labels survive strict sanitization and stay sharp in the viewer.
+      htmlLabels: false,
+      flowchart: { useMaxWidth: true, htmlLabels: false },
       sequence: { useMaxWidth: true },
     });
   }
@@ -189,7 +216,7 @@ let isSource = false;
     if (_mermaidLoaded) return Promise.resolve();
     if (_mermaidLoadingPromise) return _mermaidLoadingPromise;
     if (typeof mermaid !== 'undefined') { initMermaid(); _mermaidLoaded = true; return Promise.resolve(); }
-    _mermaidLoadingPromise = _loadScript('mermaid.min.js').then(() => { initMermaid(); _mermaidLoaded = true; _mermaidLoadingPromise = null; });
+    _mermaidLoadingPromise = _loadScript('mermaid.min.js').then(() => { initMermaid(); _mermaidLoaded = true; }).finally(() => { _mermaidLoadingPromise = null; });
     return _mermaidLoadingPromise;
   }
   initMermaid();
@@ -203,37 +230,12 @@ let isSource = false;
     });
   }
 
-  function sanitizeMermaidSvg(svg) {
-    // Belt-and-braces: even with mermaid's strict security level, strip any
-    // script elements and event/javascript: attributes before inserting SVG.
-    try {
-      const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
-      const root = doc.documentElement;
-      const els = Array.from(root.getElementsByTagName('*'));
-      for (const el of els) {
-        if (el.tagName.toLowerCase() === 'script') {
-          el.remove();
-          continue;
-        }
-        for (const attr of Array.from(el.attributes)) {
-          const name = attr.name.toLowerCase();
-          const value = (attr.value || '').trim().toLowerCase();
-          if (name.startsWith('on') ||
-              ((name === 'href' || name === 'xlink:href') && value.startsWith('javascript:'))) {
-            el.removeAttribute(attr.name);
-          }
-        }
-      }
-      return new XMLSerializer().serializeToString(root);
-    } catch (e) {
-      return svg;
-    }
-  }
+  function sanitizeMermaidSvg(svg) { return MarkdownPipeline.cleanSVG(svg); }
 
   async function renderMermaidDiagrams(root) {
     const codeBlocks = root.querySelectorAll('code.language-mermaid');
     if (codeBlocks.length === 0) return;
-    await ensureMermaid();
+    try { await ensureMermaid(); } catch (error) { showStatus(error.message, true); return; }
     if (typeof mermaid === 'undefined') return;
     for (const code of codeBlocks) {
       const pre = code.parentElement;
@@ -246,6 +248,7 @@ let isSource = false;
           const id = 'mermaid-' + Math.random().toString(36).slice(2, 9);
           const rendered = await mermaid.render(id, source);
           svg = rendered.svg;
+          if (mermaidSvgCache.size >= 32) mermaidSvgCache.delete(mermaidSvgCache.keys().next().value);
           mermaidSvgCache.set(source, svg);
         }
         const wrapper = document.createElement('div');
@@ -253,74 +256,21 @@ let isSource = false;
         wrapper.setAttribute('data-source', source);
         wrapper.setAttribute('contenteditable', 'false');
         wrapper.innerHTML = sanitizeMermaidSvg(svg);
-        pre.parentNode.replaceChild(wrapper, pre);
+        if (pre.parentNode && !closing) pre.parentNode.replaceChild(wrapper, pre);
       } catch (e) {
         const error = document.createElement('div');
         error.className = 'mermaid-error';
         error.setAttribute('contenteditable', 'false');
         error.textContent = 'Mermaid render error: ' + (e && e.message ? e.message : e);
-        pre.parentNode.replaceChild(error, pre);
+        if (pre.parentNode && !closing) pre.parentNode.replaceChild(error, pre);
       }
     }
   }
 
-  function preprocessMarkdownExtensions(markdown) {
-    const footnotes = [];
-    let body = markdown.replace(/^\[\^([^\]]+)\]:\s*([\s\S]*?)(?=^\[\^[^\]]+\]:|\n{2,}|\s*$)/gm, (match, id, text) => {
-      footnotes.push({ id: id.trim(), text: text.trim().replace(/\n\s+/g, ' ') });
-      return '';
-    });
-    const mathBlocks = [];
-    body = body.replace(/\$\$\s*([\s\S]*?)\s*\$\$/g, (match, expr) => {
-      const token = `@@MATH_BLOCK_${mathBlocks.length}@@`;
-      mathBlocks.push(expr.trim());
-      return token;
-    });
-    return { body, footnotes, mathBlocks };
-  }
-
-  function renderMathPlaceholders(root, mathBlocks) {
-    root.innerHTML = root.innerHTML.replace(/@@MATH_BLOCK_(\d+)@@/g, (match, idx) => {
-      return '<span class="math-block" contenteditable="false">' + escHtml(mathBlocks[Number(idx)] || '') + '</span>';
-    });
-    root.innerHTML = root.innerHTML.replace(/\$([^$\n]+?)\$/g, (match, expr) => {
-      return '<span class="math-inline" contenteditable="false">' + escHtml(expr.trim()) + '</span>';
-    });
-  }
-
-  function renderFootnotes(root, footnotes) {
-    if (!footnotes.length) return;
-    root.querySelectorAll('sup').forEach((sup) => {
-      const text = sup.textContent || '';
-      const ref = text.match(/^\[([^\]]+)\]$/);
-      if (!ref) return;
-      const id = ref[1];
-      const slug = slugifyHeading(id);
-      sup.className = 'footnote-ref';
-      sup.id = `fnref-${slug}`;
-      sup.innerHTML = `<a href="#fn-${slug}">[${escHtml(id)}]</a>`;
-    });
-    const section = document.createElement('section');
-    section.className = 'footnotes';
-    section.setAttribute('contenteditable', 'false');
-    const items = footnotes.map((fn) => {
-      const id = slugifyHeading(fn.id);
-      return `<li id="fn-${id}">${escHtml(fn.text)} <a class="footnote-backref" href="#fnref-${id}">↩</a></li>`;
-    }).join('');
-    section.innerHTML = `<ol>${items}</ol>`;
-    root.appendChild(section);
-  }
-
-  function splitMarkdownForFirstScreen(markdown) {
-    if (!markdown || markdown.length <= FIRST_SCREEN_MARKDOWN_CHARS) {
-      return { first: markdown || '', rest: '', staged: false };
-    }
-    let cut = markdown.lastIndexOf('\n\n', FIRST_SCREEN_MARKDOWN_CHARS);
-    if (cut < FIRST_SCREEN_MARKDOWN_CHARS * 0.55) cut = markdown.lastIndexOf('\n#', FIRST_SCREEN_MARKDOWN_CHARS);
-    if (cut < FIRST_SCREEN_MARKDOWN_CHARS * 0.55) cut = markdown.lastIndexOf('\n', FIRST_SCREEN_MARKDOWN_CHARS);
-    if (cut < FIRST_SCREEN_MARKDOWN_CHARS * 0.55) cut = FIRST_SCREEN_MARKDOWN_CHARS;
-    return { first: markdown.slice(0, cut), rest: markdown.slice(cut), staged: true };
-  }
+  // Extensions now run in the lexer, so code and HTML attributes are never scanned as prose.
+  function preprocessMarkdownExtensions(markdown) { return { body: markdown, footnotes: [], mathBlocks: [] }; }
+  function renderMathPlaceholders() {}
+  function renderFootnotes() {}
 
   function containsMermaidFence(markdown) {
     return /(^|\n)\s*(```+|~~~+)\s*mermaid(?:\s|$)/i.test(markdown || '');
@@ -340,42 +290,8 @@ let isSource = false;
   //   1. string-level BEFORE innerHTML (otherwise <img onerror> already fires
   //      while the parser sets innerHTML and no DOM pass can undo it);
   //   2. DOM-level AFTER parsing (defense in depth for parser-normalized forms).
-  function sanitizeHtmlString(html) {
-    const blockedTags = 'script|iframe|object|embed|link|meta|base|style|svg|math|video|audio|source|track|frame|frameset|applet|param|noscript|form';
-    const tagRe = new RegExp('<(?:' + blockedTags + ')\\b[^>]*>[\\s\\S]*?<\\/\\s*(?:' + blockedTags + ')\\s*>|<(?:' + blockedTags + ')\\b[^>]*\\/?>', 'gi');
-    const onAttrRe = /\s+on[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
-    const dangerousUrl = '(?:javascript:|vbscript:|data:(?!image\\/)|file:)';
-    const hrefRe = new RegExp('(href|poster)\\s*=\\s*(?:"|\')?\\s*' + dangerousUrl + '[^\\s"\'>]*', 'gi');
-    const srcRe = new RegExp('\\ssrc\\s*=\\s*(?:"|\')?\\s*' + dangerousUrl + '[^\\s"\'>]*', 'gi');
-    // style="background:url(javascript:...)" is inert in modern browsers but we
-    // still strip it for defense in depth.
-    const styleRe = /\sstyle\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi;
-    return (html || '')
-      .replace(tagRe, '')
-      .replace(onAttrRe, '')
-      .replace(hrefRe, '$1="#"')
-      .replace(srcRe, '')
-      .replace(styleRe, (m) => /url\s*\(\s*['"]?\s*(?:javascript|vbscript|data:text\/html)/i.test(m) ? '' : m);
-  }
-
-  function sanitizeRenderedDOM(root) {
-    try {
-      root.querySelectorAll('script,iframe,object,embed,link,meta,base,style,svg,math,video,audio,source,track,frame,frameset,applet,param,noscript,form').forEach((el) => el.remove());
-      root.querySelectorAll('*').forEach((el) => {
-        for (const attr of Array.from(el.attributes || [])) {
-          const name = attr.name.toLowerCase();
-          if (name.startsWith('on')) { el.removeAttribute(attr.name); continue; }
-          if (name === 'href' || name === 'src' || name === 'xlink:href' || name === 'poster') {
-            if (/^\s*(?:javascript:|vbscript:|data:(?!image\/)|file:)/i.test((attr.value || '').trim())) {
-              el.removeAttribute(attr.name);
-            }
-          }
-        }
-      });
-    } catch (e) {
-      // Sanitizer must never break rendering.
-    }
-  }
+  function sanitizeHtmlString(html) { return MarkdownPipeline.cleanHTML(html); }
+  function sanitizeRenderedDOM(root) { root.innerHTML = MarkdownPipeline.cleanHTML(root.innerHTML); }
 
   const CODE_HIGHLIGHT_MAX_CHARS = 350000;
   const CODE_LANGUAGE_ALIASES = {
@@ -814,8 +730,7 @@ let isSource = false;
     }
 
     const bodyDiv = document.createElement('div');
-    bodyDiv.innerHTML = sanitizeHtmlString(marked.parse(body));
-    sanitizeRenderedDOM(bodyDiv);
+    bodyDiv.innerHTML = MarkdownPipeline.parse(body);
     while (bodyDiv.firstChild) fragment.appendChild(bodyDiv.firstChild);
 
     const work = document.createElement('div');
@@ -842,7 +757,7 @@ let isSource = false;
     protectComplexBlocks(container);
     balanceTableColumns(container);
     ensureBlockCaretLandingZones(container, content);
-    lastRenderedHash = contentHash(content);
+    lastRenderedHash = content;
   }
 
   function ensureBlockCaretLandingZones(container, source) {
@@ -899,43 +814,19 @@ let isSource = false;
     return true;
   }
 
-  function scheduleDeferredEnhancements(container, content, jobId) {
-    clearTimeout(deferredRenderTimer);
-    deferredRenderTimer = setTimeout(async () => {
-      if (jobId !== renderJobId || closing) return;
-      buildToc(container);
-      if (hasRenderableMermaid(container)) {
-        await renderMermaidDiagrams(container);
-        if (jobId !== renderJobId || closing) return;
-        protectComplexBlocks(container);
-        balanceTableColumns(container);
-        requestAnimationFrame(() => { if (!isSource) updateScrollSpy(); });
-      }
-    }, 80);
-  }
-
   async function renderMarkdown(content, container) {
     const jobId = ++renderJobId;
     clearTimeout(deferredRenderTimer);
-    const split = splitMarkdownForFirstScreen(content);
-    appendParsedMarkdown(split.first, container, { keepExisting: false });
+    // A complete token stream is required for fences, references and footnotes.
+    // No delayed full-document replacement is allowed to overwrite user input.
+    appendParsedMarkdown(content, container, { keepExisting: false });
     finalizeRenderedMarkdown(container, content);
-    scheduleDeferredEnhancements(container, content, jobId);
-
-    if (split.staged) {
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          if (jobId !== renderJobId || closing) return;
-          // Re-render the full document in the deferred pass instead of
-          // appending only the tail. Markdown constructs can legally span the
-          // split boundary (fences, reference links, definitions), so the final
-          // DOM must come from a complete parse even though the first paint is
-          // intentionally partial.
-          appendParsedMarkdown(content, container, { keepExisting: false });
-          finalizeRenderedMarkdown(container, content);
-          scheduleDeferredEnhancements(container, content, jobId);
-        }, 0);
-      });
+    buildToc(container);
+    if (hasRenderableMermaid(container)) {
+      await renderMermaidDiagrams(container);
+      if (jobId !== renderJobId || closing) return;
+      protectComplexBlocks(container);
+      balanceTableColumns(container);
     }
   }
 
@@ -962,8 +853,8 @@ let isSource = false;
     if (!toggle) return;
     toggle.classList.toggle('collapsed', hidden);
     toggle.setAttribute('aria-expanded', hidden ? 'false' : 'true');
-    toggle.setAttribute('aria-label', hidden ? 'Show outline' : 'Hide outline');
-    toggle.setAttribute('title', hidden ? 'Show outline' : 'Hide outline');
+    toggle.setAttribute('aria-label', hidden ? t('Show outline', '显示目录') : t('Hide outline', '隐藏目录'));
+    toggle.setAttribute('title', hidden ? t('Show outline', '显示目录') : t('Hide outline', '隐藏目录'));
   }
 
   let tocHasContent = false;
@@ -1273,6 +1164,11 @@ let isSource = false;
     h = h.replace(/^(#{1,6})(\s)/, '<span class="syn-heading">$1</span>$2');
     h = h.replace(/(\*\*|__)(.+?)\1/g, '<span class="syn-bold">$1</span>$2<span class="syn-bold">$1</span>');
     h = h.replace(/(^|[^\*])(\*)([^\s\*][^\*]*?)\*(?!\*)/g, '$1<span class="syn-italic">$2</span>$3<span class="syn-italic">$2</span>');
+    // Single-underscore italic (_like this_). Runs after the bold rule so __
+    // pairs are already wrapped in spans. The [^\w_] guard keeps intraword
+    // underscores (snake_case_words) from matching — matching CommonMark,
+    // which does not emphasize inside words with _.
+    h = h.replace(/(^|[^\w_])_([^_\s][^_]*?)_(?!\w)/g, '$1<span class="syn-italic">_</span>$2<span class="syn-italic">_</span>');
     h = h.replace(/(~~)([^~]+?)(~~)/g, '<span class="syn-strike">$1</span>$2<span class="syn-strike">$1</span>');
     h = h.replace(/`([^`]+)`/g, '<span class="syn-code">`</span>$1<span class="syn-code">`</span>');
     // Image marker "!" gets its own color; the [alt](url) is colored by the
@@ -1340,7 +1236,8 @@ let isSource = false;
   function syncHighlight() {
     const t0 = performance.now();
     const layer = document.getElementById('highlightLayer');
-    layer.innerHTML = highlightMarkdown(document.getElementById('textarea').value) + '\n';
+    const sourceText = document.getElementById('textarea').value;
+    layer.innerHTML = (sourceText.length > 500000 ? escHtml(sourceText) : highlightMarkdown(sourceText)) + '\n';
     _sourceLayerText = layer.textContent;
     const starts = [0];
     for (let i = 0; i < _sourceLayerText.length; i++) {
@@ -1415,11 +1312,13 @@ let isSource = false;
     document.documentElement.style.setProperty('--content-font-size', contentFontSize + 'px');
   }
   function zoomIn() {
+    if (imageViewer.active) { imageViewer.zoomIn(); return; }
     contentFontSize = Math.min(FONT_MAX, contentFontSize + FONT_STEP);
     applyFontSize();
     showSizeHint('font');
   }
   function zoomOut() {
+    if (imageViewer.active) { imageViewer.zoomOut(); return; }
     contentFontSize = Math.max(FONT_MIN, contentFontSize - FONT_STEP);
     applyFontSize();
     showSizeHint('font');
@@ -1848,7 +1747,7 @@ let isSource = false;
     restoreRenderedSelection(savedSel);
     let html;
     try {
-      html = marked.parse(s);
+      html = MarkdownPipeline.parse(s);
     } catch (err) {
       html = escHtml(s);
     }
@@ -1891,7 +1790,7 @@ let isSource = false;
   function compactRenderedHtml(html) {
     try {
       const tmp = document.createElement('div');
-      tmp.innerHTML = html;
+      tmp.innerHTML = sanitizeHtmlString(html);
       const toRemove = [];
       const walker = document.createTreeWalker(tmp, NodeFilter.SHOW_TEXT, null, false);
       while (walker.nextNode()) {
@@ -1983,10 +1882,17 @@ let isSource = false;
     return filePath && filePath !== 'Untitled.md' ? filePath.split('/').pop().replace(/\.[^.]+$/, '') : 'Untitled';
   }
 
-  function buildHtml() {
+  async function buildHtml() {
     const title = currentDocTitle();
     const clone = document.getElementById('content').cloneNode(true);
     clone.querySelectorAll('.frontmatter-toggle, .colgroup, colgroup').forEach(el => el.remove());
+    for (const image of clone.querySelectorAll('img[data-original-src]')) {
+      if (!window.pywebview || !window.pywebview.api.read_image_for_export) throw new Error(t('Local images cannot be embedded yet. Please retry.', '本地图片尚无法嵌入，请重试。'));
+      const result = await window.pywebview.api.read_image_for_export(image.getAttribute('data-original-src'), documentSession.id);
+      if (!result.success) throw new Error(t('Image export failed: ', '图片导出失败：') + result.error);
+      image.setAttribute('src', result.data);
+    }
+
     clone.querySelectorAll('*').forEach(el => {
       el.removeAttribute('contenteditable');
       el.removeAttribute('spellcheck');
@@ -2010,7 +1916,7 @@ let isSource = false;
       '.math-block { display: block; padding: 12px 14px; overflow-x: auto; text-align: center; }\n' +
       '.frontmatter { font-family: "SF Mono", Menlo, monospace; font-size: 13px; background: #f5f5f7; border-radius: 8px; padding: 14px 18px; white-space: pre-wrap; }\n' +
       '.mermaid-diagram { text-align: center; }\n' +
-      '</style>\n</head>\n<body>\n' + clone.innerHTML + '\n</body>\n</html>';
+      '</style>\n</head>\n<body>\n' + MarkdownPipeline.cleanExport(clone.innerHTML) + '\n</body>\n</html>';
     return html;
   }
 
@@ -2022,7 +1928,7 @@ let isSource = false;
         showStatus(t('Word export is not ready yet', 'Word 导出功能尚未就绪'), true);
         return null;
       }
-      const html = buildHtml();
+      const html = await buildHtml();
       const blob = htmlDocx.asBlob(html, {
         margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
       });
@@ -2124,7 +2030,8 @@ let isSource = false;
   // visible area (or an empty image). We temporarily switch to Preview and
   // restore the UI after the write completes.
   async function exportAsWrite(path, format) {
-    const needPreview = isSource && (format === 'pdf' || format === 'png');
+    await ensureTurndown();
+    const needPreview = isSource && ['html', 'docx', 'pdf', 'png'].includes(format);
     if (needPreview) await showPreviewForCapture();
     // PDFs must not contain the fixed-position TOC sidebar. Hide it (and drop
     // the has-toc layout class so the page goes back to full-width centering)
@@ -2147,6 +2054,13 @@ let isSource = false;
     const body = document.body;
     const sw = document.querySelector('.scroll-wrap');
     if (format === 'pdf') {
+      // Native PDF capture uses screen media: hide all interface overlays.
+      for (const element of body.children) {
+        if (element !== sw && !['SCRIPT', 'STYLE', 'LINK'].includes(element.tagName)) {
+          stash(element, 'display');
+          element.style.display = 'none';
+        }
+      }
       stash(body, 'height');
       stash(body, 'overflow');
       if (sw) { stash(sw, 'position'); stash(sw, 'height'); stash(sw, 'overflow'); }
@@ -2162,7 +2076,7 @@ let isSource = false;
     try {
       let content = '';
       if (format === 'md' || format === 'txt') content = getCurrentMarkdown();
-      else if (format === 'html') content = buildHtml();
+      else if (format === 'html') content = await buildHtml();
       else if (format === 'docx') {
         await ensureLib('html-docx-js.js', 'htmlDocx');
         content = await buildDocx();
@@ -2204,7 +2118,7 @@ let isSource = false;
     const page = document.getElementById('page');
     const textarea = document.getElementById('textarea');
     const md = textarea ? textarea.value : '';
-    if (contentHash(md) !== lastRenderedHash) {
+    if (md !== lastRenderedHash) {
       await renderMarkdown(md, content);
     }
     renderedDirty = false;
@@ -2254,7 +2168,10 @@ let isSource = false;
     }
   }
 
+  let modalPreviousFocus = null;
   function setModal(title, bodyHtml, actionsHtml) {
+    imageViewer.close();
+    modalPreviousFocus = document.activeElement;
     const header = document.getElementById('modalHeader');
     const body = document.getElementById('modalBody');
     const actions = document.getElementById('modalActions');
@@ -2262,25 +2179,27 @@ let isSource = false;
     if (body) body.innerHTML = bodyHtml;
     if (actions) actions.innerHTML = actionsHtml || '<button class="modal-close" onclick="closeModal()">' + t('Close', '关闭') + '</button>';
     document.getElementById('modalOverlay').classList.add('visible');
+    const firstControl = document.querySelector('#modalOverlay button, #modalOverlay a, #modalOverlay input');
+    if (firstControl) firstControl.focus();
   }
 
   function closeModal() {
     document.getElementById('modalOverlay').classList.remove('visible');
+    closePromptVisible = false;
+    if (modalPreviousFocus && modalPreviousFocus.isConnected) modalPreviousFocus.focus();
   }
   document.getElementById('modalOverlay').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeModal();
   });
-  document.getElementById('imageLightbox').addEventListener('click', () => {
-    document.getElementById('imageLightbox').classList.remove('visible');
+  const imageViewer = createImageViewer({
+    root: document.getElementById('imageLightbox'),
+    content: document.getElementById('content'),
+    enabled: () => !isSource && !closing && !closePromptVisible,
+    translate: t,
+    cleanSVG: sanitizeMermaidSvg,
+    onError: message => showStatus(message, true),
   });
   document.getElementById('content').addEventListener('click', (e) => {
-    const img = e.target.closest('img');
-    if (img) {
-      e.preventDefault();
-      document.getElementById('imageLightboxImg').src = img.src;
-      document.getElementById('imageLightbox').classList.add('visible');
-      return;
-    }
     // Non-editable rendered content (frontmatter, math, Mermaid, protected
     // blocks, ...): show a transient hint pointing the user to the Source view
     // instead of silently doing nothing. Editable complex content such as
@@ -2319,6 +2238,13 @@ let isSource = false;
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') closeModal();
+    // Rendered view: Enter inside a blockquote is taken over (see
+    // handleRenderedEnter). WKWebView's native behavior inserts <div>/<p>
+    // junk — and on an empty quote line a nested blockquote — which corrupts
+    // the markdown round trip (stray "> " blank lines in the source).
+    if (!isSource && e.key === 'Enter' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey) {
+      handleRenderedEnter(e);
+    }
     // Rendered view: Backspace/Delete on a block edge should merge adjacent
     // blocks (which is how a blank line between markdown paragraphs is
     // removed). WKWebView/Safari only moves the caret there, so without this
@@ -2452,6 +2378,135 @@ let isSource = false;
       else { r.selectNodeContents(blockEl); r.collapse(false); }
       sel.removeAllRanges();
       sel.addRange(r);
+    }
+  }
+
+  // Rendered view: Enter inside a blockquote. Taken over from the browser
+  // because WKWebView's native Enter inserts <div>/<p> junk inside the quote
+  // (and on an empty quote line a NESTED blockquote). Those junk nodes then
+  // round-trip through turndown as stray "> " blank lines: the preview grows
+  // blank lines the source never had, and the source gains "> " lines the
+  // user never typed. Standard editor behavior implemented here:
+  //   - Enter on a non-empty quote line      -> new empty line inside the quote
+  //   - Enter on the last (empty) quote line -> leave the quote: the empty
+  //     line is removed and a new <p> is inserted after the blockquote
+  // Content after the caret moves into the new line (native split semantics).
+  // Note: like the merge helpers above, the manual DOM edit replaces the
+  // native undo entry for this keystroke.
+  function handleRenderedEnter(e) {
+    const content = document.getElementById('content');
+    if (!content || !content.contains(e.target)) return;
+    if (e.isComposing || e.keyCode === 229) return;
+    const sel = window.getSelection();
+    if (!sel || !sel.rangeCount) return;
+    const range = sel.getRangeAt(0);
+    if (!range.collapsed) return; // selection replacement stays native
+    const startNode = range.startContainer;
+    const startEl = startNode.nodeType === Node.ELEMENT_NODE ? startNode : startNode.parentElement;
+    if (!startEl) return;
+    if (startEl.closest('pre, code, table, .mermaid-diagram, .math-block, .frontmatter')) return;
+    const quote = startEl.closest('blockquote');
+    if (!quote || !content.contains(quote)) return;
+    // The line block the caret sits in (innermost block inside the quote).
+    let line = startEl.closest('p, h1, h2, h3, h4, h5, h6, li, div');
+    if (line && (!quote.contains(line) || line === quote)) return; // bare text in quote: stay native
+    if (!line) return;
+    e.preventDefault();
+    // Extract the content after the caret: it moves into the new line.
+    const tail = range.cloneRange();
+    tail.setEnd(line, line.childNodes.length);
+    const frag = tail.extractContents();
+    const isBlankLine = !line.textContent.trim() && !line.querySelector('img');
+    if (isBlankLine && !line.nextElementSibling) {
+      // Leave the quote: drop this empty trailing line, then insert a fresh
+      // paragraph after the blockquote. If the quote has no content left,
+      // remove it entirely.
+      const quoteParent = quote.parentNode;
+      const quoteRef = quote.nextSibling;
+      line.parentNode.removeChild(line);
+      if (!quote.textContent.trim() && !quote.querySelector('img')) quoteParent.removeChild(quote);
+      const p = document.createElement('p');
+      p.appendChild(document.createElement('br'));
+      quoteParent.insertBefore(p, quoteRef);
+      placeCaretInRenderedBlock(p, false);
+      markRenderedContentEdited();
+      return;
+    }
+    // Continuation: a new line inside the quote, carrying the tail content.
+    const tag = line.tagName === 'DIV' ? 'P' : line.tagName;
+    const newLine = document.createElement(tag);
+    if (frag.hasChildNodes()) newLine.appendChild(frag);
+    else newLine.appendChild(document.createElement('br'));
+    line.parentNode.insertBefore(newLine, line.nextSibling);
+    placeCaretInRenderedBlock(newLine, false);
+    markRenderedContentEdited();
+  }
+
+  // Prepares the rendered DOM for markdown conversion (turndown), fixing two
+  // WebKit editing artifacts that would otherwise corrupt the round trip:
+  //   1. Empty <p>/<div> line blocks (only a <br>) at the END of a blockquote
+  //      get written back as stray "> " blank lines in the source — and those
+  //      lines then re-render as even more blank quote lines in the preview.
+  //      Trailing empty quote lines carry no information, so they are dropped.
+  //      Empty lines in the MIDDLE of a quote are preserved ("> " separator).
+  //   2. Paragraph-like <div>s inside a blockquote are inline content for
+  //      turndown, which merges quote lines together; they become <p> first.
+  //      Known wrapper divs (.table-wrap, .mermaid-diagram, ...) are excluded.
+  // Also strips trailing <br> inside quote lines (WebKit keeps a placeholder
+  // <br> after typing into an empty line).
+  // Operates on a detached clone; the live preview DOM is never touched.
+  function normalizeRenderedHtmlForTurndown(html) {
+    try {
+      const tmp = document.createElement('div');
+      tmp.innerHTML = sanitizeHtmlString(html);
+      tmp.querySelectorAll('blockquote').forEach((quote) => {
+        // Nested quotes may already have been removed together with their
+        // ancestor (forEach iterates a static snapshot) — guard each removal.
+        quote.querySelectorAll('blockquote').forEach((nested) => {
+          if (!nested.parentNode) return;
+          if (!nested.textContent.trim() && !nested.querySelector('img')) nested.parentNode.removeChild(nested);
+        });
+        if (!quote.parentNode) return; // removed with an ancestor quote
+        let child = quote.lastElementChild;
+        while (child) {
+          const prev = child.previousElementSibling;
+          const isLineBlock = child.tagName === 'P' || child.tagName === 'DIV';
+          const isEmptyLine = isLineBlock && !child.textContent.trim() &&
+            !child.querySelector('img') && !child.querySelector('table, pre, ul, ol');
+          if (isEmptyLine) child.parentNode.removeChild(child);
+          else break;
+          child = prev;
+        }
+        if (!quote.parentNode) return;
+        if (!quote.textContent.trim() && !quote.querySelector('img')) {
+          quote.parentNode.removeChild(quote);
+          return;
+        }
+      });
+      // Strip trailing <br> from every line block: WebKit keeps a placeholder
+      // <br> after typing into an empty line, and a <br> at the very end of a
+      // block never carries meaning — but it round-trips as a "  " (trailing
+      // spaces) junk line in the markdown source.
+      tmp.querySelectorAll('p, div').forEach((line) => {
+        if (!line.parentNode) return;
+        if (line.closest('.table-wrap, .mermaid-diagram, .math-block, .frontmatter')) return;
+        while (line.lastElementChild && line.lastElementChild.tagName === 'BR') {
+          line.removeChild(line.lastElementChild);
+        }
+      });
+      // Paragraph-like <div>s inside a blockquote are inline content for
+      // turndown, which merges quote lines together; they become <p> first.
+      tmp.querySelectorAll('blockquote div').forEach((d) => {
+        if (!d.parentNode) return;
+        if (d.closest('.table-wrap, .mermaid-diagram, .math-block, .frontmatter')) return;
+        if (d.querySelector('p, div, ul, ol, table, pre, blockquote, h1, h2, h3, h4, h5, h6, img, .mermaid-diagram, .math-block')) return;
+        const p = document.createElement('p');
+        while (d.firstChild) p.appendChild(d.firstChild);
+        d.parentNode.replaceChild(p, d);
+      });
+      return tmp.innerHTML;
+    } catch (err) {
+      return html;
     }
   }
 
@@ -2607,14 +2662,21 @@ let isSource = false;
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
   }
-  async function loadContent(path, content, pageWidth, draftRecovered, zh) {
+  async function loadContent(path, content, pageWidth, draftRecovered, zh, meta = {}) {
+    imageViewer.close(false);
+    clearTimeout(pythonSyncTimer);
+    documentSession.reset({ ...meta, draftRecovered: !!draftRecovered });
+    closing = false;
+    lastPushedHash = content;
+    mermaidSvgCache.clear();
     filePath = path;
-    try {
-      if (window.pywebview && window.pywebview.api && window.pywebview.api.startup_ready) {
-        window.pywebview.api.startup_ready(Math.round(performance.now() - _jsT0));
-      }
-    } catch (e) {}
-    
+    document.getElementById('textarea').value = content;
+    const loadEpoch = documentSession.epoch;
+    const loadRevision = documentSession.revision;
+    isSource = (!path || path === 'Untitled.md');
+    document.getElementById('textarea').readOnly = true;
+    document.getElementById('content').setAttribute('contenteditable', 'false');
+    document.getElementById('content').setAttribute('aria-busy', 'true');
     if (pageWidth) {
       pageWidthPct = normalizePageWidthPct(pageWidth / BASE_WIDTH * 100);
       applyPageWidth();
@@ -2624,12 +2686,12 @@ let isSource = false;
       applyStaticUiLanguage();
     }
     await renderMarkdown(content, document.getElementById('content'));
-    document.getElementById('textarea').value = content;
+    if (loadEpoch !== documentSession.epoch) return;
     syncHighlight();
-    lastPushedHash = contentHash(content);
-    isDirty = false;
-    renderedDirty = false;
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(false);
+    isDirty = !!draftRecovered || documentSession.revision > loadRevision;
+    renderedDirty = !isSource && documentSession.revision > loadRevision;
+    document.getElementById('content').setAttribute('aria-busy', 'false');
+    if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(isDirty, documentSession.revision, documentSession.id);
     // Opening an EXISTING document (double-click, Cmd+O, Finder, reopen) shows
     // the rendered Preview by default. Only a brand-new blank document (path
     // still 'Untitled.md') starts in Source mode so the user can type right in.
@@ -2644,13 +2706,21 @@ let isSource = false;
         ta.setSelectionRange(0, 0);
       }
     }
+    if (meta.readError) {
+      document.getElementById('textarea').readOnly = true;
+      document.getElementById('content').setAttribute('contenteditable', 'false');
+      showStatus(t('Could not read the file: ', '无法读取文件：') + meta.readError, true);
+    } else {
+      document.getElementById('textarea').readOnly = false;
+      document.getElementById('content').setAttribute('contenteditable', 'true');
+    }
     if (draftRecovered) showDraftRecoveredBanner();
+    if (meta.externalConflict) showStatus(t('The original file changed after this draft. Saving will ask how to resolve it.', '原文件在草稿之后发生变化，保存时将询问如何处理。'), true);
+    if (window.pywebview && window.pywebview.api.startup_ready) window.pywebview.api.startup_ready(Math.round(performance.now() - _jsT0));
     // Preload turndown.js in background (non-blocking) so it's ready
     // when the user first toggles to source mode.
-    ensureTurndown();
-    if (containsMermaidFence(content)) {
-      ensureMermaid();
-    }
+    ensureTurndown().catch((error) => showStatus(error.message, true));
+    if (meta.recoverableDrafts && meta.recoverableDrafts.length && !draftRecovered && isSource) showRecoveryManager(meta.recoverableDrafts);
   }
 
   function showDraftRecoveredBanner() {
@@ -2668,11 +2738,11 @@ let isSource = false;
     const discard = document.getElementById('draftDiscard');
     const dismiss = document.getElementById('draftDismiss');
     const remove = () => { if (banner.parentNode) banner.parentNode.removeChild(banner); };
-    discard.addEventListener('click', (e) => {
+    discard.addEventListener('click', async (e) => {
       e.preventDefault();
-      if (window.pywebview && window.pywebview.api) window.pywebview.api.discard_draft();
+      if (window.pywebview && window.pywebview.api) await window.pywebview.api.discard_draft();
       if (window.pywebview && window.pywebview.api) {
-        window.pywebview.api.get_initial_content().then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh));
+        window.pywebview.api.get_initial_content().then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
       }
       remove();
     });
@@ -2682,7 +2752,7 @@ let isSource = false;
 
   function reloadContent() {
     if (window.pywebview && window.pywebview.api) {
-      window.pywebview.api.get_initial_content().then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh));
+      window.pywebview.api.get_initial_content().then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
     }
   }
 
@@ -2750,7 +2820,10 @@ let isSource = false;
   // heading had a -N suffix, so TOC clicks and highlight sync missed (or hit
   // the wrong copy of) duplicate headings. Fence-aware: heading-looking lines
   // inside ``` fenced code blocks are ignored.
+  let cachedHeadingText = null;
+  let cachedHeadings = [];
   function collectMarkdownHeadingSlugs(md) {
+    if (md === cachedHeadingText) return cachedHeadings;
     const slugs = [];
     const used = new Map();
     const lines = md.split('\n');
@@ -2773,6 +2846,8 @@ let isSource = false;
       if (count > 0) slug = slug + '-' + count;
       slugs.push({ line: i, slug });
     }
+    cachedHeadingText = md;
+    cachedHeadings = slugs;
     return slugs;
   }
 
@@ -2924,11 +2999,12 @@ let isSource = false;
     // Otherwise the last heading at/above the top band of the viewport.
     const limit = wrap.scrollTop + TOC_SPY_BAND;
     let active = null;
-    for (const s of headings) {
-      const t = sourceLineTop(s.line);
-      if (t === null) continue;
-      if (t <= limit) active = s.slug;
-      else break;
+    let low = 0, high = headings.length - 1;
+    while (low <= high) {
+      const middle = (low + high) >> 1;
+      const top = sourceLineTop(headings[middle].line);
+      if (top !== null && top <= limit) { active = headings[middle].slug; low = middle + 1; }
+      else high = middle - 1;
     }
     return active;
   }
@@ -3006,6 +3082,7 @@ let isSource = false;
   }
 
   async function toggleView() {
+    imageViewer.close();
     if (!isSource) {
       // rendered → source: capture cursor, convert, position
       const content = document.getElementById('content');
@@ -3013,7 +3090,9 @@ let isSource = false;
       if (renderedDirty) {
         // Only round-trip the DOM when the user actually edited the rendered view.
         await ensureTurndown();
-        const html = content.innerHTML;
+        // Normalize WebKit editing junk (empty trailing quote lines, quote
+        // <div>s) before converting, so the source stays clean.
+        const html = normalizeRenderedHtmlForTurndown(content.innerHTML);
         textarea.value = turndownService ? turndownService.turndown(html) : html;
       }
       // Otherwise the textarea already holds the pristine markdown.
@@ -3029,7 +3108,7 @@ let isSource = false;
       // reverse positioning works even when no TOC entry is highlighted.
       const headingId = getActiveTocTarget() || getSourceActiveHeading();
       const md = document.getElementById('textarea').value;
-      if (contentHash(md) !== lastRenderedHash) {
+      if (md !== lastRenderedHash) {
         await renderMarkdown(md, document.getElementById('content'));
       }
       renderedDirty = false;
@@ -3131,23 +3210,33 @@ let isSource = false;
   function getCurrentMarkdown() {
     if (isSource) return document.getElementById('textarea').value;
     if (!renderedDirty) return document.getElementById('textarea').value;
-    const html = document.getElementById('content').innerHTML;
-    return turndownService ? turndownService.turndown(html) : html;
+    const html = normalizeRenderedHtmlForTurndown(document.getElementById('content').innerHTML);
+    if (!turndownService) throw new Error(t('Markdown converter is not ready. Please retry.', 'Markdown 转换器尚未就绪，请重试。'));
+    return turndownService.turndown(html);
   }
 
-  function markSaved(markdown) {
-    isDirty = false;
-    renderedDirty = false;
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(false);
-    document.getElementById('textarea').value = markdown;
-    lastPushedHash = contentHash(markdown);
-    syncHighlight();
+  function markSaved(markdown, snapshot = documentSession.snapshot(markdown)) {
+    if (!documentSession.isCurrent(snapshot)) return false;
+    const clean = documentSession.saved(snapshot);
+    if (clean) {
+      isDirty = false;
+      renderedDirty = false;
+      document.getElementById('textarea').value = markdown;
+      lastPushedHash = markdown;
+      documentSession.ackRevision = snapshot.revision;
+      syncHighlight();
+    } else {
+      isDirty = true;
+      schedulePythonSync(0);
+    }
+    if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(!clean, documentSession.revision, documentSession.id);
+    return clean;
   }
 
   function forceCloseWindow(discard = false) {
     closePromptVisible = false;
     if (window.pywebview && window.pywebview.api) {
-      window.pywebview.api.force_close_window(!!discard);
+      return window.pywebview.api.force_close_window(!!discard);
     }
   }
 
@@ -3157,6 +3246,11 @@ let isSource = false;
   // working without a cold start.
   function convertToBlankDocument() {
     filePath = null;
+    documentSession.reset();
+    closing = false;
+    renderJobId += 1;
+    clearTimeout(pythonSyncTimer);
+    mermaidSvgCache.clear();
     markSaved('');
     document.getElementById('content').innerHTML = '';
     // Reset the outline too, otherwise the previous document's TOC lingers on
@@ -3180,11 +3274,13 @@ let isSource = false;
       ta.setSelectionRange(0, 0);
     }
     if (window.pywebview && window.pywebview.api) {
-      window.pywebview.api.reset_to_untitled();
+      return window.pywebview.api.reset_to_untitled().then(() => reloadContent());
     }
   }
 
-  function promptBeforeClose(force = false) {
+  async function promptBeforeClose(force = false) {
+    await ensureTurndown();
+    if (isDirty) await pushContentToPython(true);
     if (!force && !isDirty) {
       forceCloseWindow();
       return;
@@ -3202,7 +3298,7 @@ let isSource = false;
           if (res.action === 'save') {
             if (res.path && res.path !== filePath) filePath = res.path;
             const result = await saveFile(false, null, { closeOnSuccess: true });
-            if (result && result.saved) {
+            if (result && result.saved && !isDirty) {
               await forceCloseWindow();
             } else {
               closePromptVisible = false;
@@ -3234,17 +3330,17 @@ let isSource = false;
       closeModal();
       closePromptVisible = false;
       const result = await saveFile(false, null, { closeOnSuccess: true });
-      if (result && result.saved) await forceCloseWindow();
+      if (result && result.saved && !isDirty) await forceCloseWindow();
     });
   }
 
   function showSaveConflictDialog(path, markdown, options = {}) {
     const finishOverwrite = async () => {
-      const result = await saveFile(true, markdown);
+      const result = await saveFile(true);
       if (options.closeOnSuccess && result && result.saved) await forceCloseWindow();
     };
     const finishSaveAs = async () => {
-      const result = await saveAsFile(markdown);
+      const result = await saveAsFile();
       if (options.closeOnSuccess && result && result.saved) await forceCloseWindow();
     };
     const finishCancel = () => {
@@ -3295,16 +3391,21 @@ let isSource = false;
       showStatus(t('Save is not ready yet', '保存功能尚未就绪'), true);
       return { saved: false, error: 'not-ready' };
     }
+    if (saveInFlight) { await saveInFlight; return saveFile(force, null, options); }
+    await ensureTurndown();
     const markdown = suppliedMarkdown !== null ? suppliedMarkdown : getCurrentMarkdown();
+    const snapshot = documentSession.snapshot(markdown);
     if (!filePath || filePath === 'Untitled.md') {
       return await saveAsFile(markdown);
     }
     try {
-      const result = await window.pywebview.api.save_file(filePath, markdown, !!force);
+      saveInFlight = window.pywebview.api.save_file(filePath, markdown, !!force, snapshot.revision, snapshot.id);
+      const result = await saveInFlight;
+      if (!documentSession.isCurrent(snapshot)) return { saved: false, stale: true };
       if (result.success) {
-        markSaved(markdown);
+        const clean = markSaved(markdown, snapshot);
         showStatus(force ? t('Saved current version', '已保存当前版本') : t('Saved', '已保存'));
-        return { saved: true };
+        return { saved: clean, snapshotSaved: true };
       } else if (result.conflict) {
         showSaveConflictDialog(result.path || filePath, markdown, options);
         return { saved: false, conflict: true };
@@ -3315,7 +3416,7 @@ let isSource = false;
     } catch (err) {
       showStatus(t('Save failed: ', '保存失败：') + (err && err.message ? err.message : err), true);
       return { saved: false, error: err };
-    }
+    } finally { saveInFlight = null; }
   }
 
   async function saveAsFile(suppliedMarkdown = null) {
@@ -3323,18 +3424,23 @@ let isSource = false;
       showStatus(t('Save is not ready yet', '保存功能尚未就绪'), true);
       return { saved: false, error: 'not-ready' };
     }
-    const markdown = suppliedMarkdown !== null ? suppliedMarkdown : getCurrentMarkdown();
+    await ensureTurndown();
+    const identity = documentSession.id;
     try {
       const result = await window.pywebview.api.save_as_choose(currentDocTitle() + '.md');
       if (result && result.success) {
+        if (identity !== documentSession.id) return { saved: false, stale: true };
+        const markdown = getCurrentMarkdown();
+        const snapshot = documentSession.snapshot(markdown);
         const { path, format } = result;
         if (format === 'md') {
-          const saveRes = await window.pywebview.api.save_file(path, markdown, true);
+          const saveRes = await window.pywebview.api.save_file(path, markdown, true, snapshot.revision, snapshot.id);
           if (saveRes && saveRes.success) {
+            if (!documentSession.isCurrent(snapshot)) return { saved: false, stale: true };
             filePath = path;
-            markSaved(markdown);
+            const clean = markSaved(markdown, snapshot);
             showStatus(t('Saved', '已保存'));
-            return { saved: true, path };
+            return { saved: clean, snapshotSaved: true, path };
           }
           showStatus(t('Save failed: ', '保存失败：') + ((saveRes && saveRes.error) || ''), true);
           return { saved: false, error: (saveRes && saveRes.error) || 'save-failed' };
@@ -3343,7 +3449,7 @@ let isSource = false;
         const writeRes = await exportAsWrite(path, format);
         if (writeRes && writeRes.success) {
           showStatus(t('Saved', '已保存'));
-          return { saved: true, exported: true, path };
+          return { saved: false, exported: true, path };
         }
         showStatus(t('Save failed: ', '保存失败：') + ((writeRes && writeRes.error) || ''), true);
         return { saved: false, error: (writeRes && writeRes.error) || 'save-failed' };
@@ -3470,6 +3576,7 @@ let isSource = false;
   // Apply bilingual text to static UI elements declared in index.html.
   // Called whenever isZh is (re)set, i.e. after each loadContent().
   function applyStaticUiLanguage() {
+    document.documentElement.lang = isZh ? 'zh-Hans' : 'en';
     const findInput = document.getElementById('findInput');
     if (findInput) findInput.placeholder = t('Find', '查找');
     const findPrev = document.getElementById('findPrev');
@@ -3535,15 +3642,26 @@ let isSource = false;
     }
   }
 
-  function showUpdateDownloadFailed(message) {
+  function showUpdateDownloadFailed(code, detail) {
+    // `code` comes from the Python updater: 'network' | 'incomplete' |
+    // 'mount' | 'verify' | 'unknown'. `detail` is an already-localized
+    // sentence from Python (may be empty) for the status bar.
+    const reasons = {
+      network: t('Network error. Check your connection.', '网络错误，请检查网络连接。'),
+      incomplete: t('The downloaded file is incomplete.', '下载的文件不完整。'),
+      mount: t('Failed to open the update image.', '安装包无法打开。'),
+      verify: t('The update failed the version check.', '更新未通过版本校验。'),
+      unknown: t('Unexpected error.', '未知错误。'),
+    };
+    const reason = reasons[code] || reasons.unknown;
     const el = document.getElementById('updateBubble');
     if (el) {
       el.classList.remove('downloading', 'installing');
       el.classList.add('visible');
       setUpdateProgress(0);
-      setUpdateBubbleText(t('Download failed. Check your connection.', '下载失败，请检查网络。'));
+      setUpdateBubbleText(t('Download failed: ', '下载失败：') + reason);
     }
-    showStatus(t('Update download failed: ', '更新下载失败：') + (message || t('unknown', '未知')), true);
+    showStatus(t('Update download failed: ', '更新下载失败：') + (detail || reason), true);
   }
 
   function showManualInstallGuide(dmgPath, message) {
@@ -3560,7 +3678,8 @@ let isSource = false;
     if (el) el.classList.remove('visible');
   }
 
-  function installUpdate() {
+  async function installUpdate() {
+    if (isDirty) await pushContentToPython(true);
     const el = document.getElementById('updateBubble');
     if (el && (el.classList.contains('installing') || el.classList.contains('downloading'))) return;
     if (el) {
@@ -3572,7 +3691,7 @@ let isSource = false;
     if (window.pywebview && window.pywebview.api) {
       window.pywebview.api.perform_auto_install().then(function(result) {
         if (result && result.success) {
-          showStatus(t('Update installed. Restarting...', '更新已安装，正在重启…'));
+          showStatus(t('Update prepared. Finish saving to restart.', '更新已准备，请完成保存以重启。'));
         } else {
           const error = result ? result.error : t('unknown', '未知');
           if (result && result.manual_install) {
@@ -3813,7 +3932,7 @@ let isSource = false;
   });
 
   function isBlockedHref(href) {
-    return !href || /^\s*(javascript:|data:)/i.test(href);
+    return !href || !MarkdownPipeline.safeURL(href);
   }
 
   function isExternalHref(href) {
@@ -3855,6 +3974,7 @@ let isSource = false;
   // leave a non-daemon pywebview thread blocked forever and deadlock the
   // interpreter on exit.
   function prepareForClose() {
+    imageViewer.close(false);
     closing = true;
     clearTimeout(pythonSyncTimer);
     clearTimeout(highlightTimer);
@@ -3866,15 +3986,30 @@ let isSource = false;
 
   let pythonSyncTimer = null;
 
-  function pushContentToPython(force = false) {
-    if (closing) return;
-    if (!window.pywebview || !window.pywebview.api) return;
-    if (!force && !isDirty) return;
+  async function pushContentToPython(force = false) {
+    if (closing || !window.pywebview || !window.pywebview.api) return false;
+    if (!force && !isDirty) return true;
+    if (syncInFlight) { await syncInFlight; return pushContentToPython(force); }
     const markdown = getCurrentMarkdown();
-    const hash = contentHash(markdown);
-    if (!force && hash === lastPushedHash) return;
-    lastPushedHash = hash;
-    window.pywebview.api.store_content(markdown);
+    const snapshot = documentSession.snapshot(markdown);
+    if (!force && markdown === lastPushedHash && snapshot.revision <= documentSession.ackRevision) return true;
+    syncInFlight = Promise.resolve(window.pywebview.api.store_content(markdown, snapshot.revision, snapshot.id));
+    try {
+      const result = await syncInFlight;
+      if (result === false || (result && result.success === false)) throw new Error((result && result.error) || 'Draft sync rejected');
+      if (documentSession.isCurrent(snapshot)) {
+        lastPushedHash = markdown;
+        documentSession.ackRevision = snapshot.revision;
+        syncRetryCount = 0;
+      }
+      return true;
+    } catch (error) {
+      if (documentSession.isCurrent(snapshot) && !closing) {
+        showStatus(t('Draft could not be saved. Keep this window open and retry saving.', '草稿保存失败，请保留窗口并重试保存。'), true);
+        if (syncRetryCount++ < 3) schedulePythonSync(Math.min(8000, 500 * 2 ** syncRetryCount));
+      }
+      return false;
+    } finally { syncInFlight = null; }
   }
 
   function schedulePythonSync(delay = 900) {
@@ -3884,9 +4019,9 @@ let isSource = false;
   }
 
   function setDirty(dirty) {
-    if (isDirty === dirty) return;
-    isDirty = dirty;
-    if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(dirty);
+    if (dirty) documentSession.edit();
+    isDirty = !!dirty;
+    if (window.pywebview && window.pywebview.api) window.pywebview.api.set_dirty(dirty, documentSession.revision, documentSession.id);
   }
 
   document.getElementById('content').addEventListener('input', () => { renderedDirty = true; setDirty(true); schedulePythonSync(PYTHON_SYNC_DEBOUNCE_MS); dismissWelcomeOverlay(); });
@@ -3927,5 +4062,55 @@ let isSource = false;
   keepAliveTimer = setInterval(() => { if (!closing && isSource) pushContentToPython(false); }, 5000);
 
   window.addEventListener('pywebviewready', () => {
-    window.pywebview.api.get_initial_content().then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh));
+    window.pywebview.api.get_initial_content().then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
+  });
+
+  function showRecoveryManager(drafts) {
+    const body = '<p>' + t('Unsaved documents are available to recover.', '发现可恢复的未保存文档。') + '</p>' +
+      drafts.map((draft, index) => '<button class="modal-button secondary recover-draft" data-index="' + index + '">' + escHtml(draft.preview || t('Untitled document', '未命名文档')) + '</button>').join('');
+    setModal(t('Recover documents', '恢复文档'), body);
+    document.querySelectorAll('.recover-draft').forEach(button => button.addEventListener('click', async () => {
+      const result = await window.pywebview.api.recover_untitled(drafts[Number(button.dataset.index)].documentId);
+      if (!result.success) return showStatus(result.error, true);
+      closeModal();
+      const data = result.data;
+      await loadContent(data.path, data.content, data.pageWidth, true, data.isZh, data);
+    }));
+  }
+
+  async function confirmQuitDocument() {
+    try {
+      await ensureTurndown();
+      if (!isDirty) return window.pywebview.api.finish_quit_document(true, documentSession.id);
+      const flushed = await pushContentToPython(true);
+      const result = await window.pywebview.api.native_save_prompt();
+      if (!result || result.action === 'cancel') return window.pywebview.api.finish_quit_document(false, documentSession.id);
+      if (result.action === 'delete') {
+        await window.pywebview.api.discard_draft();
+        isDirty = false;
+      } else if (result.action === 'save') {
+        if (result.path) filePath = result.path;
+        const saved = await saveFile();
+        if (!saved.saved || isDirty) return window.pywebview.api.finish_quit_document(false, documentSession.id);
+      } else return window.pywebview.api.finish_quit_document(false, documentSession.id);
+      return window.pywebview.api.finish_quit_document(!isDirty, documentSession.id);
+    } catch (error) {
+      showStatus(error.message, true);
+      return window.pywebview.api.finish_quit_document(false, documentSession.id);
+    }
+  }
+
+  function setQuitFrozen(frozen) {
+    document.getElementById('textarea').readOnly = !!frozen;
+    document.getElementById('content').setAttribute('contenteditable', frozen ? 'false' : 'true');
+  }
+
+  document.getElementById('modalOverlay').addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { event.preventDefault(); closeModal(); return; }
+    if (event.key !== 'Tab') return;
+    const controls = [...event.currentTarget.querySelectorAll('button, a[href], input, select, textarea')].filter(node => !node.disabled);
+    if (!controls.length) return;
+    const first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });

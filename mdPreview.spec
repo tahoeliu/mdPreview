@@ -24,6 +24,13 @@ a = Analysis(
         ('index.html', '.'),
         ('styles.css', '.'),
         ('app.js', '.'),
+        ('frontend', 'frontend'),
+        ('WorkSpace/tests/native-check.js', 'tests'),
+        ('purify.min.js', '.'),
+        ('marked-footnote.umd.js', '.'),
+        ('VERSION', '.'),
+        ('release-policy.json', '.'),
+        ('vendor/licenses', 'vendor/licenses'),
         ('marked.min.js', '.'),
         ('turndown.js', '.'),
         ('mermaid.min.js', '.'),
@@ -33,11 +40,10 @@ a = Analysis(
         ('doc_icon.icns', '.'),
         # Shown in the standard macOS About panel (bottom "Credits" area).
         # Contains a clickable "GitHub" hyperlink + "©tahoeliu".
-        ('Credits.rtf', '.'),
+        ('WorkSpace/Credits.rtf', '.'),
     ],
     hiddenimports=[
         'webview.platforms.cocoa',
-        'webview.platforms.edgechromium',
         'webview.js',
         'bottle',
         'proxy_tools',
@@ -92,7 +98,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     console=False,
     icon='app_icon.icns',
 )
@@ -103,7 +109,7 @@ coll = COLLECT(
     a.zipfiles,
     a.datas,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=['*.dylib'],
     name='mdPreview',
 )
@@ -119,7 +125,8 @@ app = BUNDLE(
         'CFBundleName': 'mdPreview',
         'CFBundleDisplayName': 'mdPreview',
         'CFBundleShortVersionString': SHORT_VERSION,
-        'LSMinimumSystemVersion': '10.13',
+        'CFBundleVersion': SHORT_VERSION,
+        'LSMinimumSystemVersion': '13.0',
         'NSHighResolutionCapable': True,
         'NSAppTransportSecurity': {
             # Keep ATS enabled. mdPreview only uses HTTPS endpoints for update checks,
