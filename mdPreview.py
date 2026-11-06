@@ -589,14 +589,7 @@ if HAS_COCOA:
 
 
 def _pdf_to_a4_longpage(src_path, dst_path):
-    """Scale a full-height PDF page down to A4 width as ONE continuous page.
-
-    No pagination: the whole document stays on a single tall page whose width
-    matches the A4 printable width, so content flows top-to-bottom without any
-    page splits (no repeated lines, no clipped mid-line text). The source is a
-    full-height page created by WKWebView's createPDF; PDF coordinates grow
-    upward from the bottom-left, so the document top sits at source y = src_h.
-    """
+    """连续 PDF 缩至 A4 宽度，超过 14000pt 分段并原子保存。"""
     from Foundation import NSURL
     from Quartz import (CGPDFDocumentCreateWithURL, CGPDFDocumentGetPage,
                         CGPDFPageGetBoxRect, CGPDFContextCreateWithURL,
@@ -617,20 +610,32 @@ def _pdf_to_a4_longpage(src_path, dst_path):
         raise ValueError('bad source page size')
     pw = A4_W - 2 * M
     sx = min(1.0, pw / src_w)
-    page_h = src_h * sx + 2 * M
-    media = CGRectMake(0, 0, A4_W, page_h)
-    ctx = CGPDFContextCreateWithURL(NSURL.fileURLWithPath_(dst_path), media, None)
+    import math
+    import struct
+    from Foundation import NSMutableData, NSData
+    from Quartz import CGDataConsumerCreateWithCFData, CGPDFContextCreate, kCGPDFContextMediaBox
+    content_h = src_h * sx
+    segment_h = 14000 - 2 * M
+    count = max(1, math.ceil(content_h / segment_h))
+    data = NSMutableData.data()
+    ctx = CGPDFContextCreate(CGDataConsumerCreateWithCFData(data), None, None)
     if ctx is None:
         raise ValueError('cannot create output pdf context')
-    CGPDFContextBeginPage(ctx, None)
-    CGContextSaveGState(ctx)
-    CGContextScaleCTM(ctx, sx, sx)
-    # Source top (y = src_h) must land on the target's top margin line.
-    CGContextTranslateCTM(ctx, M / sx, (page_h - M) / sx - src_h)
-    CGContextDrawPDFPage(ctx, page)
-    CGContextRestoreGState(ctx)
-    CGPDFContextEndPage(ctx)
+    for index in range(count):
+        page_h = min(segment_h, content_h-index*segment_h) + 2*M
+        box = struct.pack('dddd', 0, 0, A4_W, page_h)
+        CGPDFContextBeginPage(ctx, {kCGPDFContextMediaBox: NSData.dataWithBytes_length_(box, len(box))})
+        CGContextSaveGState(ctx)
+        from Quartz import CGContextClipToRect
+        CGContextClipToRect(ctx, CGRectMake(M, M, A4_W-2*M, page_h-2*M))
+        CGContextScaleCTM(ctx, sx, sx)
+        CGContextTranslateCTM(ctx, M/sx, (page_h-M+index*segment_h)/sx-src_h)
+        CGContextDrawPDFPage(ctx, page)
+        CGContextRestoreGState(ctx)
+        CGPDFContextEndPage(ctx)
     CGPDFContextClose(ctx)
+    atomic_write(dst_path, bytes(data))
+    return count
 
 
 class MarkdownAPI:
@@ -1077,6 +1082,52 @@ class MarkdownAPI:
             self._output_completion = None
             self._output_lock.release()
 
+    def _export_paged_pdf(self, path, page):
+        from mdpreview_core.export import print_engine, pdf_post
+        if not self._output_lock.acquire(blocking=False):
+            return {'success': False, 'error': 'output-busy'}
+        state = print_engine.Completion()
+        self._output_completion = state
+        fd, temporary = tempfile.mkstemp(suffix='.pdf')
+        os.close(fd)
+        options = (page or {}).get('options') or self.get_output_settings()
+        def start():
+            if state.result is not None:
+                return
+            try:
+                import webview.platforms.cocoa as cocoa_mod
+                bv = cocoa_mod.BrowserView.instances.get(getattr(self.window, 'uid', None))
+                if bv is None:
+                    state.finish(False, 'closed')
+                    return
+                info = print_engine.make_print_info(options.get('paper', 'auto'), options.get('margins', 'normal'), temporary)
+                def done(success):
+                    if not state.finish(success) and os.path.exists(temporary):
+                        os.unlink(temporary)
+                print_engine.run(bv.webview, bv.window, info, False, done)
+            except Exception:
+                state.finish(False, 'pdf-generation-failed')
+        try:
+            AppHelper.callAfter(start)
+            result = state.wait(600)
+            if result is None:
+                state.finish(False, 'timeout')
+                return state.result
+            if not result['success']:
+                return result
+            meta = dict((page or {}).get('meta') or {})
+            meta['pageNumbers'] = options.get('page_numbers', True)
+            pdf_post.finalize(temporary, path, meta)
+            _remember_save_directory(path)
+            return {'success': True, 'path': path}
+        except Exception:
+            return {'success': False, 'error': 'pdf-write-failed'}
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+            self._output_completion = None
+            self._output_lock.release()
+
     def export_as_write(self, path, fmt, content='', page=None):
         """Write the exported document. md/html/txt are written as text; pdf is
         generated from the current WKWebView render (async). `page` is an
@@ -1086,20 +1137,28 @@ class MarkdownAPI:
         if not HAS_COCOA:
             return {'success': False, 'error': 'Cocoa not available'}
         try:
+            if fmt == 'pdf' and ((page or {}).get('options') or self.get_output_settings()).get('pdf_layout', 'paged') != 'continuous':
+                return self._export_paged_pdf(path, page)
             if fmt == 'pdf':
                 from PyObjCTools import AppHelper
                 from WebKit import WKPDFConfiguration
+                from mdpreview_core.export.print_engine import Completion
+                if not self._output_lock.acquire(blocking=False):
+                    return {'success': False, 'error': 'output-busy'}
                 result_holder = {}
-                completed = threading.Event()
+                completed = Completion()
+                self._output_completion = completed
 
                 def _run_pdf():
+                    if completed.result is not None:
+                        return
                     try:
                         import webview.platforms.cocoa as cocoa_mod
                         bv = cocoa_mod.BrowserView.instances.get(getattr(self.window, 'uid', None))
                         webview_native = bv.webview if bv is not None else None
                         if webview_native is None:
                             result_holder['error'] = 'No webview available'
-                            completed.set()
+                            completed.finish(False, 'closed')
                             return
                         config = WKPDFConfiguration.alloc().init()
                         if page:
@@ -1117,37 +1176,40 @@ class MarkdownAPI:
                                 if data is None or len(data) == 0:
                                     result_holder['error'] = 'Empty PDF data'
                                     return
-                                # createPDF produces one tall page covering the
-                                # whole document; slice it into standard A4
-                                # pages (scaled to the printable width).
-                                tmp_fd, tmp_path = tempfile.mkstemp(suffix='.pdf')
-                                os.close(tmp_fd)
-                                try:
-                                    with open(tmp_path, 'wb') as f:
-                                        f.write(bytes(data))
-                                    _pdf_to_a4_longpage(tmp_path, path)
-                                finally:
-                                    try:
-                                        os.remove(tmp_path)
-                                    except Exception:
-                                        pass
-                                _remember_save_directory(path)
-                                result_holder['done'] = True
+                                if completed.result is None:
+                                    result_holder['data'] = bytes(data)
                             except Exception as e:
                                 result_holder['error'] = str(e)
                             finally:
-                                completed.set()
+                                completed.finish('data' in result_holder, 'pdf-generation-failed')
 
                         webview_native.createPDFWithConfiguration_completionHandler_(config, handler)
-                    except Exception as e:
-                        result_holder['error'] = str(e)
-                        completed.set()
+                    except Exception:
+                        completed.finish(False, 'pdf-generation-failed')
 
-                AppHelper.callAfter(_run_pdf)
-                completed.wait()
-                if result_holder.get('done'):
-                    return {'success': True, 'path': path}
-                return {'success': False, 'error': result_holder.get('error', 'PDF generation failed')}
+                try:
+                    AppHelper.callAfter(_run_pdf)
+                    result = completed.wait(600)
+                    if result is None:
+                        completed.finish(False, 'timeout')
+                        return completed.result
+                    if not result['success']:
+                        return result
+                    with tempfile.TemporaryDirectory() as directory:
+                        source = os.path.join(directory, 'source.pdf')
+                        converted = os.path.join(directory, 'continuous.pdf')
+                        with open(source, 'wb') as stream:
+                            stream.write(result_holder['data'])
+                        count = _pdf_to_a4_longpage(source, converted)
+                        from mdpreview_core.export import pdf_post
+                        meta = dict((page or {}).get('meta') or {})
+                        meta['pageNumbers'] = False
+                        pdf_post.finalize(converted, path, meta)
+                    _remember_save_directory(path)
+                    return {'success': True, 'path': path, 'pages': count, 'split': count > 1}
+                finally:
+                    self._output_completion = None
+                    self._output_lock.release()
 
             if fmt in ('docx', 'png'):
                 # JS produces base64 payloads for these binary formats.

@@ -2014,7 +2014,7 @@ let isSource = false;
       if (!res || !res.success) return;
       const writeRes = await exportAsWrite(res.path, res.format);
       if (writeRes && writeRes.success) {
-        showStatus(t('Exported', '已导出'));
+        showStatus(writeRes.split ? t('Exported in multiple pages/files', '已分段导出多页或多个文件') : t('Exported', '已导出'));
       } else {
         showStatus(t('Export failed: ', '导出失败：') + ((writeRes && writeRes.error) || ''), true);
       }
@@ -2095,6 +2095,13 @@ let isSource = false;
           width: Math.max(document.body.scrollWidth, window.innerWidth),
           height: document.body.scrollHeight + 100,
         };
+      }
+      if (format === 'pdf') {
+        const options = await Bridge.call('get_output_settings');
+        pageSize.options = options;
+        pageSize.meta = { title: currentDocTitle(), author: '', pageNumbers: options.page_numbers,
+          links: [...document.querySelectorAll('#content a[href]')].filter(el => /^https?:/.test(el.href)).map(el => ({text: el.textContent.trim(), url: el.href})),
+          headings: [...document.querySelectorAll('#content h1,#content h2,#content h3')].map(el => ({level:Number(el.tagName[1]),text:el.textContent.trim()})) };
       }
       return await Bridge.call('export_as_write', path, format, content, pageSize);
     } finally {
