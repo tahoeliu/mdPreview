@@ -2141,7 +2141,43 @@ let isSource = false;
     updateEmptyState();
     syncPositionToSource();
   }
-  function printDocument() { window.print(); }
+  let outputBusy = false;
+  async function printDocument() {
+    if (outputBusy || closing) return { success: false, error: 'output-busy' };
+    outputBusy = true;
+    const root = document.documentElement;
+    const previousOutput = root.getAttribute('data-output');
+    const previousFont = root.style.getPropertyValue('--print-font-size');
+    const wasSource = isSource;
+    const marks = [];
+    try {
+      const opts = await Bridge.call('get_output_settings');
+      if (wasSource) await showPreviewForCapture();
+      root.dataset.output = 'print';
+      root.style.setProperty('--print-font-size', { small: '9.5pt', normal: '10.75pt', large: '12pt' }[opts.font] || '10.75pt');
+      for (const [key, cls] of [['show_urls','print-show-urls'], ['hide_frontmatter','print-hide-frontmatter'], ['h1_new_page','print-h1-new-page']]) {
+        marks.push([root, cls, root.classList.contains(cls)]);
+        root.classList.toggle(cls, !!opts[key]);
+      }
+      document.querySelectorAll('.markdown pre').forEach(el => {
+        marks.push([el, 'print-short', el.classList.contains('print-short')]);
+        el.classList.toggle('print-short', el.textContent.split('\n').length <= 25);
+      });
+      await document.fonts.ready;
+      const result = await Bridge.call('print_document', opts);
+      if (!result.success && !result.cancelled) showStatus(t('Print failed', '打印失败'), true);
+      return result;
+    } catch (error) {
+      showStatus(t('Print failed', '打印失败'), true);
+      return { success: false, error: 'print-failed' };
+    } finally {
+      if (previousOutput === null) root.removeAttribute('data-output'); else root.setAttribute('data-output', previousOutput);
+      if (previousFont) root.style.setProperty('--print-font-size', previousFont); else root.style.removeProperty('--print-font-size');
+      marks.forEach(([el, cls, present]) => el.classList.toggle(cls, present));
+      if (wasSource) restoreSourceMode();
+      outputBusy = false;
+    }
+  }
 
   async function copyTextToClipboard(text) {
     if (!text || text === '-') return false;

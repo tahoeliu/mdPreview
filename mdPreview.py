@@ -640,6 +640,8 @@ class MarkdownAPI:
         self.saved_revision = 0
         self._session_lock = threading.RLock()
         self._save_lock = threading.Lock()
+        self._output_lock = threading.Lock()
+        self._output_completion = None
         self.file_path = file_path
         self.cached_content = ''  # JS pushes content here periodically
         self.file_content = ''    # Last known file content
@@ -1043,6 +1045,38 @@ class MarkdownAPI:
         finally:
             _format_panel_lock.release()
 
+    def get_output_settings(self):
+        return {'paper': 'auto', 'margins': 'normal', 'font': 'normal',
+                'page_numbers': True, 'show_urls': False, 'hide_frontmatter': True,
+                'h1_new_page': False, 'pdf_layout': 'paged', 'png_width': 'original'}
+
+    def print_document(self, options=None):
+        from mdpreview_core.export import print_engine
+        if not self._output_lock.acquire(blocking=False):
+            return {'success': False, 'error': 'output-busy'}
+        state = print_engine.Completion()
+        self._output_completion = state
+        options = options or self.get_output_settings()
+        def start():
+            if state.result is not None:
+                return
+            try:
+                import webview.platforms.cocoa as cocoa_mod
+                bv = cocoa_mod.BrowserView.instances.get(getattr(self.window, 'uid', None))
+                if bv is None:
+                    state.finish(False, 'closed')
+                    return
+                info = print_engine.make_print_info(options.get('paper', 'auto'), options.get('margins', 'normal'))
+                print_engine.run(bv.webview, bv.window, info, True, state.finish)
+            except Exception:
+                state.finish(False, 'native-print-failed')
+        try:
+            AppHelper.callAfter(start)
+            return state.wait()
+        finally:
+            self._output_completion = None
+            self._output_lock.release()
+
     def export_as_write(self, path, fmt, content='', page=None):
         """Write the exported document. md/html/txt are written as text; pdf is
         generated from the current WKWebView render (async). `page` is an
@@ -1206,6 +1240,8 @@ class MarkdownAPI:
             window = self.window
             if window is None:
                 return {'success': False}
+            if self._output_completion is not None:
+                self._output_completion.finish(False, 'closed')
             if _is_last_window(window):
                 _hide_last_window(window, self)
                 return {'success': True}

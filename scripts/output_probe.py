@@ -31,6 +31,7 @@ def options():
     parser.add_argument('--dark', action='store_true')
     parser.add_argument('--font-size', default=None)
     parser.add_argument('--json', action='store_true')
+    parser.add_argument('--native-engine', action='store_true')
     args = parser.parse_args()
     args.out = args.out.resolve()
     if not args.out.is_relative_to(WORKSPACE.resolve()):
@@ -255,6 +256,13 @@ def run(args):
 
         def doPrint(self):
             try:
+                if args.native_engine:
+                    sys.path.insert(0, str(ROOT))
+                    from mdpreview_core.export import print_engine
+                    info = print_engine.make_print_info('a4', 'normal', args.out)
+                    self.print_delegate = print_engine.run(self.wv, self.win, info, False,
+                                                          lambda success: self.done_success_ctx_(None, success, None))
+                    return
                 info = AppKit.NSPrintInfo.sharedPrintInfo().copy()
                 info.setPaperSize_(Foundation.NSMakeSize(595.28, 841.89))
                 info.setHorizontalPagination_(AppKit.NSFitPagination)
