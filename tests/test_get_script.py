@@ -94,6 +94,8 @@ class GetScriptFlow(unittest.TestCase):
         text = text.replace("DOWNLOAD_BASE=\"https://github.com/${REPO}/releases/download\"", 'DOWNLOAD_BASE="file://%s/releases"' % urllib.parse.quote(str(self.root)))
         text = text.replace("CURL_PROTO='=https'", "CURL_PROTO='=file'")
         text = text.replace('pgrep -x mdPreview', 'false')  # 测试机上可能正运行着真实的 mdPreview
+        # 测试安装到临时目录：不要向 LaunchServices 登记它，否则会留下指向已删除目录的记录。
+        text = text.replace('/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister', 'true')
         path = self.root / 'get-test.sh'
         path.write_text(text)
         return path

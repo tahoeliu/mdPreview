@@ -63,6 +63,19 @@ def main():
         document = zipfile.ZipFile(out / 'long.docx').read('word/document.xml').decode()
         assert 'altChunk' not in document, 'DOCX still uses altChunk'
         assert 'w:val="Heading1"' in document and 'w:val="Heading2"' in document, 'DOCX lacks heading styles'
+        # 第二个独立的 OOXML 解析器（macOS 自带 textutil）必须能读出正文。
+        plain = subprocess.run(['textutil', '-convert', 'txt', '-stdout', str(out / 'long.docx')], capture_output=True, text=True, timeout=60)
+        assert plain.returncode == 0 and '阅读工具' in plain.stdout, 'textutil cannot read the DOCX body'
+        for fixture, check in (('wide-table', lambda z, x: '<w:tbl>' in x), ('math', lambda z, x: any(n.startswith('word/media/') for n in z.namelist())),
+                               ('mermaid', lambda z, x: any(n.startswith('word/media/') for n in z.namelist()))):
+            export(app, FIXTURES / f'{fixture}.md', 'docx', out / f'{fixture}.docx')
+            archive = zipfile.ZipFile(out / f'{fixture}.docx')
+            assert check(archive, archive.read('word/document.xml').decode()), f'DOCX for {fixture} lacks its table/images'
+            assert subprocess.run(['textutil', '-convert', 'txt', '-stdout', str(out / f'{fixture}.docx')], capture_output=True, timeout=60).returncode == 0
+        export(app, FIXTURES / 'footnotes.md', 'docx', out / 'footnotes.docx')
+        notes_doc = zipfile.ZipFile(out / 'footnotes.docx').read('word/document.xml').decode()
+        ids = re.findall(r'<w:footnoteReference w:id="(\d+)"', notes_doc)
+        assert len(ids) >= 2 and len(set(ids)) == len(ids), 'footnote references must have unique ids'
         html = (out / 'long.html').read_text(encoding='utf-8')
         assert '<script' not in html and '<link' not in html, 'HTML is not self-contained'
         assert re.search(r'<html[^>]*lang="zh', html), 'HTML lang not detected'

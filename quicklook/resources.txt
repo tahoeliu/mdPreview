@@ -1,0 +1,13 @@
+# 预览页资源清单：<仓库内源文件> <web/ 下的目标路径>。quicklook/build.sh 与浏览器测试共用这一份，避免漂移。
+quicklook/web/preview.html preview.html
+quicklook/web/preview.css preview.css
+quicklook/web/preview.js preview.js
+css/tokens.css tokens.css
+css/content.css content.css
+vendor/marked.min.js marked.min.js
+vendor/purify.min.js purify.min.js
+vendor/marked-footnote.umd.js marked-footnote.umd.js
+frontend/markdown-pipeline.js markdown-pipeline.js
+vendor/katex/katex.min.js katex.min.js
+vendor/katex/katex.min.css katex.min.css
+@fonts vendor/katex/fonts fonts

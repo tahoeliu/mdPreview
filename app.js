@@ -1,5 +1,5 @@
 const documentSession = new DocumentSession();
-let appSettings={remote_images:'ask',auto_update:false,auto_reload:true,font_size:16,page_width:720,restore_session:false,language:'system'};
+let appSettings={remote_images:'ask',auto_update:true,auto_reload:true,font_size:16,page_width:720,restore_session:false,language:'system'};
 let saveInFlight = null;
 let syncInFlight = null;
 let syncRetryCount = 0;

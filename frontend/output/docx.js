@@ -4,8 +4,10 @@ window.buildDocxFromMarkdown = async function(markdown, ctx) {
   const D=window.docx, tokens=MarkdownPipeline.lex(markdown.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/,''));
   const font={ascii:'Calibri',hAnsi:'Calibri',eastAsia:'PingFang SC'};
   const size={small:21,normal:22,large:24}[ctx.options.font] || 22;
-  const notes={}, noteIds=new Map(); let serial=1;
-  const collect=items=>{for(const t of items||[]){if(t.type==='footnote'&&!noteIds.has(t.label)){noteIds.set(t.label,serial++);notes[t.label]=t;} if(t.type==='footnotes')collect(t.rawItems);if(t.tokens)collect(t.tokens);if(t.items)collect(t.items);}};
+  // Word 的脚注与引用一一对应：同一定义被多次引用时，每次引用生成独立脚注（内容相同），
+  // 与 Pandoc、LibreOffice 的做法一致，避免出现两个 footnoteReference 指向同一 id 的非常规文件。
+  const notes={}, references=[]; let nextNoteId=1, insideNote=false;
+  const collect=items=>{for(const t of items||[]){if(t.type==='footnote'&&!notes[t.label]){notes[t.label]=t;} if(t.type==='footnotes')collect(t.rawItems);if(t.tokens)collect(t.tokens);if(t.items)collect(t.items);}};
   collect(tokens);
   const run=(text,style={})=>new D.TextRun({text,font,size,...style});
   const paragraph=(children,opts={})=>new D.Paragraph({children,spacing:{after:120,line:312},...opts});
@@ -41,7 +43,12 @@ window.buildDocxFromMarkdown = async function(markdown, ctx) {
         result.push(new D.ImageRun({type,data:pic.data,transformation:{width:pic.width,height:pic.height}}));continue;
       }
       if(t.type==='inlineMath'){result.push(await graphic(t,true));continue;}
-      if(t.type==='footnoteRef'){const id=noteIds.get(t.label);if(id)result.push(new D.FootnoteReferenceRun(id));else result.push(run(t.raw,style));continue;}
+      if(t.type==='footnoteRef'){
+        // 脚注内部再出现的引用，Word 不支持嵌套，按原文输出。
+        if(notes[t.label]&&!insideNote){const id=nextNoteId++;references.push([id,t.label]);result.push(new D.FootnoteReferenceRun(id));}
+        else result.push(run(t.raw,style));
+        continue;
+      }
       if(t.type==='br'){result.push(new D.TextRun({break:1}));continue;}
       if(t.type==='codespan'){result.push(run(t.text,{...style,font:'Menlo',shading:{fill:'F5F5F7'}}));continue;}
       if(t.tokens){result.push(...await inline(t.tokens,style));continue;}
@@ -104,7 +111,9 @@ window.buildDocxFromMarkdown = async function(markdown, ctx) {
     return result;
   }
   const children=await blocks(tokens), footnotes={};
-  for(const [label,id] of noteIds)footnotes[id]={children:await blocks(notes[label].content)};
+  insideNote=true;
+  for(const [id,label] of references)footnotes[id]={children:await blocks(notes[label].content)};
+  insideNote=false;
   const doc=new D.Document({title:ctx.title,creator:'mdPreview',styles:{default:{document:{run:{font,size},paragraph:{spacing:{after:120,line:312}}}}},numbering:{config:numbering},footnotes,sections:[{children}]});
   return D.Packer.toBase64String(doc);
 };

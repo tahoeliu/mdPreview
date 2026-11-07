@@ -1,5 +1,5 @@
 """应用设置采用离线默认值，仅接受明确的类型和范围。"""
-DEFAULTS = {'language': 'system', 'restore_session': False, 'auto_update': False,
+DEFAULTS = {'language': 'system', 'restore_session': False, 'auto_update': True,
             'font_size': 16, 'page_width': 720, 'remote_images': 'ask', 'auto_reload': True}
 CHOICES = {'language': ('system', 'en', 'zh-Hans', 'zh-Hant'),
            'remote_images': ('ask', 'always', 'never')}

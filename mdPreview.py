@@ -2919,7 +2919,7 @@ if HAS_COCOA:
 
                     # Section 3: Full Screen.
                     fullscreen_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Enter Full Screen", "进入全屏幕"), "toggleFullScreen:", "f")
-                    fullscreen_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 19))  # Cmd+Option+F
+                    fullscreen_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 18))  # Ctrl+Cmd+F，macOS 标准全屏快捷键
                     _set_symbol_icon(fullscreen_item, 'arrow.up.left.and.arrow.down.right')
                     view_menu.insertItem_atIndex_(fullscreen_item, first_section_end + 3)
                     view_menu.insertItem_atIndex_(NSMenuItem.separatorItem(), first_section_end + 4)

@@ -1,0 +1,7 @@
+/* Quick Look 预览页：复用 tokens.css/content.css 的文档排版，只补充页面外壳。 */
+html, body { margin: 0; background: var(--bg, #fff); }
+.page { max-width: 760px; margin: 0 auto; padding: 28px 28px 64px; }
+.markdown { min-height: 0; }
+.markdown img { cursor: default; }
+.blocked-image { color: var(--fg-muted, #666); font-style: italic; border-bottom: 1px dotted currentColor; }
+.markdown a { cursor: default; }

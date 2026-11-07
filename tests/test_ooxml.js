@@ -8,5 +8,15 @@ const parts=unzipSync(Buffer.from(output,'base64'));const body=Buffer.from(parts
 for(const word of ['首项','子项续段','末项','已完成','未完成'])assert.equal(body.split(word).length-1,1);
 assert.match(body,/\u2611/);assert.match(body,/\u2610/);assert.match(body,/w:color/);
 assert.match(Buffer.from(parts['word/numbering.xml']).toString(),/<w:start w:val="3"/);
+// 同一脚注被多次引用：每次引用对应独立脚注（id 唯一，内容相同），不得出现重复 id。
+await a.load('甲[^n]，乙[^n]，丙[^m]。\n\n[^n]: 共用脚注 **粗**\n[^m]: 另一条[^n]');await a.w.exportAsWrite('/tmp/test.docx','docx');
+const notes=unzipSync(Buffer.from(output,'base64'));const bodyXml=Buffer.from(notes['word/document.xml']).toString();
+const referenceIds=[...bodyXml.matchAll(/<w:footnoteReference w:id="(\d+)"/g)].map(m=>m[1]);
+assert.equal(referenceIds.length,3,'三次引用');assert.equal(new Set(referenceIds).size,3,'引用 id 唯一');
+const footnotesXml=Buffer.from(notes['word/footnotes.xml']).toString();
+const definedIds=[...footnotesXml.matchAll(/<w:footnote w:id="(\d+)"/g)].map(m=>m[1]).filter(id=>Number(id)>0);
+for(const id of referenceIds)assert.ok(definedIds.includes(id),'脚注 '+id+' 已定义');
+assert.equal(footnotesXml.split('共用脚注').length-1,2,'共用脚注内容出现在两个独立脚注里');
+assert.ok(!/<w:footnoteReference/.test(footnotesXml),'脚注内部不得再嵌套脚注引用');
 console.log('OOXML结构断言通过');
 }finally{a.close()}})().catch(e=>{console.error(e);process.exitCode=1});

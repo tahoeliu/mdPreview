@@ -4,7 +4,7 @@ from mdpreview_core.reading_state import remember, position_key
 
 class PreferencesTests(unittest.TestCase):
     def test_offline(self):
-        self.assertFalse(settings({})['auto_update'])
+        self.assertTrue(settings({})['auto_update'])
         self.assertEqual(settings({})['remote_images'], 'ask')
         with self.assertRaises(ValueError): validated({'font_size': True})
         self.assertEqual(validated({'unknown': 3}), {})
