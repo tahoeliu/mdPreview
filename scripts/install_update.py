@@ -6,7 +6,7 @@ import os
 import subprocess
 import time
 from pathlib import Path
-from mdpreview_core.release import transactional_install, verify_bundle, wait_for_exit
+from mdpreview_core.release import transactional_install, verify_bundle, wait_for_exit, check_installation_identity, check_startup_snapshot
 
 
 def main():
@@ -14,8 +14,19 @@ def main():
     parser.add_argument('--plan', required=True)
     args = parser.parse_args()
     plan = json.loads(Path(args.plan).read_text())
+    if any(plan['destinationIdentity'].get(key) != value for key, value in plan['startupIdentity'].items()):
+        raise ValueError('startup-plan-identity-mismatch')
     logging.basicConfig(filename=plan['log'], level=logging.INFO)
+    from mdpreview_core.release_zip import extract_verified
+    import uuid
+    staged = extract_verified(plan['archive'], plan['manifest'], plan['signature'],
+                              Path(plan['archive']).parent / ('helper-' + uuid.uuid4().hex))
+    verify_bundle(staged, plan['teamId'], plan['version'])
+    check_startup_snapshot(plan['destination'], plan['startupIdentity'])
+    check_installation_identity(plan['destination'], plan['destinationIdentity'])
     wait_for_exit(plan['pid'])
+    check_startup_snapshot(plan['destination'], plan['startupIdentity'])
+    check_installation_identity(plan['destination'], plan['destinationIdentity'])
     marker = Path(plan['ready'])
     marker.unlink(missing_ok=True)
     def launch(app):
@@ -36,8 +47,9 @@ def main():
         subprocess.run(['pkill', '-f', str(app / 'Contents/MacOS/mdPreview')], capture_output=True)
         return False
     try:
-        transactional_install(plan['staging'], plan['destination'],
-                              lambda app: verify_bundle(app, plan['teamId'], plan['version']), launch, ready)
+        transactional_install(staged, plan['destination'],
+                              lambda app: verify_bundle(app, plan['teamId'], plan['version']), launch, ready,
+                              destination_identity=plan['destinationIdentity'])
         logging.info('Update ready: %s', plan['version'])
     except Exception:
         logging.exception('Update failed; previous application restored when possible')

@@ -5,9 +5,13 @@ window.toPlainText = function(rootEl) {
     if (node.nodeType === 3) return node.textContent;
     if (node.nodeType !== 1) return '';
     const tag = node.tagName;
-    if (node.matches('script,style,button,input,.code-lang-label,.frontmatter-toggle,.footnote-backref,.markdown-definitions')) return '';
+    if(node.matches('.task-toggle'))return node.dataset.taskMarker||'';
+    if (node.matches('script,style,button,input,.remote-image-bar,.code-lang-label,.frontmatter-toggle,.footnote-backref,.markdown-definitions')) return '';
     if (node.matches('.mermaid-diagram')) return '\n\n[图表]\n\n';
-    if (node.matches('.math-inline,.math-block')) return node.textContent;
+    if (node.matches('.math-inline,.math-block')) {
+      const tex = node.getAttribute('data-tex') ?? node.textContent;
+      return node.matches('.math-block') ? '\n\n'+tex+'\n\n' : tex;
+    }
     if (tag === 'IMG') return '[图片: ' + (node.getAttribute('alt') || '') + ']';
     if (tag === 'BR') return '\n';
     if (tag === 'PRE') {

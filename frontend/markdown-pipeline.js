@@ -12,11 +12,32 @@
     if (/^[a-z][a-z0-9+.-]*:/i.test(normalized)) return /^(https?:|mailto:|tel:)/i.test(normalized);
     return !normalized.startsWith('//');
   }
-  function clean(html, svg = false, allowFile = false) {
-    const fragment = purifier.sanitize(String(html || ''), {
-      USE_PROFILES: svg ? { svg: true, svgFilters: true, html: true } : { html: true },
+  function clean(html, svg = false, allowFile = false, math = false) {
+    // template 内容不激活资源；在任何可加载的 DOM 节点创建前移除远程图片地址。
+    const inert = document.createElement('template');
+    inert.innerHTML = String(html || '');
+    // 不支持的自动加载入口整体替换为惰性文本占位；原HTML仅存于data属性供回写。
+    for (const element of inert.content.querySelectorAll('video,audio,source,track,object,embed,iframe,[poster],[background],svg image,svg use')) {
+      if (!inert.content.contains(element)) continue;
+      const placeholder = document.createElement('span');
+      placeholder.setAttribute('data-resource-raw', element.outerHTML);
+      placeholder.setAttribute('contenteditable', 'false');
+      placeholder.textContent = '[不支持的外部资源已禁用]';
+      element.replaceWith(placeholder);
+    }
+    if (!allowFile) for (const img of inert.content.querySelectorAll('img')) {
+      const src=img.getAttribute('src')||'', srcset=img.getAttribute('srcset');
+      if (/^(?:https?:|\/\/)/i.test(src.replace(/[\u0000-\u0020\u007f-\u009f]/g,'')) || srcset) {
+        if (!img.hasAttribute('data-image-raw') && !img.hasAttribute('data-md-image')) img.setAttribute('data-image-raw',img.outerHTML);
+        if (src) img.setAttribute('data-remote-src',src);
+        if (srcset) img.setAttribute('data-remote-srcset',srcset);
+        img.removeAttribute('src');img.removeAttribute('srcset');
+      }
+    }
+    const fragment = purifier.sanitize(inert.innerHTML, {
+      USE_PROFILES: svg ? { svg: true, svgFilters: true, html: true, mathMl: math } : { html: true },
       FORBID_TAGS: ['script', 'iframe', 'object', 'embed', 'form', 'input', 'button', 'select', 'textarea', 'link', 'meta', 'base', ...(svg ? [] : ['style'])],
-      FORBID_ATTR: ['srcset', 'formaction', ...(svg ? [] : ['style'])],
+      FORBID_ATTR: ['srcset', 'poster', 'background', 'formaction', ...(svg ? [] : ['style'])],
       ADD_ATTR: ['contenteditable'], RETURN_DOM_FRAGMENT: true,
       ...(allowFile ? { ADD_URI_SAFE_ATTR: ['src'] } : {})
     });
@@ -34,17 +55,19 @@
   }
   const mathExtensions = [
     {
-      name: 'blockMath', level: 'block', start: (src) => src.indexOf('$$'),
+      name: 'blockMath', level: 'block', start: (src) => src.search(/\$\$|\\\[/),
       tokenizer(src) {
-        const match = /^\$\$[ \t]*\n?([\s\S]*?)\$\$(?:[ \t]*\n|$)/.exec(src);
+        const match = /^(?:\$\$[ \t]*\n?([\s\S]*?)\$\$|\\\[([\s\S]+?)\\\])(?:[ \t]*\n|$)/.exec(src);
+        if (match) match[1] = match[1] === undefined ? match[2] : match[1];
         if (match) return { type: 'blockMath', raw: match[0], text: match[1].trim() };
       },
       renderer(token) { return '<div class="math-block" contenteditable="false" data-raw="' + escape(token.raw.trimEnd()) + '">' + escape(token.text) + '</div>\n'; }
     },
     {
-      name: 'inlineMath', level: 'inline', start: (src) => src.indexOf('$'),
+      name: 'inlineMath', level: 'inline', start: (src) => src.search(/\$|\\\(/),
       tokenizer(src) {
-        const match = /^\$(?!\$|\s)([^$\n]*?\S)\$(?!\d)/.exec(src);
+        const match = /^(?:\$(?!\$|\s)([^$\n]*?\S)\$(?!\d)|\\\(([^\n]+?)\\\))/.exec(src);
+        if (match) match[1] = match[1] === undefined ? match[2] : match[1];
         if (match) return { type: 'inlineMath', raw: match[0], text: match[1] };
       },
       renderer(token) { return '<span class="math-inline" contenteditable="false" data-raw="' + escape(token.raw) + '">' + escape(token.text) + '</span>'; }
@@ -64,25 +87,40 @@
     if (masked === aligned) return false;
     return marked.Tokenizer.prototype.emStrong.call(this, src, masked, prevChar) || false;
   }
-  function parse(markdown) {
-    const definitions = [];
+  function createParser(definitions = []) {
     // A fresh extension state per document prevents cross-document footnote leakage.
     const parser = new marked.Marked({ breaks: true, gfm: true },
       markedFootnote({ refMarkers: true, keepLabels: true, prefixId: 'fn-' }),
-      { renderer: { checkbox(checked) { return checked ? '[x] ' : '[ ] '; } },
-        tokenizer: { emStrong: cjkEmStrong }, extensions: mathExtensions, walkTokens(token) {
+      { renderer: { checkbox(checked) { return checked ? '[x] ' : '[ ] '; },
+          listitem(text,task){return '<li'+(task?' data-task="true"':'')+'>'+text+'</li>\n';},
+          image(href,title,text){return '<img src="'+escape(href)+'" alt="'+escape(text)+'"'+(title?' title="'+escape(title)+'"':'')+' data-md-image="true">';} },
+        tokenizer: { emStrong: cjkEmStrong }, extensions: [...mathExtensions, {
+          name:'alert',level:'block',renderer(token){return '<div class="markdown-alert markdown-alert-'+token.kind.toLowerCase()+'" contenteditable="false" data-raw="'+escape(token.raw.trimEnd())+'"><p class="markdown-alert-title"><span aria-hidden="true">!</span> '+token.kind+'</p>'+this.parser.parse(token.tokens)+'</div>';}
+        }], walkTokens(token) {
+        if(token.type==='blockquote'){
+          const match=/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*(?:\n|$)/.exec(token.text);
+          if(match){token.type='alert';token.kind=match[1];token.tokens=createParser().lexer(token.text.slice(match[0].length));}
+        }
         if (token.type === 'footnote') definitions.push(token.raw.trimEnd());
         if (token.type === 'html') {
-          const holder = document.createElement('div'); holder.innerHTML = clean(token.text);
+          const original=document.createElement('template');original.innerHTML=token.text;
+          original.content.querySelectorAll('*').forEach(el=>{for(const attr of [...el.attributes])if(attr.name.startsWith('data-'))el.removeAttribute(attr.name);});
+          const holder = document.createElement('div'); holder.innerHTML = clean(original.innerHTML);
           holder.querySelectorAll('*').forEach(element => {
-            ['frontmatter','mermaid-diagram','footnotes','math-inline','math-block','render-caret-spacer','markdown-definitions'].forEach(name => element.classList.remove(name));
+            ['frontmatter','mermaid-diagram','footnotes','math-inline','math-block','render-caret-spacer','markdown-definitions','markdown-alert','remote-image-bar','task-toggle','code-copy-btn'].forEach(name => element.classList.remove(name));
             for (const attr of Array.from(element.attributes)) {
-              if (attr.name.startsWith('data-') || attr.name === 'contenteditable') element.removeAttribute(attr.name);
+              if ((attr.name.startsWith('data-') && !['data-remote-src','data-remote-srcset','data-image-raw','data-resource-raw'].includes(attr.name)) || attr.name === 'contenteditable') element.removeAttribute(attr.name);
             }
           });
           token.text = holder.innerHTML;
         }
       }});
+    return parser;
+  }
+  function lex(markdown) { return createParser().lexer(markdown); }
+  function parse(markdown) {
+    const definitions = [];
+    const parser = createParser(definitions);
     const html = clean(parser.parse(markdown));
     const root = document.createElement('div'); root.innerHTML = html;
     root.querySelectorAll('sup:has(a[data-fn-ref])').forEach((sup) => {
@@ -100,5 +138,20 @@
     }
     return root.innerHTML;
   }
-  window.MarkdownPipeline = { parse, cleanHTML: (html, allowFile = false) => clean(html, false, allowFile), cleanSVG: (svg) => clean(svg, true), cleanExport: (html) => clean(html, true, true), safeURL };
+  function cleanMath(html) {
+    const fragment = purifier.sanitize(String(html), {
+      ALLOWED_TAGS: ['span','math','semantics','mrow','mi','mo','mn','msup','msub','msubsup','mfrac','msqrt','mroot','mtable','mtr','mtd','mtext','mspace','annotation','mstyle','mover','munder','munderover','mpadded','mphantom','menclose','svg','path','line','g'],
+      ALLOWED_ATTR: ['style','class','aria-hidden','encoding','xmlns','display','mathvariant','stretchy','fence','separator','accent','accentunder','columnalign','columnspacing','rowspacing','width','height','depth','viewBox','preserveAspectRatio','d','fill','stroke','stroke-width','x1','x2','y1','y2'],
+      ALLOW_DATA_ATTR: false, RETURN_DOM_FRAGMENT: true
+    });
+    const properties = /^(?:color|background-color|position|display|top|bottom|left|right|width|height|min-width|font-size|font-family|font-style|font-weight|line-height|vertical-align|text-align|white-space|margin(?:-(?:left|right|top|bottom))?|padding(?:-(?:left|right|top|bottom))?|border(?:-(?:left|right|top|bottom))?(?:-(?:width|style|color))?|transform|transform-origin)$/;
+    for (const el of fragment.querySelectorAll('*')) {
+      for (const attr of [...el.attributes]) {
+        if (/href|src|^on/i.test(attr.name) || /url\s*\(|expression|@import|\\/i.test(attr.value)) el.removeAttribute(attr.name);
+      }
+      if (el.style) for (const name of Array.from(el.style)) if (!properties.test(name)) el.style.removeProperty(name);
+    }
+    const holder = document.createElement('div'); holder.append(fragment); return holder.innerHTML;
+  }
+  window.MarkdownPipeline = { parse, lex, cleanMath, cleanHTML: (html, allowFile = false) => clean(html, false, allowFile), cleanSVG: (svg) => clean(svg, true), cleanExport: (html) => clean(html, true, true, true), safeURL };
 })();

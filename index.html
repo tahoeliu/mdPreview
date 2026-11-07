@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' file: data: blob: https:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="stylesheet" href="css/tokens.css">
 <link rel="stylesheet" href="css/content.css">
@@ -17,8 +18,8 @@
 
 <!-- Find Bar -->
 <div class="find-bar" id="findBar">
-  <input type="text" id="findInput" placeholder="Find" autocomplete="off" spellcheck="false" />
-  <span class="find-count" id="findCount"></span>
+  <input type="text" id="findInput" aria-label="Find" placeholder="Find" autocomplete="off" spellcheck="false" />
+  <span class="find-count" id="findCount" role="status"></span>
   <button id="findPrev" title="Previous (Shift+Cmd+G)">&#x25B2;</button>
   <button id="findNext" title="Next (Cmd+G)">&#x25BC;</button>
   <button class="find-close" id="findClose" title="Close (Esc)">&#x2715;</button>
@@ -38,12 +39,12 @@
 <div role="status" aria-live="polite" class="status" id="status"></div>
 <div class="edit-hint-bubble" id="editHintBubble" role="status" aria-live="polite"></div>
 <div class="edit-hint-bubble size-hint-bubble" id="sizeHintBubble" role="status" aria-live="polite"></div>
-<div class="update-bubble" id="updateBubble" onclick="installUpdate()" role="alert">
+<div class="update-bubble" id="updateBubble" role="alert">
   <div class="update-bubble-body">
     <span class="update-bubble-text">Update available, click to install...</span>
     <div class="update-progress" aria-hidden="true"><div class="update-progress-bar" id="updateProgressBar"></div></div>
   </div>
-  <button class="update-bubble-close" onclick="dismissUpdateBubble(event)" title="Dismiss" aria-label="Dismiss">&times;</button>
+  <button class="update-bubble-close" title="Dismiss" aria-label="Dismiss">&times;</button>
 </div>
 <div class="image-lightbox" id="imageLightbox" role="dialog" aria-modal="true" aria-labelledby="imageViewerTitle" aria-describedby="imageViewerHelp" aria-hidden="true">
   <div class="image-viewer-toolbar">
@@ -66,20 +67,43 @@
     <div class="modal-header" id="modalHeader">File Properties</div>
     <div class="modal-body" id="modalBody"></div>
     <div class="modal-actions" id="modalActions">
-      <button class="modal-close" onclick="closeModal()">Close</button>
+      <button class="modal-close">Close</button>
     </div>
   </div>
 </div>
 
-<script src="marked.min.js" defer></script>
-<script src="purify.min.js" defer></script>
-<script src="marked-footnote.umd.js" defer></script>
+<script src="frontend/headless.js"></script>
+<script src="vendor/marked.min.js" defer></script>
+<script src="vendor/purify.min.js" defer></script>
+<script src="vendor/marked-footnote.umd.js" defer></script>
 <script src="frontend/document-session.js" defer></script>
 <script src="frontend/markdown-pipeline.js" defer></script>
 <script src="frontend/image-viewer.js" defer></script>
 <script src="frontend/bridge.js" defer></script>
+<script src="frontend/i18n.js" defer></script>
 <script src="frontend/output/prepare.js" defer></script>
 <script src="frontend/output/plaintext.js" defer></script>
+<script src="frontend/performance.js" defer></script>
+<script src="frontend/math.js" defer></script>
+<script src="frontend/output/raster.js" defer></script>
+<script src="frontend/output/docx.js" defer></script>
+<script src="frontend/output/richtext.js" defer></script>
+<script src="frontend/reading.js" defer></script>
+<script src="frontend/settings.js" defer></script>
+<script src="frontend/editor.js" defer></script>
+<script src="frontend/onboarding.js" defer></script>
+<script src="frontend/syntax.js" defer></script>
+<script src="frontend/tables.js" defer></script>
+<script src="frontend/updates.js" defer></script>
+<script src="frontend/find.js" defer></script>
+<script src="frontend/paste.js" defer></script>
+<script src="frontend/outline.js" defer></script>
+<script src="frontend/output.js" defer></script>
+<script src="frontend/rendered-editing.js" defer></script>
+<script src="frontend/conversion.js" defer></script>
+<script src="frontend/rendering.js" defer></script>
+<script src="frontend/feedback.js" defer></script>
+<script src="frontend/save-dialogs.js" defer></script>
 <script src="app.js" defer></script>
 </body>
 </html>

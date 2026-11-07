@@ -1,0 +1,44 @@
+#!/bin/bash
+set -euo pipefail
+if [[ -n "${MDPREVIEW_APP:-}" ]]; then
+  APP="$MDPREVIEW_APP"
+else
+  source_path="${BASH_SOURCE[0]}"
+  while [[ -L "$source_path" ]]; do
+    source_dir="$(cd "$(dirname "$source_path")" && pwd)"
+    source_path="$(readlink "$source_path")"
+    [[ "$source_path" = /* ]] || source_path="$source_dir/$source_path"
+  done
+  candidate="$(cd "$(dirname "$source_path")/../../.." && pwd)"
+  if [[ "$candidate" = *.app && -x "$candidate/Contents/MacOS/mdPreview" ]]; then
+    APP="$candidate"
+  else
+    APP='/Applications/mdPreview.app'
+  fi
+fi
+if [[ "${1:-}" != export ]]; then
+  exec /usr/bin/open -a "$APP" "$@"
+fi
+shift
+if [[ $# -lt 3 ]]; then
+  printf '%s\n' 'Usage: mdpreview export INPUT --to pdf|html|docx|txt|png [-o OUTPUT]' >&2
+  exit 1
+fi
+input=$1
+shift
+format=''
+output=''
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --to|-o)
+      [[ $# -ge 2 ]] || exit 1
+      if [[ "$1" == --to ]]; then format=$2; else output=$2; fi
+      shift 2 ;;
+    *) printf '%s\n' 'Unknown argument' >&2; exit 1 ;;
+  esac
+done
+case "$format" in pdf|html|docx|txt|png) ;; *) exit 1 ;; esac
+[[ -n "$output" ]] || output="${input%.*}.$format"
+[[ -x "$APP/Contents/MacOS/mdPreview" ]] || { printf '%s\n' 'mdPreview application not found; set MDPREVIEW_APP.' >&2; exit 2; }
+export MDPREVIEW_DISABLE_UPDATES=1
+exec "$APP/Contents/MacOS/mdPreview" --headless-export "$input" "$output" "$format"

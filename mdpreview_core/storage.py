@@ -51,6 +51,54 @@ def atomic_write(path, payload: bytes):
             os.unlink(tmp)
 
 
+def atomic_create(path, payload: bytes):
+    """原子提交且不覆盖；逐级无符号链接打开父目录，以dirfd固定写入位置。"""
+    import uuid
+    target = Path(os.path.abspath(path))
+    directory = os.open('/', os.O_RDONLY | os.O_DIRECTORY)
+    temporary = '.mdpreview-create-' + uuid.uuid4().hex
+    created = False
+    linked = False
+    inode = None
+    try:
+        for part in target.parent.parts[1:]:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=directory)
+            os.close(directory)
+            directory = child
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
+                     0o600, dir_fd=directory)
+        created = True
+        with os.fdopen(fd, 'wb') as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+            inode = os.fstat(stream.fileno()).st_ino
+        # link不替换已有目录项，也不跟随目标符号链接；并发只能一个提交成功。
+        os.link(temporary, target.name, src_dir_fd=directory, dst_dir_fd=directory,
+                follow_symlinks=False)
+        linked = True
+        # durable目录提交和临时名清理都完成才返回成功；失败由本函数回滚当前片。
+        os.fsync(directory)
+        os.unlink(temporary, dir_fd=directory)
+        created = False
+    except Exception:
+        if linked:
+            current = os.stat(target.name, dir_fd=directory, follow_symlinks=False)
+            if current.st_ino == inode:
+                os.unlink(target.name, dir_fd=directory)
+        raise
+    finally:
+        try:
+            if created:
+                try:
+                    os.unlink(temporary, dir_fd=directory)
+                except OSError:
+                    # 清理失败保留随机临时名，不覆盖业务异常；dirfd仍必须关闭。
+                    pass
+        finally:
+            os.close(directory)
+
+
 _draft_lock = threading.RLock()
 
 

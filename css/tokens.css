@@ -1,4 +1,5 @@
 :root {
+  --alert-note:#0969da; --alert-tip:#1a7f37; --alert-important:#8250df; --alert-warning:#9a6700; --alert-caution:#cf222e;
   --fg: #333;
   --fg-strong: #1d1d1f;
   --fg-muted: #666;
@@ -38,6 +39,7 @@
 }
 @media screen and (prefers-color-scheme: dark) {
   :root:not([data-output]) {
+    --alert-note:#79c0ff; --alert-tip:#7ee787; --alert-important:#d2a8ff; --alert-warning:#e3b341; --alert-caution:#ff7b72;
     --bg: #1e1e1f;
     --app-fg: #f2f2f2;
     --dark-1: #e8e8e8;
@@ -61,6 +63,7 @@
   }
 }
 :root[data-output] {
+  --alert-note:#0969da; --alert-tip:#1a7f37; --alert-important:#8250df; --alert-warning:#9a6700; --alert-caution:#cf222e;
   --fg: #333;
   --fg-strong: #1d1d1f;
   --fg-muted: #666;

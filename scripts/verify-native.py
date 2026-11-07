@@ -34,4 +34,31 @@ if 'NEW CONTENT' not in pdf_text:raise SystemExit('FAIL: PDF missing latest docu
 for ui_text in ['mdSource', 'mdPreview', 'Saved', '已保存']:
     if ui_text in pdf_text:raise SystemExit('FAIL: PDF contains application UI: '+ui_text)
 if process.returncode!=0:raise SystemExit('FAIL: abnormal native quit '+str(process.returncode))
-print('Native WKWebView save/export/Unicode/quit verification PASS; evidence: '+str(data))
+# 同一个候选包执行 CLI，不安装应用；失败或无产物必须阻断门禁。
+long_source=data/'cli-long.md'
+long_source.write_text(('# CLI 多页输出\n\n' + '正文用于验证分页与文本完整性。\n\n' * 30) * 8, encoding='utf-8')
+cli=app/'Contents/Resources/bin/mdpreview'
+if not os.access(cli, os.X_OK):raise SystemExit('FAIL: packaged CLI is not executable')
+cli_env=dict(environment, MDPREVIEW_APP=str(app))
+for fmt in ('pdf', 'html', 'docx', 'txt', 'png'):
+    target=data/('cli-output.'+fmt)
+    completed=subprocess.run([str(cli), 'export', str(long_source), '--to', fmt, '-o', str(target)],
+                             env=cli_env, capture_output=True, timeout=190)
+    if completed.returncode!=0:raise SystemExit('FAIL: CLI '+fmt+' exit '+str(completed.returncode))
+    if fmt=='png':
+        candidates=list(data.glob('cli-output*.png'))
+        if not candidates or any(not item.read_bytes().startswith(b'\x89PNG\r\n\x1a\n') for item in candidates):
+            raise SystemExit('FAIL: CLI PNG missing or invalid')
+    elif not target.is_file() or target.stat().st_size==0:raise SystemExit('FAIL: CLI missing '+fmt)
+    if fmt=='pdf':
+        document=PDFDocument.alloc().initWithURL_(NSURL.fileURLWithPath_(str(target)))
+        if document is None or document.pageCount()<=1:raise SystemExit('FAIL: CLI PDF must have multiple pages')
+        if '正文用于验证分页' not in str(document.string()):raise SystemExit('FAIL: CLI PDF text missing')
+    if fmt=='docx':
+        import zipfile
+        with zipfile.ZipFile(target) as archive:
+            if 'word/document.xml' not in archive.namelist():raise SystemExit('FAIL: CLI OOXML missing')
+invalid=subprocess.run([str(cli), 'export', str(long_source), '--to', 'invalid'], env=cli_env, capture_output=True, timeout=10)
+if invalid.returncode!=1:raise SystemExit('FAIL: CLI argument exit code')
+print('Native WKWebView and CLI output verification PASS; evidence: '+str(data))
+print('Window visibility and zero network requests still require independent observation evidence.')

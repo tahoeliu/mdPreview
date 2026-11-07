@@ -1,4 +1,8 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
+.welcome-overlay [data-onboarding] { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 20px; }
+.welcome-overlay button, .release-notes-notice { padding: 8px 12px; border: 1px solid var(--border); border-radius: 6px; color: var(--fg); background: var(--bg); cursor: pointer; }
+.release-notes-notice { position: fixed; bottom: 16px; left: 20px; z-index: 900; }
+:focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
 body { font-family: var(--font-sans); background: var(--bg); color: var(--app-fg); height: 100vh; overflow: hidden; }
 .scroll-wrap { position: absolute; top: 0; bottom: 0; left: 0; right: 0; overflow-y: auto; overflow-x: hidden; }
 .page { position: relative; max-width: var(--page-width, 720px); margin: 0 auto; padding: 60px 16px 120px; }

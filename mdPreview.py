@@ -5,8 +5,19 @@ Minimal Markdown Viewer for macOS
 
 import sys
 import os
+# 在WebView/窗口/更新逻辑加载前冻结当前启动副本，采样失败永久禁用本进程更新。
+_STARTUP_BUNDLE_SNAPSHOT = None
+if getattr(sys, 'frozen', False):
+    try:
+        from pathlib import Path
+        from types import MappingProxyType
+        from mdpreview_core.release import bundle_snapshot
+        _STARTUP_BUNDLE_SNAPSHOT = MappingProxyType(bundle_snapshot(Path(sys.executable).resolve().parents[2]))
+    except (OSError, ValueError):
+        pass
 import json
 import time
+_PROCESS_START = time.monotonic()
 import threading
 import tempfile
 import shutil
@@ -14,8 +25,9 @@ import hashlib
 import logging
 import uuid
 from logging.handlers import RotatingFileHandler
+from contextlib import contextmanager, nullcontext
 from urllib.parse import urlsplit
-from mdpreview_core.storage import atomic_write, DraftStore
+from mdpreview_core.storage import atomic_write, atomic_create, DraftStore
 from mdpreview_core.images import export_image
 if '--install-update-helper' in sys.argv:
     from scripts.install_update import main as install_helper
@@ -30,18 +42,36 @@ _START_T0 = time.time()  # cold-start profiling
 APP_SUPPORT_DIR = os.environ.get('MDPREVIEW_DATA_DIR') or os.path.expanduser('~/Library/Application Support/mdPreview')
 CONFIG_FILE = os.path.join(APP_SUPPORT_DIR, 'config.json')
 LEGACY_CONFIG_FILE = os.path.expanduser('~/.mdviewer_config.json')
-LOG_FILE = os.path.join(APP_SUPPORT_DIR, 'Logs', 'mdPreview.log') if os.environ.get('MDPREVIEW_DATA_DIR') else os.path.expanduser('~/Library/Logs/mdPreview.log')
+LOG_FILE = os.path.join(APP_SUPPORT_DIR, 'Logs', 'mdPreview.log') if os.environ.get('MDPREVIEW_DATA_DIR') else os.path.expanduser('~/Library/Logs/mdPreview/mdPreview.log')
 DRAFT_DIR = os.path.join(APP_SUPPORT_DIR, 'Drafts')
 UPDATE_STAGING_DIR = os.path.join(APP_SUPPORT_DIR, 'UpdateStaging')
 
 
 def _setup_logging():
+    if '--headless-export' in sys.argv:
+        return
     try:
         os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
         logging.basicConfig(handlers=[RotatingFileHandler(LOG_FILE, maxBytes=2_000_000, backupCount=3)],
                             level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     except OSError:
         pass
+
+
+def _uncaught_exception(exc_type, exc_value, traceback):
+    from mdpreview_core.diagnostics import record
+    record('uncaught', error=exc_type.__name__)
+    logging.error('uncaught exception; details excluded for privacy')
+
+
+def _uncaught_thread(args):
+    from mdpreview_core.diagnostics import record
+    record('thread-uncaught', error=args.exc_type.__name__)
+    logging.error('uncaught thread exception; details excluded for privacy')
+
+
+sys.excepthook = _uncaught_exception
+threading.excepthook = _uncaught_thread
 
 
 def log_exception(context):
@@ -65,8 +95,29 @@ def _is_chinese_locale():
     return language.lower().startswith('zh')
 
 
+def _locale_bundle():
+    language = load_config().get('settings', {}).get('language', 'system')
+    if language == 'system':
+        language = os.environ.get('MDPREVIEW_LANGUAGE')
+        if not language:
+            try:
+                from Foundation import NSLocale
+                language = str(NSLocale.preferredLanguages()[0])
+            except Exception:
+                language = os.environ.get('LC_ALL') or os.environ.get('LANG', 'en')
+    tag = str(language).replace('_', '-').lower()
+    locale = 'zh-Hant' if tag.startswith(('zh-hant', 'zh-tw', 'zh-hk', 'zh-mo')) else 'zh-Hans' if tag.startswith('zh') else 'en'
+    try:
+        with open(get_resource_path('frontend/' + locale + '.json'), encoding='utf-8') as stream:
+            messages = json.load(stream)
+    except (OSError, ValueError):
+        messages = {}
+    return {'locale': locale, 'messages': messages}
+
+
 def _t(en, zh):
-    return zh if _is_chinese_locale() else en
+    bundle = _locale_bundle()
+    return bundle['messages'].get(en, zh if bundle['locale'] == 'zh-Hans' else en)
 
 
 def _is_privacy_sensitive_user_path(path):
@@ -122,6 +173,8 @@ def _default_save_directory(preferred=None):
 
 
 def _remember_save_directory(path):
+    if '--headless-export' in sys.argv:
+        return
     if path:
         update_config({'last_save_dir': os.path.dirname(os.path.abspath(path))})
 
@@ -696,6 +749,9 @@ def _pdf_to_a4_longpage(src_path, dst_path):
     return count
 
 
+_pending_link_hashes = {}
+
+
 class MarkdownAPI:
     def __init__(self, file_path=None):
         self.document_id = str(uuid.uuid4())
@@ -706,6 +762,7 @@ class MarkdownAPI:
         self._output_lock = threading.Lock()
         self._output_completion = None
         self.file_path = file_path
+        self.pending_hash = _pending_link_hashes.pop(os.path.realpath(file_path), '') if file_path else ''
         self.cached_content = ''  # JS pushes content here periodically
         self.file_content = ''    # Last known file content
         self.window = None        # Set after window creation
@@ -719,6 +776,9 @@ class MarkdownAPI:
         self.close_confirmed = False  # True after the user explicitly chooses to close
 
     def _record_baseline_stat(self, path):
+        from mdpreview_core.watcher import watcher
+        if path and self.window:
+            watcher.watch(id(self), path, self._external_change)
         try:
             stat = os.stat(path)
             self.baseline_mtime_ns = getattr(stat, 'st_mtime_ns', int(stat.st_mtime * 1_000_000_000))
@@ -795,9 +855,14 @@ class MarkdownAPI:
             return False
 
     def startup_ready(self, ms):
-        """JS calls this once the first screen has rendered (cold-start perf)."""
+        """只记录本进程首次首屏，后续文档加载不混入冷启动。"""
+        if _UI_READY.is_set():
+            return
         try:
-            logging.info('[startup] js first screen ready: %dms' % int(ms))
+            from mdpreview_core.diagnostics import record
+            elapsed = (time.monotonic() - _PROCESS_START) * 1000
+            record('startup', milliseconds=elapsed)
+            logging.info('[startup] process to first screen: %dms; JS: %dms', int(elapsed), int(ms))
         except Exception:
             pass
         _UI_READY.set()
@@ -812,8 +877,12 @@ class MarkdownAPI:
 
     def get_initial_content(self):
         cfg = load_config()
-        page_width = cfg.get('page_width', 720)
-        base = {'pageWidth': page_width, 'isZh': _is_chinese_locale(),
+        preferences = self.get_settings()
+        page_width = preferences['page_width']
+        from mdpreview_core.reading_state import position_key
+        position = cfg.get('reading_positions', {}).get(position_key(self.file_path), {}) if self.file_path else {}
+        base = {'i18n': _locale_bundle(), 'readingPosition': position, 'pageWidth': page_width, 'settings': preferences, 'fontSize': preferences['font_size'],
+                'hash': self.pending_hash, 'isZh': _is_chinese_locale() if preferences['language'] == 'system' else preferences['language'].startswith('zh'),
                 'documentId': self.document_id, 'revision': self.revision,
                 'recoverableDrafts': [draft for draft in DraftStore(DRAFT_DIR).recoverable()
                                       if draft['documentId'] not in {api.document_id for api in _window_apis.values()}]}
@@ -956,6 +1025,11 @@ class MarkdownAPI:
             log_exception('read clipboard failed')
             return {'format': 'none', 'content': '', 'plain': ''}
 
+    def _cancel_document_output(self):
+        if self._output_completion is not None:
+            self._output_completion.close()
+        self._reload_candidate = None
+
     def reset_to_untitled(self):
         """Turn the current window into a blank Untitled document without closing it.
 
@@ -965,10 +1039,14 @@ class MarkdownAPI:
         start.
         """
         try:
+            self._cancel_document_output()
+            from mdpreview_core.watcher import watcher
+            watcher.remove(id(self))
             if self.file_path:
                 with _state_lock:
                     _opened_files.discard(os.path.abspath(self.file_path))
             self.document_id = str(uuid.uuid4())
+            self.pending_hash = ''
             self.revision = 0
             self.saved_revision = 0
             self.encoding = 'utf-8'
@@ -1008,6 +1086,8 @@ class MarkdownAPI:
                     if save_revision < self.saved_revision:
                         return {'success': False, 'stale': True, 'error': 'Older save snapshot'}
                     previous_path = self.file_path
+                    if previous_path and not self.is_untitled and os.path.realpath(path) == os.path.realpath(previous_path) and not os.path.exists(path):
+                        return {'success': False, 'deleted': True, 'error': 'use-save-as'}
                     if self.read_error and previous_path and os.path.realpath(path) == os.path.realpath(previous_path):
                         return {'success': False, 'error': 'Original file could not be read; use Save As to a new path'}
                     encoding = self.encoding or 'utf-8'
@@ -1027,6 +1107,7 @@ class MarkdownAPI:
                     self.is_dirty = self.revision > save_revision or self.cached_content != content
                     self.is_untitled = False
                     self.recovery_conflict = False
+                    self.deleted_on_disk = False
                     self._record_baseline_stat(path)
                     _remove_draft(previous_path, identity)
                     if previous_path != path:
@@ -1109,12 +1190,36 @@ class MarkdownAPI:
         finally:
             _format_panel_lock.release()
 
+    def set_clipboard_rich(self, html, plain):
+        from mdpreview_core.clipboard import set_rich
+        return set_rich(html, plain)
+
+    def get_math_export_css(self, families):
+        import base64
+        import re
+        if not isinstance(families, list) or len(families) > 32 or any(not isinstance(f, str) or not re.fullmatch(r'KaTeX_(?:Size[1-4]|[A-Za-z]+)', f) for f in families):
+            raise ValueError('invalid-math-fonts')
+        with open(get_resource_path('vendor/katex/katex.min.css'), encoding='utf-8') as stream:
+            css = stream.read()
+        def embed(match):
+            block = match.group(0)
+            family = re.search(r'font-family\s*:\s*[\"\']?(KaTeX_(?:Size[1-4]|[A-Za-z]+))', block)
+            if not family or family.group(1) not in families:
+                return ''
+            font = re.search(r'url\([\"\']?fonts/([A-Za-z0-9_-]+\.woff2)[\"\']?\)', block)
+            if not font:
+                raise ValueError('missing-math-font')
+            with open(get_resource_path('vendor/katex/fonts/' + font.group(1)), 'rb') as stream:
+                data = base64.b64encode(stream.read()).decode('ascii')
+            return re.sub(r'src\s*:[^;}]+', 'src:url(data:font/woff2;base64,' + data + ') format(\"woff2\")', block)
+        return re.sub(r'@font-face\s*\{[^}]+\}', embed, css)
+
     def get_export_css(self):
-        with open(resource_path('VERSION'), encoding='utf-8') as stream:
+        with open(get_resource_path('VERSION'), encoding='utf-8') as stream:
             version = stream.read().strip()
         chunks = []
         for name in ('tokens', 'content', 'print'):
-            with open(resource_path('css/' + name + '.css'), encoding='utf-8') as stream:
+            with open(get_resource_path('css/' + name + '.css'), encoding='utf-8') as stream:
                 chunks.append(stream.read())
         return {'css': '\n'.join(chunks), 'version': version}
 
@@ -1166,6 +1271,16 @@ class MarkdownAPI:
             self._output_completion = None
             self._output_lock.release()
 
+    def _no_clobber_output(self):
+        return getattr(self, '_headless_lifecycle', None) is not None
+
+    @contextmanager
+    def _export_commit_guard(self, completion=None):
+        lifecycle = getattr(self, '_headless_lifecycle', None)
+        with lifecycle.commit_guard() if lifecycle else nullcontext():
+            with completion.commit_guard() if completion else nullcontext():
+                yield
+
     def _export_paged_pdf(self, path, page):
         from mdpreview_core.export import print_engine, pdf_post
         if not self._output_lock.acquire(blocking=False):
@@ -1202,7 +1317,7 @@ class MarkdownAPI:
                 return result
             meta = dict((page or {}).get('meta') or {})
             meta['pageNumbers'] = options.get('page_numbers', True)
-            pdf_post.finalize(temporary, path, meta, state.commit_guard)
+            pdf_post.finalize(temporary, path, meta, lambda: self._export_commit_guard(state), no_clobber=self._no_clobber_output())
             _remember_save_directory(path)
             return {'success': True, 'path': path}
         except Exception:
@@ -1284,7 +1399,7 @@ class MarkdownAPI:
                         return result
                     if fmt == 'png':
                         from mdpreview_core.export import snapshot
-                        paths = snapshot.render(result_holder['data'], path, commit_guard=completed.commit_guard)
+                        paths = snapshot.render(result_holder['data'], path, commit_guard=lambda: self._export_commit_guard(completed), no_clobber=self._no_clobber_output())
                         _remember_save_directory(path)
                         return {'success': True, 'path': paths[0], 'paths': paths, 'split': len(paths) > 1}
                     with tempfile.TemporaryDirectory() as directory:
@@ -1296,7 +1411,7 @@ class MarkdownAPI:
                         from mdpreview_core.export import pdf_post
                         meta = dict((page or {}).get('meta') or {})
                         meta['pageNumbers'] = False
-                        pdf_post.finalize(converted, path, meta, completed.commit_guard)
+                        pdf_post.finalize(converted, path, meta, lambda: self._export_commit_guard(completed), no_clobber=self._no_clobber_output())
                     _remember_save_directory(path)
                     return {'success': True, 'path': path, 'pages': count, 'split': count > 1}
                 finally:
@@ -1316,20 +1431,277 @@ class MarkdownAPI:
                     return {'success': False, 'error': 'Invalid payload: %s' % str(e)}
                 if len(raw) == 0:
                     return {'success': False, 'error': 'Empty file data'}
-                atomic_write(path, raw)
+                with self._export_commit_guard():
+                    (atomic_create if self._no_clobber_output() else atomic_write)(path, raw)
                 _remember_save_directory(path)
                 return {'success': True, 'path': path}
 
-            _safe_write_text(path, content, encoding='utf-8')
+            with self._export_commit_guard():
+                (atomic_create if self._no_clobber_output() else atomic_write)(path, content.encode('utf-8'))
             _remember_save_directory(path)
             return {'success': True, 'path': path}
         except Exception as e:
             log_exception('export as write failed')
             return {'success': False, 'error': str(e)}
 
+    def save_reading_position(self, position, document_id=None):
+        from mdpreview_core.reading_state import remember
+        if document_id and document_id != self.document_id:
+            return False
+        if self.is_untitled or not self.file_path:
+            return False
+        try:
+            with _config_lock:
+                values = load_config().get('reading_positions', {})
+                update_config({'reading_positions': remember(values, self.file_path, position)})
+            return True
+        except (ValueError, OSError):
+            return False
+
+    def _external_change(self, path, stamp):
+        with self._save_lock, self._session_lock:
+            if self.file_path != path or not self.window or self.close_confirmed:
+                return
+            from mdpreview_core.watcher import watcher
+            if watcher.stamp(path) != stamp:
+                return
+            if stamp == (self.baseline_mtime_ns, self.baseline_size):
+                return
+            self.recovery_conflict = True
+            identity = self.document_id
+            if stamp is None:
+                self.deleted_on_disk = True
+                window = self.window
+                if HAS_COCOA:
+                    AppHelper.callAfter(lambda: window.set_title(os.path.basename(path) + '（已删除）'))
+        _dispatch_js_to(self.window, 'handleExternalChange('+json.dumps(identity)+','+json.dumps(stamp is None)+')')
+
+    def reload_from_disk(self, document_id, revision):
+        with self._save_lock, self._session_lock:
+            if document_id != self.document_id or self.is_dirty or revision != self.revision:
+                return {'success': False, 'conflict': True}
+            if not self.file_path or not os.path.isfile(self.file_path):
+                return {'success': False, 'deleted': True}
+            try:
+                before = os.stat(self.file_path)
+                content, encoding = _detect_text_encoding(self.file_path)
+                after = os.stat(self.file_path)
+                stamp = (after.st_mtime_ns, after.st_size, after.st_ino)
+                if stamp != (before.st_mtime_ns, before.st_size, before.st_ino):
+                    return {'success': False, 'conflict': True}
+                candidate = {'id': uuid.uuid4().hex, 'document': document_id, 'revision': revision,
+                             'content': content, 'encoding': encoding, 'stamp': stamp}
+                self._reload_candidate = candidate
+                return {'success': True, 'content': content, 'documentId': self.document_id,
+                        'candidateId': candidate['id']}
+            except (OSError, UnicodeError):
+                return {'success': False, 'error': 'reload-failed'}
+
+    def ack_reload_from_disk(self, candidate_id, document_id, revision):
+        with self._save_lock, self._session_lock:
+            candidate = getattr(self, '_reload_candidate', None)
+            if (not candidate or candidate['id'] != candidate_id or document_id != self.document_id
+                    or candidate['document'] != document_id or candidate['revision'] != revision
+                    or self.revision != revision or self.is_dirty):
+                return {'success': False, 'conflict': True}
+            self._reload_candidate = None
+            self.recovery_conflict = True
+            try:
+                stamp = os.stat(self.file_path)
+                current, encoding = _detect_text_encoding(self.file_path)
+                if ((stamp.st_mtime_ns, stamp.st_size, stamp.st_ino) != candidate['stamp']
+                        or current != candidate['content']):
+                    return {'success': False, 'conflict': True}
+                self.file_content = self.cached_content = current
+                self.encoding = encoding
+                self.baseline_mtime_ns, self.baseline_size = candidate['stamp'][:2]
+                self.recovery_conflict = False
+                self.deleted_on_disk = False
+                return {'success': True}
+            except (OSError, UnicodeError):
+                return {'success': False, 'conflict': True}
+
+    def save_image_asset(self, doc_path, base64_data, ext, suggested_name='', document_id=None):
+        from mdpreview_core.images import save_asset
+        with self._session_lock:
+            if document_id and document_id != self.document_id:
+                return {'success': False, 'error': 'stale-document'}
+            if self.is_untitled or not self.file_path:
+                return {'success': False, 'need_save': True}
+            if not isinstance(doc_path, str) or os.path.realpath(doc_path) != os.path.realpath(self.file_path):
+                return {'success': False, 'error': 'invalid-document'}
+            try:
+                return save_asset(self.file_path, base64_data, ext)
+            except (OSError, ValueError):
+                return {'success': False, 'error': 'image-save-failed'}
+
+    def get_credits(self):
+        from pathlib import Path
+        return Path(get_resource_path('THIRD_PARTY_NOTICES.md')).read_text(encoding='utf-8')
+
+    def get_diagnostics(self):
+        from mdpreview_core.watcher import watcher
+        return {'version': self.get_export_css()['version'], 'python': sys.version.split()[0],
+                'cocoa': HAS_COCOA, 'windows': len(_window_apis),
+                'watcher': bool(watcher.thread and watcher.thread.is_alive()),
+                'auto_update': self.get_settings()['auto_update']}
+
+    def report_issue(self):
+        from mdpreview_core.diagnostics import issue_url
+        return self.open_external_link(issue_url(_get_current_version()))
+
+    def export_diagnostics(self):
+        if not HAS_COCOA:
+            return {'success': False, 'error': 'native-unavailable'}
+        from AppKit import NSSavePanel, NSOKButton
+        from Foundation import NSThread
+        from PyObjCTools import AppHelper
+        from mdpreview_core.diagnostics import archive
+        selected = {}
+        completed = threading.Event()
+
+        def choose():
+            try:
+                panel = NSSavePanel.savePanel()
+                panel.setTitle_(_t('Export Diagnostics', '导出诊断信息'))
+                panel.setNameFieldStringValue_('mdPreview-diagnostics.zip')
+                panel.setAllowedFileTypes_(['zip'])
+                if panel.runModal() == NSOKButton:
+                    selected['path'] = str(panel.URL().path())
+            finally:
+                completed.set()
+        try:
+            if NSThread.isMainThread():
+                choose()
+            else:
+                AppHelper.callAfter(choose)
+                completed.wait()
+            if 'path' not in selected:
+                return {'success': False, 'cancelled': True}
+            atomic_write(selected['path'], archive(_get_current_version(), load_config()))
+            return {'success': True}
+        except Exception:
+            return {'success': False, 'error': 'diagnostics-export-failed'}
+
+    def install_cli(self):
+        from pathlib import Path
+        source = Path(get_resource_path('bin/mdpreview'))
+        if not source.is_file():
+            return {'success': False, 'error': 'packaged-cli-required'}
+        try:
+            if not os.access(source, os.X_OK):
+                return {'success': False, 'error': 'packaged-cli-not-executable'}
+            folder = Path('/usr/local/bin')
+            if not folder.is_dir() or not os.access(folder, os.W_OK):
+                folder = Path.home() / '.local/bin'
+                folder.mkdir(parents=True, exist_ok=True)
+            target = folder / 'mdpreview'
+            if target.exists() or target.is_symlink():
+                return {'success': False, 'error': 'cli-target-exists'}
+            target.symlink_to(source)
+            return {'success': True, 'path': str(target), 'addToPath': str(folder)}
+        except OSError:
+            return {'success': False, 'error': 'cli-install-failed'}
+
+    def get_onboarding(self):
+        config = load_config()
+        version = _get_current_version()
+        return {'first': not config.get('onboarded', False), 'version': version,
+                'updated': bool(config.get('last_seen_version') and config['last_seen_version'] != version)}
+
+    def acknowledge_onboarding(self):
+        update_config({'onboarded': True, 'last_seen_version': _get_current_version()})
+        return {'success': True}
+
+    def get_shortcuts(self):
+        with open(get_resource_path('frontend/shortcuts.json'), encoding='utf-8') as stream:
+            return json.load(stream)
+
+    def get_example(self):
+        with open(get_resource_path('frontend/welcome.json'), encoding='utf-8') as stream:
+            return json.load(stream)[_locale_bundle()['locale']]
+
+    def get_release_notes(self):
+        import re
+        with open(get_resource_path('CHANGELOG.md'), encoding='utf-8') as stream:
+            text = stream.read()
+        version = _get_current_version()
+        match = re.search(r'^## \[?' + re.escape(version) + r'\]?(?:\s[^\n]*)?\n(.*?)(?=^## |\Z)', text, re.M | re.S)
+        return {'version': version, 'content': match.group(1).strip() if match else '', 'available': bool(match)}
+
+    def get_i18n(self):
+        return _locale_bundle()
+
+    def get_settings(self):
+        from mdpreview_core.settings import settings
+        return settings(load_config())
+
+    def set_settings(self, patch):
+        from mdpreview_core.settings import validated
+        try:
+            patch = validated(patch)
+        except ValueError:
+            return {'success': False, 'error': 'invalid-settings'}
+        with _config_lock:
+            values = self.get_settings()
+            values.update(patch)
+            update_config({'settings': values})
+            return {'success': load_config().get('settings') == values, 'settings': values}
+
+    def save_font_size(self, size):
+        return self.set_settings({'font_size': size})
+
+    def open_linked_document(self, path, hash='', same_window=False):
+        if not isinstance(path, str) or not isinstance(hash, str) or type(same_window) is not bool:
+            return {'success': False, 'error': 'invalid-link'}
+        if not os.path.isabs(path):
+            if self.is_untitled or not self.file_path:
+                return {'success': False, 'error': 'need-save'}
+            path = os.path.join(os.path.dirname(self.file_path), path)
+        path = os.path.realpath(path)
+        if not os.path.exists(path):
+            return {'success': False, 'error': 'not-found'}
+        if path.lower().endswith(('.md', '.markdown', '.mdown', '.mkd', '.mkdown', '.txt')) and os.path.isfile(path):
+            if same_window and self.is_dirty:
+                return {'success': False, 'error': 'dirty-document'}
+            if same_window and self.window:
+                update_main_window(self.window, self, path, hash)
+            else:
+                _pending_link_hashes[path] = hash
+                handle_opened_file(path)
+                for api in list(_window_apis.values()):
+                    if api.file_path and os.path.realpath(api.file_path) == path:
+                        api.pending_hash = hash
+                        if id(api.window) in _windows_js_ready:
+                            _dispatch_js_to(api.window, 'scrollToHash('+json.dumps(hash)+')')
+            return {'success': True}
+        if not HAS_COCOA:
+            return {'success': False, 'error': 'native-confirmation-unavailable'}
+        result = {}; done = threading.Event()
+        def confirm():
+            try:
+                from AppKit import NSAlert, NSAlertFirstButtonReturn, NSWorkspace
+                from Foundation import NSURL
+                alert = NSAlert.alloc().init()
+                alert.setMessageText_(_t('Open this file with the default application?', '使用系统默认程序打开此文件？'))
+                alert.setInformativeText_(path)
+                alert.addButtonWithTitle_('取消'); alert.addButtonWithTitle_('打开')
+                if alert.runModal() == NSAlertFirstButtonReturn + 1:
+                    result['success'] = bool(NSWorkspace.sharedWorkspace().openURL_(NSURL.fileURLWithPath_(path)))
+                else:
+                    result.update(success=False, cancelled=True)
+            except Exception:
+                result.update(success=False, error='open-link-failed')
+            finally:
+                done.set()
+        from Foundation import NSThread
+        if NSThread.isMainThread(): confirm()
+        else: AppHelper.callAfter(confirm); done.wait()
+        return result
+
     def save_page_width(self, width):
         """Persist the user's preferred page width"""
-        update_config({'page_width': max(360, min(2016, int(width)))})
+        self.set_settings({'page_width': max(360, min(2016, int(width)))})
         return True
 
     def open_file_dialog(self):
@@ -1394,8 +1766,10 @@ class MarkdownAPI:
             window = self.window
             if window is None:
                 return {'success': False}
-            if self._output_completion is not None:
-                self._output_completion.close()
+            if self.is_dirty and not self.close_confirmed:
+                _dispatch_js_to(window, 'promptBeforeClose(true)')
+                return {'success': False, 'confirmation_required': True}
+            self._cancel_document_output()
             if _is_last_window(window):
                 _hide_last_window(window, self)
                 return {'success': True}
@@ -1964,6 +2338,11 @@ def _forget_window(window):
 
 def _allow_close(window):
     """Allow the close and perform successful-close cleanup."""
+    from mdpreview_core.watcher import watcher
+    api = _window_apis.get(id(window))
+    if api:
+        api._cancel_document_output()
+        watcher.remove(id(api))
     _forget_window(window)
     return True
 
@@ -2062,6 +2441,7 @@ def on_window_closing(window):
             except Exception:
                 pass
             return False
+        _save_window_geometry(window)
         # If this is the last window and the user is not explicitly quitting,
         # keep the app alive by blanking it and HIDING it instead of closing.
         # Hiding (rather than destroying) keeps the NSWindow/pywebview state
@@ -2083,7 +2463,7 @@ def on_window_closing(window):
         return _allow_close(window)
     except Exception:
         log_exception('window closing failed')
-        return _allow_close(window)
+        return False
 
 
 def _is_app_quitting():
@@ -2152,17 +2532,16 @@ def patch_evaluate_js():
         BrowserView = cocoa.BrowserView
 
         def _safe_evaluate_js(self, script, parse_json=True):
-            try:
-                if not self.webview or not BrowserView.app.isRunning():
-                    return None
-            except Exception:
-                return None
+            if not self.webview or not BrowserView.app.isRunning():
+                raise RuntimeError('native-javascript-window-closed')
 
             class JSResult:
                 result = None
+                error = None
                 result_semaphore = threading.Semaphore(0)
 
             def handler(result, error):
+                JSResult.error = error
                 if parse_json and result:
                     try:
                         JSResult.result = json.loads(result)
@@ -2178,23 +2557,52 @@ def patch_evaluate_js():
             def eval_():
                 try:
                     self.webview.evaluateJavaScript_completionHandler_(script, handler)
-                except Exception:
+                except Exception as error:
+                    JSResult.error = error
                     try:
                         JSResult.result_semaphore.release()
                     except Exception:
                         pass
 
-            try:
-                cocoa.AppHelper.callAfter(eval_)
-                if not JSResult.result_semaphore.acquire(timeout=EVALUATE_JS_TIMEOUT):
-                    return None
-                return JSResult.result
-            except Exception:
-                return None
+            cocoa.AppHelper.callAfter(eval_)
+            if not JSResult.result_semaphore.acquire(timeout=EVALUATE_JS_TIMEOUT):
+                raise TimeoutError('native-javascript-timeout')
+            if JSResult.error is not None:
+                raise RuntimeError('native-javascript-execution-failed')
+            return JSResult.result
 
         BrowserView.evaluate_js = _safe_evaluate_js
     except Exception:
         log_exception('patch evaluate_js failed')
+
+
+def _saved_window_geometry():
+    from mdpreview_core.reading_state import visible_frame
+    frame = load_config().get('window_frame')
+    if not HAS_COCOA:
+        return {}
+    try:
+        from AppKit import NSScreen
+        screens = [screen.visibleFrame() for screen in NSScreen.screens()]
+        rects = [[r.origin.x, r.origin.y, r.size.width, r.size.height] for r in screens]
+        if visible_frame(frame, rects):
+            # Cocoa 的原点在屏幕下方；pywebview 使用主屏顶部坐标。
+            top = NSScreen.screens()[0].frame().size.height
+            return {'x': int(frame[0]), 'y': int(top-frame[1]-frame[3]), 'width': int(frame[2]), 'height': int(frame[3])}
+    except Exception:
+        pass
+    return {}
+
+
+def _save_window_geometry(window):
+    try:
+        import webview.platforms.cocoa as cocoa
+        browser = cocoa.BrowserView.instances.get(getattr(window, 'uid', None))
+        native = browser.window if browser is not None else window.native
+        frame = native.frame()
+        update_config({'window_frame': [frame.origin.x, frame.origin.y, frame.size.width, frame.size.height]})
+    except Exception:
+        pass
 
 
 def create_window(file_path=None, x=None, y=None):
@@ -2206,6 +2614,20 @@ def create_window(file_path=None, x=None, y=None):
         with _state_lock:
             _opened_files.add(file_path)
 
+    geometry = _saved_window_geometry()
+    if x is None and y is None and geometry:
+        x, y = geometry['x'], geometry['y']
+        offset = (_window_count[0] * WINDOW_OFFSET) % 150
+        candidate = load_config().get('window_frame', [])
+        try:
+            from AppKit import NSScreen
+            from mdpreview_core.reading_state import visible_frame
+            screens = [screen.visibleFrame() for screen in NSScreen.screens()]
+            shifted = [candidate[0]+offset, candidate[1]-offset, candidate[2], candidate[3]]
+            if visible_frame(shifted, [[r.origin.x, r.origin.y, r.size.width, r.size.height] for r in screens]):
+                x += offset; y += offset
+        except Exception:
+            pass
     # Calculate cascade offset if x,y not specified
     if x is None or y is None:
         count = _window_count[0]
@@ -2222,8 +2644,8 @@ def create_window(file_path=None, x=None, y=None):
             title=title,
             url=html_path,
             js_api=api,
-            width=900,
-            height=680,
+            width=geometry.get('width', 900),
+            height=geometry.get('height', 680),
             min_size=(680, 400),
             text_select=True,
             confirm_close=False,
@@ -2270,11 +2692,12 @@ def _create_window_safely(file_path=None, x=None, y=None):
         create_window(file_path, x, y)
 
 
-def update_main_window(main_window, main_api, file_path):
+def update_main_window(main_window, main_api, file_path, hash=''):
     """Update the main window with a new file (reused hidden window path)."""
     file_path = os.path.abspath(file_path)
     main_api.reset_to_untitled()
     main_api.file_path = file_path
+    main_api.pending_hash = hash or _pending_link_hashes.pop(os.path.realpath(file_path), '')
     main_api.is_untitled = False
     with _state_lock:
         _opened_files.add(file_path)
@@ -2296,7 +2719,8 @@ def update_main_window(main_window, main_api, file_path):
         while True:
             if id(main_window) in _windows_js_ready:
                 try:
-                    main_window.evaluate_js('reloadContent();')
+                    from mdpreview_core.csp_bridge import run_body
+                    run_body(main_window, 'reloadContent();')
                     main_window.set_title(_edited_title(os.path.basename(file_path), main_api.is_dirty))
                     return
                 except Exception:
@@ -2503,16 +2927,16 @@ if HAS_COCOA:
                     view_menu.insertItem_atIndex_(NSMenuItem.separatorItem(), first_section_end + 4)
 
                     # Section 4: width and text-size controls.
-                    inc_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Increase Width", "加宽"), "increaseWidth:", ".")
-                    inc_item.setKeyEquivalentModifierMask_(1 << 20)
+                    inc_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Increase Width", "加宽"), "increaseWidth:", "=")
+                    inc_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 19))
                     _set_symbol_icon(inc_item, 'arrow.left.and.right')
                     view_menu.insertItem_atIndex_(inc_item, first_section_end + 5)
-                    dec_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Decrease Width", "变窄"), "decreaseWidth:", ",")
-                    dec_item.setKeyEquivalentModifierMask_(1 << 20)
+                    dec_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Decrease Width", "变窄"), "decreaseWidth:", "-")
+                    dec_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 19))
                     _set_symbol_icon(dec_item, 'arrow.left.and.right')
                     view_menu.insertItem_atIndex_(dec_item, first_section_end + 6)
                     reset_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Reset Width", "重置宽度"), "resetWidth:", "0")
-                    reset_item.setKeyEquivalentModifierMask_(1 << 20)
+                    reset_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 19))
                     _set_symbol_icon(reset_item, 'arrow.uturn.left')
                     view_menu.insertItem_atIndex_(reset_item, first_section_end + 7)
                     zoom_in_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Bigger Text", "放大文字"), "zoomIn:", "=")
@@ -2529,6 +2953,14 @@ if HAS_COCOA:
                     reset_item.setTarget_(_view_menu_handler)
                     zoom_in_item.setTarget_(_view_menu_handler)
                     zoom_out_item.setTarget_(_view_menu_handler)
+                    reset_font = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_('重置字号', 'resetFontSize:', '0')
+                    reset_font.setKeyEquivalentModifierMask_(1 << 20)
+                    reset_font.setTarget_(_view_menu_handler)
+                    view_menu.addItem_(reset_font)
+                    preferences = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_('设置…', 'openSettings:', ',')
+                    preferences.setKeyEquivalentModifierMask_(1 << 20)
+                    preferences.setTarget_(_view_menu_handler)
+                    main_menu.itemAtIndex_(0).submenu().insertItem_atIndex_(preferences, 1)
                     _view_menu_setup = True
 
             # ── File menu: Properties ──
@@ -2639,6 +3071,11 @@ if HAS_COCOA:
                     _set_symbol_icon(paste_md_item, 'doc.richtext')
                     paste_md_item.setTarget_(_view_menu_handler)
                     edit_menu.insertItem_atIndex_(paste_md_item, paste_insert_at)
+                    for label, action, modifier in [(_t('Copy as Rich Text', '复制为富文本'), 'copyAsRichText:', 1 << 17), (_t('Copy as Markdown', '复制为 Markdown'), 'copyAsMarkdown:', 1 << 19)]:
+                        item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(label, action, 'c')
+                        item.setKeyEquivalentModifierMask_((1 << 20) | modifier)
+                        item.setTarget_(_view_menu_handler)
+                        edit_menu.insertItem_atIndex_(item, paste_insert_at + 1)
 
                     edit_menu.addItem_(NSMenuItem.separatorItem())
                     find_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Find", "查找"), "findAction:", "f")
@@ -2653,6 +3090,37 @@ if HAS_COCOA:
                     edit_menu.addItem_(find_prev_item)
                     _view_menu_handler._edit_menu_setup = True
 
+            if not getattr(_view_menu_handler, '_help_menu_setup', False):
+                help_menu = NSMenu.alloc().initWithTitle_(_t('Help', '帮助'))
+                help_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t('Help', '帮助'), None, '')
+                help_item.setSubmenu_(help_menu)
+                for title, action in [(_t('mdPreview Help', 'mdPreview 帮助'), 'appHelp:'),
+                                      (_t('Keyboard Shortcuts', '快捷键一览'), 'keyboardShortcuts:'),
+                                      (_t('Open Example', '打开示例文档'), 'openExample:'),
+                                      (_t('Report Issue…', '报告问题…'), 'reportIssue:'),
+                                      (_t('Export Diagnostics', '导出诊断信息'), 'exportDiagnostics:')]:
+                    item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, action, '')
+                    item.setTarget_(_view_menu_handler)
+                    help_menu.addItem_(item)
+                main_menu.addItem_(help_item)
+                NSApplication.sharedApplication().setHelpMenu_(help_menu)
+                cli_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t('Install Command Line Tool…', '安装命令行工具…'), 'installCommandLine:', '')
+                cli_item.setTarget_(_view_menu_handler)
+                main_menu.itemAtIndex_(0).submenu().addItem_(cli_item)
+                _view_menu_handler._help_menu_setup = True
+            with open(get_resource_path('frontend/shortcuts.json'), encoding='utf-8') as stream:
+                shortcuts = {item['action']: item for item in json.load(stream)}
+            masks = {'command': 1 << 20, 'shift': 1 << 17, 'option': 1 << 19, 'control': 1 << 18}
+            def apply_shortcuts(menu):
+                for item in menu.itemArray():
+                    shortcut = shortcuts.get(str(item.action() or ''))
+                    if shortcut:
+                        item.setKeyEquivalent_(shortcut['key'])
+                        item.setKeyEquivalentModifierMask_(sum(masks[m] for m in shortcut['modifiers']))
+                        item.setTitle_(_t(shortcut['en'], shortcut['zh']))
+                    if item.submenu():
+                        apply_shortcuts(item.submenu())
+            apply_shortcuts(main_menu)
         except Exception:
             log_exception('setup menus failed')
 
@@ -2834,6 +3302,30 @@ if HAS_COCOA:
         def decreaseWidth_(self, sender):
             _dispatch_js('adjustPageWidth(-40)')
 
+        def installCommandLine_(self, sender):
+            _dispatch_js("Bridge.call('install_cli').then(r=>showStatus(r.success?'CLI: '+r.path+' — PATH: '+r.addToPath:r.error,!r.success))")
+
+        def appHelp_(self, sender):
+            _dispatch_js("Bridge.callSafe('open_external_link','https://github.com/tahoeliu/mdPreview#readme')")
+
+        def keyboardShortcuts_(self, sender):
+            _dispatch_js('Onboarding.shortcuts()')
+
+        def openExample_(self, sender):
+            _dispatch_js('Onboarding.example()')
+
+        def reportIssue_(self, sender):
+            _dispatch_js("Bridge.callSafe('report_issue')")
+
+        def exportDiagnostics_(self, sender):
+            _dispatch_js('Onboarding.diagnostics()')
+
+        def openSettings_(self, sender):
+            _dispatch_js('openSettings()')
+
+        def resetFontSize_(self, sender):
+            _dispatch_js('resetFontSize()')
+
         def resetWidth_(self, sender):
             _dispatch_js('resetPageWidth()')
 
@@ -2895,6 +3387,12 @@ if HAS_COCOA:
 
         def findAction_(self, sender):
             _dispatch_js('openFindBar()')
+
+        def copyAsRichText_(self, sender):
+            _dispatch_js('copyAsRichText()')
+
+        def copyAsMarkdown_(self, sender):
+            _dispatch_js('copyAsMarkdown()')
 
         def pasteAsMarkdown_(self, sender):
             _dispatch_js('pasteAsMarkdown()')
@@ -3046,6 +3544,11 @@ if HAS_COCOA:
 
             def applicationShouldTerminate_(self, application):
                 if _QUIT_APPROVED.is_set():
+                    from mdpreview_core.settings import settings
+                    from mdpreview_core.watcher import watcher
+                    if settings(load_config())['restore_session']:
+                        update_config({'session': [api.file_path for api in list(_window_apis.values()) if api.file_path and not api.is_untitled]})
+                    watcher.stop.set()
                     _QUIT_REQUESTED.set()
                     return 1
                 _begin_quit_confirmation()
@@ -3174,6 +3677,23 @@ def main():
     global _initial_file_handled
     global _main_window_ref, _main_api_ref, _active_window_ref
 
+    if '--headless-export' in sys.argv:
+        from mdpreview_core.headless import run
+        arguments = sys.argv[sys.argv.index('--headless-export') + 1:]
+        os.environ['MDPREVIEW_DISABLE_UPDATES'] = '1'
+        try:
+            from mdpreview_core.csp_bridge import install
+            install(get_resource_path)
+            patch_evaluate_js()
+            code = run(arguments, MarkdownAPI, get_resource_path)
+        except Exception:
+            print('headless: initialization or native export failed', file=sys.stderr)
+            code = 2
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(code)
+    from mdpreview_core.csp_bridge import install
+    install(get_resource_path)
     _start_log('main entered')
     if HAS_COCOA:
         patch_app_delegate()
@@ -3196,12 +3716,14 @@ def main():
     title = os.path.basename(file_path) if file_path else 'Untitled.md'
 
     _start_log('before create_window')
+    geometry = _saved_window_geometry()
     main_window = webview.create_window(
         title=title,
         url=html_path,
         js_api=main_api,
-        width=900,
-        height=680,
+        width=geometry.get('width', 900),
+        height=geometry.get('height', 680),
+        x=geometry.get('x'), y=geometry.get('y'),
         min_size=(680, 400),
         text_select=True,
         confirm_close=False,
@@ -3231,6 +3753,11 @@ def main():
         def _post_startup():
             time.sleep(0.5)
             try:
+                from mdpreview_core.settings import settings
+                if settings(load_config())['restore_session']:
+                    for saved_path in load_config().get('session', [])[:300]:
+                        if isinstance(saved_path, str) and os.path.isfile(saved_path):
+                            handle_opened_file(saved_path, main_window, main_api)
                 _check_pending_install()
             except Exception:
                 pass
@@ -3365,6 +3892,9 @@ def _is_newer(remote, local):
 def _should_check_update():
     """Return True if enough time has passed since the last check."""
     cfg = load_config()
+    from mdpreview_core.settings import settings
+    if not settings(cfg)['auto_update']:
+        return False
     last = cfg.get('last_update_check', 0)
     return (time.time() - last) >= CHECK_INTERVAL
 
@@ -3382,7 +3912,7 @@ def _set_update_available(remote_version):
         def _update_menu():
             try:
                 if _update_menu_item:
-                    _update_menu_item.setTitle_(_t(f'Update Available: {remote_version}...', f'有可用更新：{remote_version}…'))
+                    _update_menu_item.setTitle_(_t('Update Available: {version}...', '有可用更新：{version}…').format(version=remote_version))
             except Exception:
                 pass
         AppHelper.callAfter(_update_menu)
@@ -3424,8 +3954,8 @@ def _show_update_alert(remote_version):
     try:
         local = _get_current_version()
         alert = NSAlert.alloc().init()
-        alert.setMessageText_(_t(f'mdPreview {remote_version} is available!', f'mdPreview {remote_version} 已可用！'))
-        alert.setInformativeText_(_t(f'You have version {local}. Would you like to download the update?', f'当前版本为 {local}。是否下载更新？'))
+        alert.setMessageText_(_t('mdPreview {version} is available!', 'mdPreview {version} 已可用！').format(version=remote_version))
+        alert.setInformativeText_(_t('You have version {version}. Would you like to download the update?', '当前版本为 {version}。是否下载更新？').format(version=local))
         alert.addButtonWithTitle_(_t('Download', '下载'))
         alert.addButtonWithTitle_(_t('Later', '稍后'))
         response = alert.runModal()
@@ -3447,6 +3977,15 @@ def _staged_version_acceptable(staged_version, local_version):
 
 
 def _download_and_extract_unlocked(version, progress_callback=None, keep_dmg=False):
+    from mdpreview_core.update_download import download
+    try:
+        return download(version, _get_current_version(), UPDATE_STAGING_DIR, _publisher_team_id(), progress_callback)
+    except Exception:
+        return {'error': 'verify', 'detail': _t('Signed update unavailable. Configure the release public key and verify the package.', '签名更新不可用。请配置发布公钥并校验安装包。')}
+
+
+def _disabled_legacy_dmg_download(version, progress_callback=None, keep_dmg=False):
+    raise RuntimeError('legacy-unsigned-dmg-update-disabled')
     """Download DMG to staging dir, extract .app.
 
     Returns {'staging_app': ..., 'dmg_path': ...} on success, or
@@ -3653,7 +4192,7 @@ def _manual_check_up_to_date():
         local = _get_current_version()
         alert = NSAlert.alloc().init()
         alert.setMessageText_(_t("You're up to date!", "已是最新版本！"))
-        alert.setInformativeText_(_t(f'mdPreview {local} is the latest version.', f'mdPreview {local} 已是最新版本。'))
+        alert.setInformativeText_(_t('mdPreview {version} is the latest version.', 'mdPreview {version} 已是最新版本。').format(version=local))
         alert.addButtonWithTitle_(_t('Re-download Latest', '重新下载最新版'))
         alert.addButtonWithTitle_(_t('OK', '好'))
         response = alert.runModal()
@@ -3719,7 +4258,7 @@ def _check_pending_install():
             if _update_menu_item:
                 def _update_menu():
                     try:
-                        _update_menu_item.setTitle_(_t(f'Update Available: {version}...', f'有可用更新：{version}…'))
+                        _update_menu_item.setTitle_(_t('Update Available: {version}...', '有可用更新：{version}…').format(version=version))
                     except Exception:
                         pass
                 AppHelper.callAfter(_update_menu)
@@ -3776,20 +4315,43 @@ def _perform_auto_install():
         version = cfg.get('pending_update_version')
         if not staged or os.path.commonpath([os.path.realpath(staged), os.path.realpath(UPDATE_STAGING_DIR)]) != os.path.realpath(UPDATE_STAGING_DIR):
             raise ValueError('No trusted staged application')
+        from pathlib import Path
+        from mdpreview_core.release_zip import extract_verified
+        signed_job = Path(staged).parent.parent
+        archives = list(signed_job.glob('mdPreview-*.zip'))
+        if len(archives) != 1:
+            raise ValueError('signed-archive-required')
+        archive = archives[0]
+        manifest, signature = signed_job / 'SHA256SUMS', signed_job / 'SHA256SUMS.sig'
+        staged = str(extract_verified(archive, manifest, signature,
+                                      signed_job / ('install-' + uuid.uuid4().hex)))
         team_id = _publisher_team_id()
         verify_bundle(staged, team_id, version)
         if not _smoke_test_app(staged):
             raise RuntimeError('Update did not reach a ready UI')
-        if not os.access('/Applications', os.W_OK):
-            raise PermissionError('Applications directory is not writable')
+        if not getattr(sys, 'frozen', False):
+            raise ValueError('update-requires-running-bundle')
+        from mdpreview_core.release import installation_identity, check_startup_snapshot
+        if _STARTUP_BUNDLE_SNAPSHOT is None:
+            raise ValueError('startup-identity-unavailable-restart-required')
+        destination = Path(_STARTUP_BUNDLE_SNAPSHOT['path'])
+        check_startup_snapshot(destination, _STARTUP_BUNDLE_SNAPSHOT)
+        destination_identity = installation_identity(destination)
+        check_startup_snapshot(destination, _STARTUP_BUNDLE_SNAPSHOT)
+        if destination_identity['version'] != _get_current_version():
+            raise ValueError('running-bundle-version-mismatch')
         job = os.path.dirname(staged)
-        plan = {'pid': os.getpid(), 'staging': staged, 'destination': '/Applications/mdPreview.app',
+        plan = {'pid': os.getpid(), 'staging': staged, 'destination': str(destination),
+                'destinationIdentity': destination_identity,
+                'startupIdentity': dict(_STARTUP_BUNDLE_SNAPSHOT),
                 'teamId': team_id, 'version': version,
+                'archive': str(archive), 'manifest': str(manifest), 'signature': str(signature),
                 'ready': os.path.join(UPDATE_STAGING_DIR, 'install-ready.json'),
                 'log': os.path.join(UPDATE_STAGING_DIR, 'install.log')}
         plan_path = os.path.join(job, 'install-plan.json')
         _safe_write_text(plan_path, json.dumps(plan))
         def launch_helper():
+            check_startup_snapshot(destination, _STARTUP_BUNDLE_SNAPSHOT)
             subprocess.Popen([os.path.join(staged, 'Contents/MacOS/mdPreview'),
                               '--install-update-helper', '--plan', plan_path],
                              start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

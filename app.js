@@ -1,4 +1,5 @@
 const documentSession = new DocumentSession();
+let appSettings={remote_images:'ask',auto_update:false,auto_reload:true,font_size:16,page_width:720,restore_session:false,language:'system'};
 let saveInFlight = null;
 let syncInFlight = null;
 let syncRetryCount = 0;
@@ -41,7 +42,7 @@ let isSource = false;
   // Bilingual helper: returns the Chinese string when the app UI is in
   // Chinese (isZh is set from the backend's locale detection), English otherwise.
   function t(en, zh) {
-    return isZh ? zh : en;
+    return I18n.t(en, zh);
   }
 
   if (typeof marked !== 'undefined') marked.setOptions({ breaks: true, gfm: true });
@@ -82,121 +83,19 @@ let isSource = false;
     return task;
   }
 
-  function _initTurndown() {
-    if (turndownService || typeof TurndownService === 'undefined') return;
-    turndownService = new TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-', emDelimiter: '*', strongDelimiter: '**' });
-    turndownService.addRule('frontmatter', {
-      filter: function (node) {
-        return node.classList && node.classList.contains('frontmatter');
-      },
-      replacement: function (content, node) {
-        const raw = node.getAttribute('data-raw');
-        return (raw || node.textContent) + '\n\n';
-      }
-    });
-    turndownService.addRule('mermaid', {
-      filter: function (node) {
-        return node.classList && node.classList.contains('mermaid-diagram');
-      },
-      replacement: function (content, node) {
-        const source = node.getAttribute('data-source') || '';
-        return source ? '```mermaid\n' + source.trim() + '\n```' : '';
-      }
-    });
-    turndownService.addRule('preservedExtension', {
-      filter: (node) => node.hasAttribute && node.hasAttribute('data-raw') && !node.classList.contains('frontmatter'),
-      replacement: (content, node) => {
-        const raw = node.getAttribute('data-raw') || '';
-        return node.classList.contains('math-block') || node.classList.contains('footnotes') || node.classList.contains('markdown-definitions') ? '\n\n' + raw + '\n\n' : raw;
-      }
-    });
-    turndownService.addRule('relativeImage', {
-      filter: 'img',
-      replacement: (content, node) => {
-        const src = node.getAttribute('data-original-src') || node.getAttribute('src') || '';
-        const alt = (node.getAttribute('alt') || '').replace(/\]/g, '\\]');
-        return src ? '![' + alt + '](' + src.replace(/\)/g, '\\)') + ')' : '';
-      }
-    });
-    turndownService.addRule('listItem', {
-      filter: 'li',
-      replacement: function (content, node, options) {
-        // Same shape as the bundled turndown listItem rule, but with a single
-        // space after the marker ("- item" / "1. item") instead of the
-        // hardcoded 3-space padding, so pasted lists match the app's style.
-        content = content
-          .replace(/^\n+/, '')
-          .replace(/\n+$/, '\n')
-          .replace(/\n/gm, '\n    ');
-        var parent = node.parentNode;
-        var prefix;
-        if (parent && parent.nodeName === 'OL') {
-          var start = parent.getAttribute('start');
-          var index = Array.prototype.indexOf.call(parent.children, node);
-          prefix = (start ? Number(start) + index : index + 1) + '. ';
-        } else {
-          prefix = options.bulletListMarker + ' ';
-        }
-        return prefix + content + (node.nextSibling && !/\n$/.test(content) ? '\n' : '');
-      }
-    });
-    turndownService.addRule('renderCaretSpacer', {
-      filter: function (node) {
-        return node.nodeType === 1 && node.classList && node.classList.contains('render-caret-spacer');
-      },
-      replacement: function (content, node) {
-        const text = (content || node.textContent || '').trim();
-        return text ? '\n\n' + text + '\n\n' : '';
-      }
-    });
-    turndownService.addRule('table', {
-      filter: function (node) {
-        return node.nodeName === 'TABLE';
-      },
-      replacement: function (content, node) {
-        var rows = node.rows;
-        if (!rows || rows.length === 0) return '';
-        var colCount = 0;
-        for (var r = 0; r < rows.length; r++) {
-          colCount = Math.max(colCount, rows[r].cells.length);
-        }
-        if (colCount === 0) return '';
-        function escPipe(s) {
-          return (s || '').trim().replace(/\|/g, '\\|').replace(/\n/g, ' ');
-        }
-        var lines = [];
-        var headerCells = [];
-        for (var c = 0; c < colCount; c++) {
-          headerCells.push(escPipe(rows[0].cells[c] ? turndownService.turndown(rows[0].cells[c].innerHTML) : ''));
-        }
-        lines.push('| ' + headerCells.join(' | ') + ' |');
-        var sepCells = [];
-        for (var c2 = 0; c2 < colCount; c2++) {
-          var cell = rows[0].cells[c2];
-          var align = cell ? (cell.getAttribute('align') || cell.style.textAlign || '') : '';
-          if (align === 'center') sepCells.push(':---:');
-          else if (align === 'right') sepCells.push('---:');
-          else sepCells.push('---');
-        }
-        lines.push('| ' + sepCells.join(' | ') + ' |');
-        for (var r2 = 1; r2 < rows.length; r2++) {
-          var cells = [];
-          for (var c3 = 0; c3 < colCount; c3++) {
-            cells.push(escPipe(rows[r2].cells[c3] ? turndownService.turndown(rows[r2].cells[c3].innerHTML) : ''));
-          }
-          lines.push('| ' + cells.join(' | ') + ' |');
-        }
-        return '\n\n' + lines.join('\n') + '\n\n';
-      }
-    });
-  }
 
-  function ensureTurndown() {
-    if (_turndownLoaded) return Promise.resolve();
-    if (typeof TurndownService !== 'undefined') { _initTurndown(); _turndownLoaded = true; return Promise.resolve(); }
-    return _loadScript('turndown.js').then(() => { _initTurndown(); _turndownLoaded = true; });
-  }
-
+var {
+  _initTurndown, ensureTurndown,
+} = MarkdownConversion.create({
+  _loadScript: (...args) => _loadScript(...args),
+  state: {
+    get turndownService() { return turndownService; },
+    set turndownService(value) { turndownService = value; },
+    get _turndownLoaded() { return _turndownLoaded; },
+    set _turndownLoaded(value) { _turndownLoaded = value; },
+  },
+  get TurndownService() { return typeof TurndownService === 'undefined' ? undefined : TurndownService; }
+});
   function getMermaidTheme() {
     if (document.documentElement.hasAttribute('data-output')) return 'default';
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
@@ -207,6 +106,8 @@ let isSource = false;
       startOnLoad: false,
       theme: getMermaidTheme(),
       securityLevel: 'strict',
+      secure: ['securityLevel','htmlLabels','flowchart','themeCSS','startOnLoad'],
+      suppressErrorRendering: true,
       // Native SVG labels survive strict sanitization and stay sharp in the viewer.
       htmlLabels: false,
       flowchart: { useMaxWidth: true, htmlLabels: false },
@@ -217,7 +118,7 @@ let isSource = false;
     if (_mermaidLoaded) return Promise.resolve();
     if (_mermaidLoadingPromise) return _mermaidLoadingPromise;
     if (typeof mermaid !== 'undefined') { initMermaid(); _mermaidLoaded = true; return Promise.resolve(); }
-    _mermaidLoadingPromise = _loadScript('mermaid.min.js').then(() => { initMermaid(); _mermaidLoaded = true; }).finally(() => { _mermaidLoadingPromise = null; });
+    _mermaidLoadingPromise = _loadScript('vendor/mermaid.min.js').then(() => { initMermaid(); _mermaidLoaded = true; }).finally(() => { _mermaidLoadingPromise = null; });
     return _mermaidLoadingPromise;
   }
   initMermaid();
@@ -233,12 +134,35 @@ let isSource = false;
 
   function sanitizeMermaidSvg(svg) { return MarkdownPipeline.cleanSVG(svg); }
 
+  function assertMermaidSafe(source) {
+    // 保守限定旧式无资源语法；拒绝所有扩展属性、HTML、实体/转义及配置指令。
+    // 不尝试用URL正则理解Mermaid/YAML：未知语法安全失败，避免render内部先请求。
+    const text = String(source).normalize('NFKC');
+    if (text.trimStart().startsWith('---') || text.includes('%%{') || text.replace(/\s/g,'').toLowerCase().includes('url(') ||
+        [...text].some(char => ['@','<','&','\\','!'].includes(char)))
+      throw new Error('Mermaid 外部资源或扩展语法已禁用 (blocked)');
+  }
+
+  async function renderSafeMermaid(id, source) {
+    assertMermaidSafe(source);
+    if (mermaid.mermaidAPI?.getDiagramFromText) {
+      const diagram = await mermaid.mermaidAPI.getDiagramFromText(source);
+      const vertices = diagram.db?.getVertices?.();
+      for (const vertex of vertices instanceof Map ? vertices.values() : Object.values(vertices || {})) {
+        if (vertex.img || vertex.image || vertex.icon) throw new Error('Mermaid 图片节点已禁用 (blocked)');
+      }
+    }
+    return mermaid.render(id, source);
+  }
+
   async function renderMermaidDiagrams(root) {
-    const codeBlocks = root.querySelectorAll('code.language-mermaid');
+    const codeBlocks = root.matches?.('code.language-mermaid') ? [root] : root.querySelectorAll('code.language-mermaid');
+    const generation = renderJobId;
     if (codeBlocks.length === 0) return;
     try { await ensureMermaid(); } catch (error) { showStatus(error.message, true); return; }
     if (typeof mermaid === 'undefined') return;
     for (const code of codeBlocks) {
+      if (generation !== renderJobId || closing || !code.isConnected) return;
       const pre = code.parentElement;
       if (!pre || pre.nodeName !== 'PRE') continue;
       const source = code.textContent;
@@ -247,11 +171,12 @@ let isSource = false;
         let svg = mermaidSvgCache.get(source);
         if (!svg) {
           const id = 'mermaid-' + Math.random().toString(36).slice(2, 9);
-          const rendered = await mermaid.render(id, source);
+          const rendered = await renderSafeMermaid(id, source);
           svg = rendered.svg;
           if (mermaidSvgCache.size >= 32) mermaidSvgCache.delete(mermaidSvgCache.keys().next().value);
           mermaidSvgCache.set(source, svg);
         }
+        if (generation !== renderJobId || closing || !pre.isConnected) return;
         const wrapper = document.createElement('div');
         wrapper.className = 'mermaid-diagram';
         wrapper.setAttribute('data-source', source);
@@ -262,6 +187,7 @@ let isSource = false;
         const error = document.createElement('div');
         error.className = 'mermaid-error';
         error.setAttribute('contenteditable', 'false');
+        error.setAttribute('data-raw', '```mermaid\n' + source + '\n```');
         error.textContent = 'Mermaid render error: ' + (e && e.message ? e.message : e);
         if (pre.parentNode && !closing) pre.parentNode.replaceChild(error, pre);
       }
@@ -294,939 +220,95 @@ let isSource = false;
   function sanitizeHtmlString(html) { return MarkdownPipeline.cleanHTML(html); }
   function sanitizeRenderedDOM(root) { root.innerHTML = MarkdownPipeline.cleanHTML(root.innerHTML); }
 
-  const CODE_HIGHLIGHT_MAX_CHARS = 350000;
-  const CODE_LANGUAGE_ALIASES = {
-    json: 'json',
-    js: 'javascript', javascript: 'javascript', jsx: 'javascript',
-    ts: 'typescript', typescript: 'typescript', tsx: 'typescript',
-    py: 'python', python: 'python',
-    bash: 'shell', sh: 'shell', shell: 'shell', zsh: 'shell', console: 'shell', terminal: 'shell',
-    yaml: 'yaml', yml: 'yaml',
-    html: 'html', xml: 'html', svg: 'html',
-    css: 'css', scss: 'css', less: 'css',
-    sql: 'sql'
-  };
-  const JS_TS_KEYWORDS = new Set('as async await break case catch class const constructor continue debugger default delete do else export extends finally for from function get if import in instanceof let new of return set static super switch this throw try typeof var void while with yield interface type enum implements private protected public readonly abstract declare namespace module satisfies'.split(' '));
-  const PY_KEYWORDS = new Set('and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield'.split(' '));
-  const SHELL_COMMANDS = new Set('alias awk brew cat cd chmod chown cp curl docker echo env export find git grep head jq kill less ls make mkdir mv npm npx open pnpm python python3 rm rsync sed source ssh sudo tail tar test touch unzip yarn zip'.split(' '));
-  const SQL_KEYWORDS = new Set('add alter and as asc between by case column create database delete desc distinct drop else exists from group having in inner insert into is join left like limit not null on or order outer primary right select set table then union update values view when where'.split(' '));
-  const CSS_AT_RULES = new Set('charset container font-face import keyframes layer media namespace page property scope supports'.split(' '));
 
-  function spanTok(kind, value) {
-    return '<span class="tok tok-' + kind + '">' + escHtml(value) + '</span>';
-  }
+var {
+  spanTok, normalizeCodeLanguage, readQuoted, highlightJsonCode, highlightCStyleCode, highlightPythonCode, 
+  highlightShellCode, highlightYamlValue, highlightYamlCode, highlightHtmlTag, highlightHtmlCode, 
+  highlightCssCode, highlightSqlCode, highlightGenericCode, highlightCodeByLanguage, 
+  highlightRenderedCodeBlocks, renderFrontmatter, resolveBlockScalar, highlightInlineMarkdown, 
+  highlightMarkdown,
+} = SyntaxHighlight.create({
+  document,
+  escHtml: (...args) => escHtml(...args)
+});
 
-  function normalizeCodeLanguage(code) {
-    const classes = Array.from(code.classList || []);
-    for (const cls of classes) {
-      const match = cls.match(/^(?:language|lang)-(.+)$/i);
-      if (match) {
-        const raw = match[1].toLowerCase().replace(/[^a-z0-9+#.-]/g, '');
-        return CODE_LANGUAGE_ALIASES[raw] || raw;
-      }
-    }
-    return '';
-  }
-
-  function readQuoted(text, start) {
-    const quote = text[start];
-    let i = start + 1;
-    while (i < text.length) {
-      if (text[i] === '\\') { i += 2; continue; }
-      if (text[i] === quote) { i++; break; }
-      i++;
-    }
-    return i;
-  }
-
-  function highlightJsonCode(text) {
-    let out = '';
-    let i = 0;
-    while (i < text.length) {
-      const ch = text[i];
-      if (ch === '"') {
-        const end = readQuoted(text, i);
-        const raw = text.slice(i, end);
-        let j = end;
-        while (j < text.length && /\s/.test(text[j])) j++;
-        out += spanTok(text[j] === ':' ? 'key' : 'string', raw);
-        i = end;
-        continue;
-      }
-      const num = text.slice(i).match(/^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/);
-      if (num) { out += spanTok('number', num[0]); i += num[0].length; continue; }
-      const lit = text.slice(i).match(/^(?:true|false|null)\b/);
-      if (lit) { out += spanTok(lit[0] === 'null' ? 'null' : 'literal', lit[0]); i += lit[0].length; continue; }
-      if (/^[{}[\],:]$/.test(ch)) out += spanTok('punct', ch);
-      else out += escHtml(ch);
-      i++;
-    }
-    return out;
-  }
-
-  function highlightCStyleCode(text, keywords, options = {}) {
-    let out = '';
-    let i = 0;
-    while (i < text.length) {
-      const ch = text[i];
-      const next = text[i + 1];
-      if (ch === '/' && next === '/') {
-        const end = text.indexOf('\n', i);
-        const stop = end < 0 ? text.length : end;
-        out += spanTok('comment', text.slice(i, stop));
-        i = stop;
-        continue;
-      }
-      if (ch === '/' && next === '*') {
-        const end = text.indexOf('*/', i + 2);
-        const stop = end < 0 ? text.length : end + 2;
-        out += spanTok('comment', text.slice(i, stop));
-        i = stop;
-        continue;
-      }
-      if (ch === '"' || ch === "'" || ch === '`') {
-        const end = readQuoted(text, i);
-        out += spanTok('string', text.slice(i, end));
-        i = end;
-        continue;
-      }
-      const num = text.slice(i).match(/^(?:0x[\da-fA-F]+|\d+(?:\.\d+)?)(?:[eE][+-]?\d+)?\b/);
-      if (num) { out += spanTok('number', num[0]); i += num[0].length; continue; }
-      const word = text.slice(i).match(/^[A-Za-z_$][\w$]*/);
-      if (word) {
-        const value = word[0];
-        if (keywords.has(value)) out += spanTok('keyword', value);
-        else if (/^(?:true|false|null|undefined|NaN|Infinity)$/.test(value)) out += spanTok(value === 'null' ? 'null' : 'literal', value);
-        else if (options.typescript && /^[A-Z][\w$]*$/.test(value)) out += spanTok('type', value);
-        else out += escHtml(value);
-        i += value.length;
-        continue;
-      }
-      if (/^[{}[\]().,;:?]$/.test(ch)) out += spanTok('punct', ch);
-      else out += escHtml(ch);
-      i++;
-    }
-    return out;
-  }
-
-  function highlightPythonCode(text) {
-    let out = '';
-    let i = 0;
-    while (i < text.length) {
-      const ch = text[i];
-      if (ch === '#') {
-        const end = text.indexOf('\n', i);
-        const stop = end < 0 ? text.length : end;
-        out += spanTok('comment', text.slice(i, stop));
-        i = stop;
-        continue;
-      }
-      if ((ch === '"' || ch === "'") && text.slice(i, i + 3) === ch + ch + ch) {
-        const end = text.indexOf(ch + ch + ch, i + 3);
-        const stop = end < 0 ? text.length : end + 3;
-        out += spanTok('string', text.slice(i, stop));
-        i = stop;
-        continue;
-      }
-      if (ch === '"' || ch === "'") {
-        const end = readQuoted(text, i);
-        out += spanTok('string', text.slice(i, end));
-        i = end;
-        continue;
-      }
-      if (ch === '@') {
-        const deco = text.slice(i).match(/^@[A-Za-z_][\w.]*/);
-        if (deco) { out += spanTok('decorator', deco[0]); i += deco[0].length; continue; }
-      }
-      const num = text.slice(i).match(/^(?:0x[\da-fA-F]+|\d+(?:\.\d+)?)(?:[eE][+-]?\d+)?\b/);
-      if (num) { out += spanTok('number', num[0]); i += num[0].length; continue; }
-      const word = text.slice(i).match(/^[A-Za-z_][\w]*/);
-      if (word) {
-        const value = word[0];
-        if (PY_KEYWORDS.has(value)) out += spanTok('keyword', value);
-        else if (/^(?:True|False|None)$/.test(value)) out += spanTok(value === 'None' ? 'null' : 'literal', value);
-        else out += escHtml(value);
-        i += value.length;
-        continue;
-      }
-      if (/^[{}[\]().,:]$/.test(ch)) out += spanTok('punct', ch);
-      else out += escHtml(ch);
-      i++;
-    }
-    return out;
-  }
-
-  function highlightShellCode(text) {
-    let out = '';
-    let i = 0;
-    let atCommandStart = true;
-    while (i < text.length) {
-      const ch = text[i];
-      if (ch === '\n') { out += '\n'; i++; atCommandStart = true; continue; }
-      if (ch === '#') {
-        const end = text.indexOf('\n', i);
-        const stop = end < 0 ? text.length : end;
-        out += spanTok('comment', text.slice(i, stop));
-        i = stop;
-        continue;
-      }
-      if ((ch === '$' || ch === '#') && atCommandStart) { out += spanTok('prompt', ch); i++; continue; }
-      if (ch === '"' || ch === "'") {
-        const end = readQuoted(text, i);
-        out += spanTok('string', text.slice(i, end));
-        i = end;
-        atCommandStart = false;
-        continue;
-      }
-      const variable = text.slice(i).match(/^\$\{?[A-Za-z_][\w]*\}?/);
-      if (variable) { out += spanTok('variable', variable[0]); i += variable[0].length; atCommandStart = false; continue; }
-      const flag = text.slice(i).match(/^--?[A-Za-z0-9][\w-]*/);
-      if (flag) { out += spanTok('flag', flag[0]); i += flag[0].length; atCommandStart = false; continue; }
-      const word = text.slice(i).match(/^[A-Za-z_][\w.-]*/);
-      if (word) {
-        const value = word[0];
-        out += SHELL_COMMANDS.has(value) ? spanTok('command', value) : escHtml(value);
-        i += value.length;
-        atCommandStart = false;
-        continue;
-      }
-      out += escHtml(ch);
-      if (!/\s/.test(ch)) atCommandStart = false;
-      i++;
-    }
-    return out;
-  }
-
-  function highlightYamlValue(value) {
-    const leading = (value.match(/^\s*/) || [''])[0];
-    const body = value.slice(leading.length);
-    if (/^#/.test(body)) return escHtml(leading) + spanTok('comment', body);
-    if (/^(?:"(?:\\.|[^"])*"|'(?:\\.|[^'])*')/.test(body)) {
-      const end = readQuoted(body, 0);
-      return escHtml(leading) + spanTok('string', body.slice(0, end)) + escHtml(body.slice(end));
-    }
-    const literal = body.match(/^(?:true|false|null|yes|no|on|off)\b/i);
-    if (literal) return escHtml(leading) + spanTok('literal', literal[0]) + escHtml(body.slice(literal[0].length));
-    const number = body.match(/^-?\d+(?:\.\d+)?\b/);
-    if (number) return escHtml(leading) + spanTok('number', number[0]) + escHtml(body.slice(number[0].length));
-    return escHtml(value);
-  }
-
-  function highlightYamlCode(text) {
-    return text.split('\n').map((line) => {
-      const commentOnly = line.match(/^(\s*)(#.*)$/);
-      if (commentOnly) return escHtml(commentOnly[1]) + spanTok('comment', commentOnly[2]);
-      const kv = line.match(/^(\s*)(-\s+)?([A-Za-z0-9_.-]+)(\s*:)(.*)$/);
-      if (kv) {
-        return escHtml(kv[1]) + escHtml(kv[2] || '') + spanTok('key', kv[3]) + spanTok('punct', kv[4]) + highlightYamlValue(kv[5]);
-      }
-      return escHtml(line);
-    }).join('\n');
-  }
-
-  function highlightHtmlTag(tag) {
-    let out = '';
-    let i = 0;
-    if (tag.startsWith('</')) { out += spanTok('punct', '</'); i = 2; }
-    else if (tag.startsWith('<')) { out += spanTok('punct', '<'); i = 1; }
-    while (i < tag.length) {
-      if (tag[i] === '>') { out += spanTok('punct', '>'); i++; continue; }
-      if (tag[i] === '/' && tag[i + 1] === '>') { out += spanTok('punct', '/>'); i += 2; continue; }
-      if (/\s/.test(tag[i])) { out += escHtml(tag[i]); i++; continue; }
-      if (tag[i] === '=') { out += spanTok('punct', '='); i++; continue; }
-      if (tag[i] === '"' || tag[i] === "'") {
-        const end = readQuoted(tag, i);
-        out += spanTok('string', tag.slice(i, end));
-        i = end;
-        continue;
-      }
-      const name = tag.slice(i).match(/^[A-Za-z_:][-\w:.]*/);
-      if (name) {
-        const prev = tag.slice(0, i).trim();
-        const next = tag.slice(i + name[0].length).match(/^\s*=/);
-        out += (!prev || prev === '<' || prev === '</') ? spanTok('tag', name[0]) : (next ? spanTok('attr', name[0]) : escHtml(name[0]));
-        i += name[0].length;
-        continue;
-      }
-      out += escHtml(tag[i]);
-      i++;
-    }
-    return out;
-  }
-
-  function highlightHtmlCode(text) {
-    let out = '';
-    let i = 0;
-    while (i < text.length) {
-      if (text.startsWith('<!--', i)) {
-        const end = text.indexOf('-->', i + 4);
-        const stop = end < 0 ? text.length : end + 3;
-        out += spanTok('comment', text.slice(i, stop));
-        i = stop;
-        continue;
-      }
-      if (text[i] === '<') {
-        const end = text.indexOf('>', i + 1);
-        if (end < 0) { out += escHtml(text.slice(i)); break; }
-        out += highlightHtmlTag(text.slice(i, end + 1));
-        i = end + 1;
-        continue;
-      }
-      out += escHtml(text[i]);
-      i++;
-    }
-    return out;
-  }
-
-  function highlightCssCode(text) {
-    let out = '';
-    let i = 0;
-    while (i < text.length) {
-      if (text[i] === '/' && text[i + 1] === '*') {
-        const end = text.indexOf('*/', i + 2);
-        const stop = end < 0 ? text.length : end + 2;
-        out += spanTok('comment', text.slice(i, stop));
-        i = stop;
-        continue;
-      }
-      if (text[i] === '"' || text[i] === "'") {
-        const end = readQuoted(text, i);
-        out += spanTok('string', text.slice(i, end));
-        i = end;
-        continue;
-      }
-      const color = text.slice(i).match(/^#[\da-fA-F]{3,8}\b/);
-      if (color) { out += spanTok('color', color[0]); i += color[0].length; continue; }
-      const number = text.slice(i).match(/^-?\d+(?:\.\d+)?(?:px|em|rem|vh|vw|%|s|ms|deg)?\b/);
-      if (number) { out += spanTok('number', number[0]); i += number[0].length; continue; }
-      const prop = text.slice(i).match(/^[-A-Za-z]+(?=\s*:)/);
-      if (prop) { out += spanTok('property', prop[0]); i += prop[0].length; continue; }
-      const at = text.slice(i).match(/^@([A-Za-z-]+)/);
-      if (at && CSS_AT_RULES.has(at[1])) { out += spanTok('keyword', at[0]); i += at[0].length; continue; }
-      if (/^[{}():;,]$/.test(text[i])) out += spanTok('punct', text[i]);
-      else out += escHtml(text[i]);
-      i++;
-    }
-    return out;
-  }
-
-  function highlightSqlCode(text) {
-    let out = '';
-    let i = 0;
-    while (i < text.length) {
-      if (text[i] === '-' && text[i + 1] === '-') {
-        const end = text.indexOf('\n', i);
-        const stop = end < 0 ? text.length : end;
-        out += spanTok('comment', text.slice(i, stop));
-        i = stop;
-        continue;
-      }
-      if (text[i] === '/' && text[i + 1] === '*') {
-        const end = text.indexOf('*/', i + 2);
-        const stop = end < 0 ? text.length : end + 2;
-        out += spanTok('comment', text.slice(i, stop));
-        i = stop;
-        continue;
-      }
-      if (text[i] === '"' || text[i] === "'") {
-        const end = readQuoted(text, i);
-        out += spanTok('string', text.slice(i, end));
-        i = end;
-        continue;
-      }
-      const num = text.slice(i).match(/^\d+(?:\.\d+)?\b/);
-      if (num) { out += spanTok('number', num[0]); i += num[0].length; continue; }
-      const word = text.slice(i).match(/^[A-Za-z_][\w$]*/);
-      if (word) {
-        const value = word[0];
-        out += SQL_KEYWORDS.has(value.toLowerCase()) ? spanTok('keyword', value) : escHtml(value);
-        i += value.length;
-        continue;
-      }
-      if (/^[(),.;*=<>+-]$/.test(text[i])) out += spanTok('punct', text[i]);
-      else out += escHtml(text[i]);
-      i++;
-    }
-    return out;
-  }
-
-  function highlightGenericCode(text) {
-    return highlightCStyleCode(text, new Set(), {});
-  }
-
-  function highlightCodeByLanguage(text, language) {
-    if (language === 'json') return highlightJsonCode(text);
-    if (language === 'javascript') return highlightCStyleCode(text, JS_TS_KEYWORDS, {});
-    if (language === 'typescript') return highlightCStyleCode(text, JS_TS_KEYWORDS, { typescript: true });
-    if (language === 'python') return highlightPythonCode(text);
-    if (language === 'shell') return highlightShellCode(text);
-    if (language === 'yaml') return highlightYamlCode(text);
-    if (language === 'html') return highlightHtmlCode(text);
-    if (language === 'css') return highlightCssCode(text);
-    if (language === 'sql') return highlightSqlCode(text);
-    return highlightGenericCode(text);
-  }
-
-  function highlightRenderedCodeBlocks(container) {
-    if (!container || !container.querySelectorAll) return;
-    container.querySelectorAll('pre code').forEach((code) => {
-      if (code.dataset.syntaxHighlighted === 'true') return;
-      const language = normalizeCodeLanguage(code);
-      if (language === 'mermaid') return;
-      const source = code.textContent || '';
-      code.dataset.syntaxHighlighted = 'true';
-
-      // `text` blocks: keep the source as plain, uncolored text and render no
-      // language badge.
-      if (language === 'text') {
-        code.classList.add('syntax-lang-text');
-        return;
-      }
-
-      code.classList.add('syntax-highlighted');
-      if (language) code.classList.add('syntax-lang-' + language);
-      if (source.length > CODE_HIGHLIGHT_MAX_CHARS) {
-        code.classList.add('syntax-highlight-skipped');
-        return;
-      }
-      code.innerHTML = highlightCodeByLanguage(source, language);
-
-      // Non-selectable language badge in the top-right corner of the gray
-      // background. It must never be captured by a text selection / copy of the
-      // code, so it is marked user-select:none and contenteditable=false.
-      const pre = code.parentElement;
-      if (language && pre && pre.tagName === 'PRE' && !pre.querySelector('.code-lang-label')) {
-        const label = document.createElement('span');
-        label.className = 'code-lang-label';
-        label.textContent = language;
-        label.setAttribute('contenteditable', 'false');
-        label.setAttribute('aria-hidden', 'true');
-        pre.appendChild(label);
-      }
-    });
-  }
-
-  function appendParsedMarkdown(markdown, container, options = {}) {
-    const keepExisting = !!options.keepExisting;
-    let frontmatter = '';
-    let body = markdown || '';
-    const fmMatch = body.match(/^\s*---\r?\n([\s\S]*?)\r?\n(?:---|\.\.\.)\r?\n?/);
-    if (fmMatch) {
-      frontmatter = fmMatch[1];
-      body = body.substring(fmMatch[0].length);
-    }
-
-    const extensions = preprocessMarkdownExtensions(body);
-    body = extensions.body;
-    const fragment = document.createDocumentFragment();
-
-    if (frontmatter) {
-      const fmDiv = document.createElement('div');
-      fmDiv.className = 'frontmatter';
-      fmDiv.setAttribute('contenteditable', 'false');
-      fmDiv.setAttribute('data-frontmatter', 'true');
-      fmDiv.setAttribute('data-raw', '---\n' + frontmatter + '\n---');
-      fmDiv.innerHTML = '<button class="frontmatter-toggle" onclick="toggleFrontmatter(this)">' + t('Collapse', '折叠') + '</button>' + renderFrontmatter(frontmatter);
-      fragment.appendChild(fmDiv);
-    }
-
-    const bodyDiv = document.createElement('div');
-    bodyDiv.innerHTML = MarkdownPipeline.parse(body);
-    while (bodyDiv.firstChild) fragment.appendChild(bodyDiv.firstChild);
-
-    const work = document.createElement('div');
-    work.appendChild(fragment);
-    renderMathPlaceholders(work, extensions.mathBlocks);
-    renderFootnotes(work, extensions.footnotes);
-
-    if (!keepExisting) container.innerHTML = '';
-    while (work.firstChild) container.appendChild(work.firstChild);
-  }
-
-  function finalizeRenderedMarkdown(container, content) {
-    applyHeadingAnchors(container);
-    rewriteRelativeImages(container);
-    const tables = container.querySelectorAll('table:not(.table-wrap table)');
-    for (const table of tables) {
-      if (table.parentElement && table.parentElement.classList.contains('table-wrap')) continue;
-      const wrap = document.createElement('div');
-      wrap.className = 'table-wrap';
-      table.parentNode.insertBefore(wrap, table);
-      wrap.appendChild(table);
-    }
-    highlightRenderedCodeBlocks(container);
-    protectComplexBlocks(container);
-    balanceTableColumns(container);
-    ensureBlockCaretLandingZones(container, content);
-    lastRenderedHash = content;
-  }
-
-  function ensureBlockCaretLandingZones(container, source) {
-    container.querySelectorAll('.render-caret-spacer').forEach((node) => node.remove());
-    const blockSelector = '.table-wrap, table, pre, blockquote, ul, ol, .mermaid-diagram, .math-block, .frontmatter';
-    const blocks = Array.from(container.querySelectorAll(blockSelector));
-    for (const block of blocks) {
-      if (!block.parentNode || block.closest('.table-wrap table')) continue;
-      let next = block.nextSibling;
-      while (next && next.nodeType === Node.TEXT_NODE && !next.textContent.trim()) next = next.nextSibling;
-      const hasEditableLanding = next && next.nodeType === Node.ELEMENT_NODE && !next.matches(blockSelector);
-      if (hasEditableLanding) continue;
-      block.parentNode.insertBefore(createRenderCaretSpacer(), block.nextSibling);
-    }
-    if (/\n\s*$/.test(String(source || ''))) {
-      const last = container.lastElementChild;
-      if (!last || !last.classList.contains('render-caret-spacer')) container.appendChild(createRenderCaretSpacer());
-    }
-  }
-
-  function createRenderCaretSpacer() {
-    const p = document.createElement('p');
-    p.className = 'render-caret-spacer';
-    p.setAttribute('data-render-only', 'true');
-    p.innerHTML = '<br>';
-    return p;
-  }
-
-  function placeCaretInRenderSpacer(spacer) {
-    if (!spacer) return false;
-    const sel = window.getSelection();
-    if (!sel) return false;
-    const range = document.createRange();
-    range.selectNodeContents(spacer);
-    range.collapse(false);
-    sel.removeAllRanges();
-    sel.addRange(range);
-    const content = document.getElementById('content');
-    try { content.focus({ preventScroll: true }); } catch (e) { content.focus(); }
-    return true;
-  }
-
-  function placeCaretAtSafeRenderedLanding(content) {
-    const spacers = content ? content.querySelectorAll('.render-caret-spacer') : [];
-    if (spacers && spacers.length && placeCaretInRenderSpacer(spacers[spacers.length - 1])) return true;
-    const sel = window.getSelection();
-    if (!sel || !content) return false;
-    const range = document.createRange();
-    range.selectNodeContents(content);
-    range.collapse(false);
-    sel.removeAllRanges();
-    sel.addRange(range);
-    try { content.focus({ preventScroll: true }); } catch (e) { content.focus(); }
-    return true;
-  }
-
-  async function renderMarkdown(content, container) {
-    const jobId = ++renderJobId;
-    clearTimeout(deferredRenderTimer);
-    // A complete token stream is required for fences, references and footnotes.
-    // No delayed full-document replacement is allowed to overwrite user input.
-    appendParsedMarkdown(content, container, { keepExisting: false });
-    finalizeRenderedMarkdown(container, content);
-    buildToc(container);
-    if (hasRenderableMermaid(container)) {
-      await renderMermaidDiagrams(container);
-      if (jobId !== renderJobId || closing) return;
-      protectComplexBlocks(container);
-      balanceTableColumns(container);
-    }
-  }
-
-  function toggleFrontmatter(btn) {
-    const box = btn.closest('.frontmatter');
-    if (!box) return;
-    const collapsed = box.classList.toggle('collapsed');
-    btn.textContent = collapsed ? t('Expand', '展开') : t('Collapse', '折叠');
-  }
-
-  function rewriteRelativeImages(container) {
-    if (!filePath || filePath === 'Untitled.md') return;
-    const base = filePath.split('/').slice(0, -1).join('/');
-    container.querySelectorAll('img[src]').forEach((img) => {
-      const src = img.getAttribute('src') || '';
-      if (/^(https?:|file:|data:|\/)/i.test(src)) return;
-      img.src = 'file://' + base + '/' + src.replace(/^\.\//, '');
-      img.setAttribute('data-original-src', src);
-    });
-  }
-
-  function syncTocToggle(hidden) {
-    const toggle = document.getElementById('tocToggle');
-    if (!toggle) return;
-    toggle.classList.toggle('collapsed', hidden);
-    toggle.setAttribute('aria-expanded', hidden ? 'false' : 'true');
-    toggle.setAttribute('aria-label', hidden ? t('Show outline', '显示目录') : t('Hide outline', '隐藏目录'));
-    toggle.setAttribute('title', hidden ? t('Show outline', '显示目录') : t('Hide outline', '隐藏目录'));
-  }
-
+var {
+  appendParsedMarkdown, finalizeRenderedMarkdown, ensureBlockCaretLandingZones, createRenderCaretSpacer, 
+  placeCaretInRenderSpacer, placeCaretAtSafeRenderedLanding, documentLanguage, renderMarkdown, 
+  toggleFrontmatter, rewriteRelativeImages, protectComplexBlocks,
+} = MarkdownRendering.create({
+  document,
+  window,
+  Node,
+  clearTimeout,
+  t: (...args) => t(...args),
+  preprocessMarkdownExtensions: (...args) => preprocessMarkdownExtensions(...args),
+  renderFrontmatter: (...args) => renderFrontmatter(...args),
+  renderMathPlaceholders: (...args) => renderMathPlaceholders(...args),
+  renderFootnotes: (...args) => renderFootnotes(...args),
+  applyHeadingAnchors: (...args) => applyHeadingAnchors(...args),
+  highlightRenderedCodeBlocks: (...args) => highlightRenderedCodeBlocks(...args),
+  balanceTableColumns: (...args) => balanceTableColumns(...args),
+  buildToc: (...args) => buildToc(...args),
+  hasRenderableMermaid: (...args) => hasRenderableMermaid(...args),
+  renderMermaidDiagrams: (...args) => renderMermaidDiagrams(...args),
+  state: {
+    get lastRenderedHash() { return lastRenderedHash; },
+    set lastRenderedHash(value) { lastRenderedHash = value; },
+    get renderJobId() { return renderJobId; },
+    set renderJobId(value) { renderJobId = value; },
+    get deferredRenderTimer() { return deferredRenderTimer; },
+    set deferredRenderTimer(value) { deferredRenderTimer = value; },
+    get closing() { return closing; },
+    set closing(value) { closing = value; },
+    get filePath() { return filePath; },
+    set filePath(value) { filePath = value; },
+  },
+  get RenderPerformance() { return typeof RenderPerformance === 'undefined' ? undefined : RenderPerformance; },
+  get MarkdownPipeline() { return typeof MarkdownPipeline === 'undefined' ? undefined : MarkdownPipeline; },
+  get LazyRender() { return typeof LazyRender === 'undefined' ? undefined : LazyRender; },
+  get ReadingFeatures() { return typeof ReadingFeatures === 'undefined' ? undefined : ReadingFeatures; },
+  get MathRenderer() { return typeof MathRenderer === 'undefined' ? undefined : MathRenderer; }
+});
   let tocHasContent = false;
   let tocManualOverride = null;
 
-  function isTocAutoHideWidth() {
-    return window.innerWidth < TOC_AUTO_HIDE_WIDTH;
-  }
-
-  function shouldAutoShowToc() {
-    return tocHasContent && !isTocAutoHideWidth();
-  }
-
-  function updateTocAwarePageLayout() {
-    const page = document.getElementById('page');
-    if (!page) return;
-
-    if (!document.body.classList.contains('has-toc')) {
-      page.style.removeProperty('--toc-aware-page-left');
-      page.style.removeProperty('--toc-aware-page-width');
-      return;
-    }
-
-    const windowWidth = window.innerWidth;
-    const pageWidth = getPageWidth();
-    const compressedWidth = Math.max(0, windowWidth - TOC_WIDTH);
-    let targetWidth = Math.min(pageWidth, compressedWidth);
-    let targetLeft = TOC_WIDTH;
-
-    if (windowWidth > TOC_WIDTH + pageWidth) {
-      targetWidth = pageWidth;
-      const rightPaneCenterMaxWidth = Math.max(TOC_RIGHT_PANE_CENTER_MAX_WIDTH, TOC_WIDTH * 2 + pageWidth);
-      const rightPaneCenteredLeft = TOC_WIDTH + (Math.min(windowWidth, rightPaneCenterMaxWidth) - TOC_WIDTH - pageWidth) / 2;
-      const fullWindowCenteredLeft = (windowWidth - pageWidth) / 2;
-      targetLeft = windowWidth <= rightPaneCenterMaxWidth + TOC_WIDTH
-        ? rightPaneCenteredLeft
-        : fullWindowCenteredLeft;
-    }
-
-    page.style.setProperty('--toc-aware-page-left', Math.round(targetLeft) + 'px');
-    page.style.setProperty('--toc-aware-page-width', Math.round(targetWidth) + 'px');
-  }
-
-  function setTocVisible(visible) {
-    const toc = document.getElementById('tocSidebar');
-    const show = !!visible && tocHasContent;
-    toc.classList.toggle('hidden', !show);
-    document.body.classList.toggle('has-toc', show);
-    syncTocToggle(!show);
-    updateTocAwarePageLayout();
-  }
-
-  function applyTocVisibility() {
-    if (isTocAutoHideWidth() && tocManualOverride !== true) {
-      setTocVisible(false);
-      return;
-    }
-    setTocVisible(tocManualOverride === null ? shouldAutoShowToc() : tocManualOverride);
-  }
-
-  function handleTocResize() {
-    if (isTocAutoHideWidth()) {
-      tocManualOverride = null;
-      setTocVisible(false);
-      return;
-    }
-    applyTocVisibility();
-    updateTocAwarePageLayout();
-    if (!isSource) scheduleScrollSpy();
-  }
-
-  function buildToc(container) {
-    const toc = document.getElementById('tocSidebar');
-    const toggle = document.getElementById('tocToggle');
-    const headings = Array.from(container.querySelectorAll('h1, h2, h3, h4, h5, h6'));
-    const visibleHeadingLevels = Array.from(new Set(headings
-      .map(h => parseInt(h.tagName.slice(1), 10))
-      .filter(level => Number.isFinite(level))))
-      .sort((a, b) => a - b);
-    tocHasContent = headings.length >= 2;
-    if (toggle) toggle.style.display = tocHasContent ? '' : 'none';
-    toc.innerHTML = headings.map((h) => {
-      const level = parseInt(h.tagName.slice(1), 10);
-      const relativeIndent = Math.max(0, visibleHeadingLevels.indexOf(level)) * 12;
-      return `<a class="toc-level-${level}" style="padding-left: ${relativeIndent}px;" href="#${encodeURIComponent(h.id)}" data-target="${h.id}">${escHtml(h.textContent)}</a>`;
-    }).join('');
-    applyTocVisibility();
-    setupScrollSpy(headings);
-    // Re-sync the highlight once layout settles (e.g. after mermaid reflow).
-    requestAnimationFrame(() => { if (!isSource) updateScrollSpy(); });
-  }
-
-  // ── Scroll-spy: keep the TOC highlight in sync with the rendered view ──
-  // Deterministic geometric spy: the "current" heading is the last heading
-  // whose top has scrolled to/above a small band near the top of the
-  // viewport. This replaces the previous IntersectionObserver-based spy,
-  // whose result depended on WHEN the browser delivered intersection
-  // callbacks (throttled/coalesced differently in WKWebView vs Blink) and on
-  // the exact landing geometry of the scroll, so it could disagree with the
-  // entry the user actually clicked. An explicitly-clicked TOC target
-  // (explicitTocTarget) temporarily wins over the spy until the user scrolls.
-  let scrollSpyRaf = null;
-  function setupScrollSpy(headings) {
-    if (!headings || headings.length === 0) return;
-    updateScrollSpy();
-  }
-
-  function updateScrollSpy() {
-    if (isSource) return; // source mode maintains its own highlight
-    if (explicitTocTarget) return; // a click is in flight; don't clobber it
-    const content = document.getElementById('content');
-    const toc = document.getElementById('tocSidebar');
-    if (!content || !toc) return;
-    const headings = Array.from(content.querySelectorAll('h1, h2, h3, h4, h5, h6'));
-    const links = toc.querySelectorAll('a');
-    if (headings.length === 0 || links.length === 0) return;
-    const scrollY = document.querySelector('.scroll-wrap').scrollTop;
-    let currentId = null;
-    for (const h of headings) {
-      if (h.offsetTop - TOC_SPY_BAND <= scrollY) currentId = h.id;
-      else break;
-    }
-    if (!currentId) currentId = headings[0].id;
-    links.forEach(a => {
-      a.classList.toggle('toc-active', a.getAttribute('data-target') === currentId);
-    });
-    ensureTocActiveVisible();
-  }
-
-  function scheduleScrollSpy() {
-    if (scrollSpyRaf) return;
-    scrollSpyRaf = requestAnimationFrame(() => { scrollSpyRaf = null; updateScrollSpy(); });
-  }
-
-  // Mode-aware scroll handler: as soon as the user scrolls (i.e. the wrap
-  // moves away from the position our own code last set programmatically),
-  // the explicitly-clicked target expires and the spy takes over again.
-  function scheduleTocSync() {
-    const wrap = document.querySelector('.scroll-wrap');
-    if (explicitTocTarget && wrap && Math.abs(wrap.scrollTop - lastProgrammaticScrollTop) > 2) {
-      explicitTocTarget = null;
-    }
-    if (isSource) scheduleSourceTocHighlight();
-    else scheduleScrollSpy();
-  }
-
-  function toggleToc() {
-    const toc = document.getElementById('tocSidebar');
-    tocManualOverride = toc.classList.contains('hidden');
-    setTocVisible(tocManualOverride);
-  }
-
-  function protectComplexBlocks(container) {
-    container.querySelectorAll('.frontmatter, .mermaid-diagram').forEach((node) => {
-      node.setAttribute('contenteditable', 'false');
-    });
-    container.querySelectorAll('div, section, article').forEach((node) => {
-      if (node.querySelector('.frontmatter, .mermaid-diagram')) return;
-      const hasMarkdownClass = node.classList.contains('frontmatter') || node.classList.contains('mermaid-diagram');
-      if (hasMarkdownClass) node.setAttribute('contenteditable', 'false');
-    });
-  }
-
-  function slugifyHeading(text) {
-    return (text || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[\s\u00A0]+/g, '-')
-      .replace(/[^\w\-\u4e00-\u9fff\u3040-\u30ff\uac00-\ud7af]/g, '')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '') || 'heading';
-  }
-
-  function applyHeadingAnchors(container) {
-    const used = new Map();
-    container.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
-      let id = heading.getAttribute('id') || slugifyHeading(heading.textContent);
-      const count = used.get(id) || 0;
-      used.set(id, count + 1);
-      if (count > 0) id = id + '-' + count;
-      heading.setAttribute('id', id);
-    });
-  }
-
-  function scrollToHash(hash) {
-    if (!hash || hash === '#') return false;
-    const raw = hash.slice(1);
-    let id = raw;
-    try { id = decodeURIComponent(raw); } catch (e) {}
-
-    // In source mode, scroll the textarea to the heading line instead of
-    // looking for a DOM element (which only exists in rendered mode).
-    if (isSource) {
-      const textarea = document.getElementById('textarea');
-      const md = textarea.value;
-      const line = findHeadingLineInMarkdown(md, id);
-      if (line >= 0) {
-        let pos = 0;
-        const lines = md.split('\n');
-        for (let i = 0; i < line; i++) {
-          pos += lines[i].length + 1;
-        }
-        textarea.setSelectionRange(pos, pos);
-        // Scroll first, then focus with preventScroll: focusing a textarea
-        // reveals the caret and may scroll its scrollport, which would fight
-        // the explicit scroll (and WKWebView can do so asynchronously).
-        scrollTextareaToLine(line);
-        try { textarea.focus({ preventScroll: true }); } catch (e) { textarea.focus(); }
-        markExplicitTocTarget(id);
-        return true;
-      }
-      return false;
-    }
-
-    const target = document.getElementById(id) || document.getElementById(raw);
-    if (!target) return false;
-    // Highlight the clicked entry immediately (explicit user intent) instead
-    // of relying on the scroll-spy to observe where the scroll landed, and
-    // scroll with the same measured math used elsewhere (a plain
-    // scrollIntoView leaves the final geometry up to the engine).
-    markExplicitTocTarget(id);
-    scrollToTocTarget(id);
-    // Reflect the jump in the URL; harmless if the engine refuses on file://.
-    try {
-      if (history && history.replaceState) history.replaceState(null, '', '#' + encodeURIComponent(target.id));
-    } catch (e) {}
-    return true;
-  }
-
-  // Renders frontmatter as plain text (no syntax colors) but resolves
-  // block scalar indicators per YAML semantics:
-  //   ">"  folded block scalar  → indicator hidden; following indented lines
-  //        are one string, ordinary newlines folded into spaces
-  //   "|"  literal block scalar → indicator hidden; newlines preserved
-  //   "-"  chomping indicator   → trailing newline(s) of the scalar stripped
-  //   "+"  chomping indicator   → all trailing newlines kept
-  // The original raw frontmatter is kept in data-raw for exact round-trips.
-  function renderFrontmatter(text) {
-    const lines = text.split('\n');
-    const out = [];
-    let i = 0;
-    while (i < lines.length) {
-      const line = lines[i];
-      const m = line.match(/^(\s*)([^:]+?)(\s*:\s*)(.*)$/);
-      if (m && m[2].indexOf('#') !== 0) {
-        const indent = m[1];
-        const key = m[2];
-        const val = m[4];
-        const bm = val.match(/^([>|])([-+]?)\s*$/);
-        if (bm) {
-          const style = bm[1];      // '>' folded, '|' literal
-          const chomp = bm[2] || ''; // '' clip, '-' strip, '+' keep
-          const block = [];
-          const keyIndentLen = indent.length;
-          let baseIndent = null;
-          i++;
-          while (i < lines.length) {
-            const n = lines[i];
-            if (n.trim() === '') { block.push(''); i++; continue; }
-            const ind = n.match(/^(\s*)/)[1].length;
-            if (ind <= keyIndentLen) break;
-            if (baseIndent === null) baseIndent = ind;
-            block.push(n.slice(baseIndent));
-            i++;
-          }
-          out.push(indent + key + ': ' + resolveBlockScalar(block, style, chomp));
-          continue;
-        }
-        out.push(line);
-        i++;
-        continue;
-      }
-      out.push(line);
-      i++;
-    }
-    return escHtml('---\n' + out.join('\n') + '\n---');
-  }
-
-  function resolveBlockScalar(lines, style, chomp) {
-    let text;
-    if (style === '>') {
-      // Folded: ordinary newlines become spaces; blank lines become "\n"
-      const parts = [];
-      for (let k = 0; k < lines.length; k++) {
-        const l = lines[k];
-        if (l === '') {
-          parts.push('\n');
-        } else {
-          if (parts.length > 0 && parts[parts.length - 1] !== '\n' && !parts[parts.length - 1].endsWith(' ')) {
-            parts.push(' ');
-          }
-          parts.push(l);
-        }
-      }
-      text = parts.join('');
-    } else {
-      text = lines.join('\n');
-    }
-    // Chomping: '-' strip trailing newlines, '+' keep all, default clip to one
-    if (chomp === '-') return text.replace(/\n+$/, '');
-    if (chomp === '+') return text;
-    return text.replace(/\n+$/, '') + '\n';
-  }
-
-  function highlightInlineMarkdown(line) {
-    let h = escHtml(line);
-    h = h.replace(/^(#{1,6})(\s)/, '<span class="syn-heading">$1</span>$2');
-    h = h.replace(/(\*\*|__)(.+?)\1/g, '<span class="syn-bold">$1</span>$2<span class="syn-bold">$1</span>');
-    h = h.replace(/(^|[^\*])(\*)([^\s\*][^\*]*?)\*(?!\*)/g, '$1<span class="syn-italic">$2</span>$3<span class="syn-italic">$2</span>');
-    // Single-underscore italic (_like this_). Runs after the bold rule so __
-    // pairs are already wrapped in spans. The [^\w_] guard keeps intraword
-    // underscores (snake_case_words) from matching — matching CommonMark,
-    // which does not emphasize inside words with _.
-    h = h.replace(/(^|[^\w_])_([^_\s][^_]*?)_(?!\w)/g, '$1<span class="syn-italic">_</span>$2<span class="syn-italic">_</span>');
-    h = h.replace(/(~~)([^~]+?)(~~)/g, '<span class="syn-strike">$1</span>$2<span class="syn-strike">$1</span>');
-    h = h.replace(/`([^`]+)`/g, '<span class="syn-code">`</span>$1<span class="syn-code">`</span>');
-    // Image marker "!" gets its own color; the [alt](url) is colored by the
-    // link rule that follows.
-    h = h.replace(/!\[/g, '<span class="syn-image">!</span>[');
-    h = h.replace(/\[([^\]]*)\]\(([^)]*)\)/g, '<span class="syn-link">[</span>$1<span class="syn-link">]</span><span class="syn-link">(</span>$2<span class="syn-link">)</span>');
-    h = h.replace(/^(\s*)((?:(?:\* ?){2,}\*)|(?:(?:- ?){2,}-))\s*$/, '$1<span class="syn-hr">$2</span>');
-    h = h.replace(/^(\s*)([-*+])(\s)/, '$1<span class="syn-list">$2</span>$3');
-    h = h.replace(/^(&gt;)(\s?)/, '<span class="syn-quote">$1</span>$2');
-    return h;
-  }
-
-  function highlightMarkdown(text) {
-    const lines = text.split('\n');
-    const out = [];
-    let inFence = false;
-    let fenceMarker = '';
-    let inFrontmatter = false;
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      if (i === 0 && /^\s*---\s*$/.test(line)) {
-        inFrontmatter = true;
-        out.push('<span class="syn-codeblock">' + escHtml(line) + '</span>');
-        continue;
-      }
-      if (inFrontmatter) {
-        out.push('<span class="syn-codeblock">' + escHtml(line) + '</span>');
-        if (/^\s*(---|\.\.\.)\s*$/.test(line)) inFrontmatter = false;
-        continue;
-      }
-      const fence = line.match(/^\s*(```+|~~~+)/);
-      if (fence) {
-        const marker = fence[1][0];
-        // Color the fence markers AND the language tag (e.g. "text" in
-        // ```text) so every part of the fence line is highlighted.
-        const highlighted = escHtml(line).replace(/^(```+|~~~+)([^\s`]*)/, '<span class="syn-codeblock">$1</span><span class="syn-lang">$2</span>');
-        out.push(highlighted);
-        if (!inFence) {
-          inFence = true;
-          fenceMarker = marker;
-        } else if (marker === fenceMarker) {
-          inFence = false;
-          fenceMarker = '';
-        }
-        continue;
-      }
-      if (inFence) {
-        // Code content inside a fence: give it a code color so a fenced block
-        // is visibly distinct from body text in the source view.
-        out.push('<span class="syn-codeblock">' + escHtml(line) + '</span>');
-        continue;
-      }
-      out.push(highlightInlineMarkdown(line));
-    }
-    return out.join('\n');
-  }
-
+var {
+  syncTocToggle, isTocAutoHideWidth, shouldAutoShowToc, updateTocAwarePageLayout, setTocVisible, 
+  applyTocVisibility, handleTocResize, buildToc, setupScrollSpy, updateScrollSpy, scheduleScrollSpy, 
+  scheduleTocSync, toggleToc, slugifyHeading, applyHeadingAnchors, scrollToHash, getActiveTocTarget, 
+  setTocActive, markExplicitTocTarget, placeCaretAtHeading, collectMarkdownHeadingSlugs, 
+  findHeadingLineInMarkdown, sourceLineTop, scrollTextareaToLine, scrollToTocTarget, syncPositionToSource, 
+  syncPositionToRendered, sourceActiveHeadingSlug, ensureTocActiveVisible, updateSourceTocHighlight, 
+  getSourceActiveHeading, scheduleSourceTocHighlight, findRangeBetween,
+} = DocumentOutline.create({
+  document,
+  window,
+  Node,
+  NodeFilter,
+  history,
+  getComputedStyle,
+  requestAnimationFrame,
+  escHtml: (...args) => escHtml(...args),
+  t: (...args) => t(...args),
+  getPageWidth: (...args) => getPageWidth(...args),
+  placeCaretAtSafeRenderedLanding: (...args) => placeCaretAtSafeRenderedLanding(...args),
+  state: {
+    get isSource() { return isSource; },
+    set isSource(value) { isSource = value; },
+    get tocHasContent() { return tocHasContent; },
+    set tocHasContent(value) { tocHasContent = value; },
+    get tocManualOverride() { return tocManualOverride; },
+    set tocManualOverride(value) { tocManualOverride = value; },
+    get _sourceLayerText() { return _sourceLayerText; },
+    set _sourceLayerText(value) { _sourceLayerText = value; },
+    get _sourceLineStarts() { return _sourceLineStarts; },
+    set _sourceLineStarts(value) { _sourceLineStarts = value; },
+  },
+  get TOC_AUTO_HIDE_WIDTH() { return typeof TOC_AUTO_HIDE_WIDTH === 'undefined' ? undefined : TOC_AUTO_HIDE_WIDTH; },
+  get TOC_WIDTH() { return typeof TOC_WIDTH === 'undefined' ? undefined : TOC_WIDTH; },
+  get TOC_RIGHT_PANE_CENTER_MAX_WIDTH() { return typeof TOC_RIGHT_PANE_CENTER_MAX_WIDTH === 'undefined' ? undefined : TOC_RIGHT_PANE_CENTER_MAX_WIDTH; }
+});
   // Cached text and per-logical-line start offsets of the highlight layer;
   // the source-mode geometry code uses them to locate a line inside the <pre>
   // (whose rendered text is HTML-escaped, so character offsets differ from
@@ -1312,17 +394,20 @@ let isSource = false;
   function applyFontSize() {
     document.documentElement.style.setProperty('--content-font-size', contentFontSize + 'px');
   }
+  function resetFontSize(){contentFontSize=16;applyFontSize();Bridge.callSafe('save_font_size',contentFontSize);}
   function zoomIn() {
     if (imageViewer.active) { imageViewer.zoomIn(); return; }
     contentFontSize = Math.min(FONT_MAX, contentFontSize + FONT_STEP);
     applyFontSize();
     showSizeHint('font');
+    Bridge.callSafe('save_font_size',contentFontSize);
   }
   function zoomOut() {
     if (imageViewer.active) { imageViewer.zoomOut(); return; }
     contentFontSize = Math.max(FONT_MIN, contentFontSize - FONT_STEP);
     applyFontSize();
     showSizeHint('font');
+    Bridge.callSafe('save_font_size',contentFontSize);
   }
   function openFile() {
     if (Bridge.ready()) Bridge.callSafe('open_file_dialog');
@@ -1341,10 +426,9 @@ let isSource = false;
       isSource = true;
       updateView();
     }
-    const start = textarea.selectionStart || textarea.value.length;
-    const end = textarea.selectionEnd || start;
-    textarea.value = textarea.value.slice(0, start) + snippet + textarea.value.slice(end);
-    textarea.setSelectionRange(start + snippet.length, start + snippet.length);
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    EditorFeatures.replace(textarea,start,end,snippet,[start+snippet.length,start+snippet.length]);
     setDirty(true);
     syncHighlight();
     pushContentToPython(true);
@@ -1352,19 +436,15 @@ let isSource = false;
     // empty-document welcome overlay explicitly (e.g. after ⌘⇧V paste).
     updateEmptyState();
   }
-  function handleImageDrop(e) {
+  async function handleDrop(e) {
     e.preventDefault();
-    const files = Array.from(e.dataTransfer.files || []).filter(f => /^image\//.test(f.type));
-    if (!files.length) return;
-    const snippets = files.map(f => `![${f.name}](${f.path || f.name})`).join('\n');
-    insertMarkdownSnippet('\n' + snippets + '\n');
-    // Switch back to rendered view so the user sees the image immediately
-    // (renderMarkdown already rebuilds the TOC and scroll-spy).
-    if (isSource) {
-      isSource = false;
-      renderMarkdown(getCurrentMarkdown(), document.getElementById('content')).then(() => {
-        updateView();
-      });
+    for(const file of Array.from(e.dataTransfer.files||[])){
+      try{
+        if(/\.(md|markdown|mdown|mkd|mkdown|txt)$/i.test(file.name)){
+          if(!file.path){showStatus(t('No file path provided. Use the Open File menu.','浏览器未提供文件路径，请使用打开文件菜单'),true);continue;}
+          const result=await Bridge.call('open_linked_document',file.path,'',false);if(!result.success)showStatus(t('Could not open dropped document','无法打开拖入的文档'),true);
+        }else if(file.type.startsWith('image/'))await EditorFeatures.image(file);
+      }catch(error){showStatus(t('Drop failed','拖入文件失败'),true);}
     }
   }
   // ── Paste as Markdown ──
@@ -1377,661 +457,98 @@ let isSource = false;
   //             rich, a bubble reminds the user to press Cmd+Shift+V.
   //   preview : Cmd+V / Cmd+Shift+V / menu all convert to Markdown and insert
   //             into the source, then re-render.
-  function normalizeWhitespace(s) {
-    return String(s == null ? '' : s).replace(/\s+/g, ' ').trim();
-  }
 
-  function showPasteHint() {
-    const bubble = document.getElementById('editHintBubble');
-    if (!bubble) return;
-    const sizeBubble = document.getElementById('sizeHintBubble');
-    if (sizeBubble) sizeBubble.classList.remove('visible');
-    clearTimeout(sizeHintTimer);
-    // Each key (⌘ / ⇧ / V) gets its own keycap frame.
-    bubble.innerHTML = '<span class="edit-hint-keys">' +
-      '<span class="edit-hint-key">⌘</span><span class="edit-hint-key">⇧</span><span class="edit-hint-key">V</span>' +
-      '</span><span>' + t('to paste as Markdown', '粘贴为 Markdown') + '</span>';
-    bubble.classList.add('visible');
-    clearTimeout(editHintTimer);
-    // Longer dwell than the edit hint so the reminder is not missed.
-    editHintTimer = setTimeout(() => bubble.classList.remove('visible'), 4000);
-  }
+var {
+  normalizeWhitespace, showPasteHint, showPastedAsMarkdownHint, readClipboardBest, stripHtmlToText, 
+  hasMarkdownSyntax, elementHasMarkdownStyle, htmlHasMarkdownConvertibleFormatting, shouldShowSourcePasteHint, 
+  unwrapElement, normalizePastedHtml, checkPasteQuality, showPasteQualityWarning, blockifyForInsert, 
+  insertMdAtSourceCaret, mapRenderedCaretToSourceOffset, estimateSourceOffsetByBlockOrder, 
+  findNthOccurrenceSourceOffset, firstMeaningfulLine, placeCaretNearRenderedText, pasteMdIntoRendered, 
+  compactRenderedHtml, restoreRenderedSelection, pasteAsMarkdown,
+} = MarkdownPaste.create({
+  document,
+  window,
+  DOMParser,
+  NodeFilter,
+  setTimeout,
+  clearTimeout,
+  t: (...args) => t(...args),
+  setModal: (...args) => setModal(...args),
+  showStatus: (...args) => showStatus(...args),
+  ensureTurndown: (...args) => ensureTurndown(...args),
+  insertMarkdownSnippet: (...args) => insertMarkdownSnippet(...args),
+  sanitizeHtmlString: (...args) => sanitizeHtmlString(...args),
+  escHtml: (...args) => escHtml(...args),
+  balanceTableColumns: (...args) => balanceTableColumns(...args),
+  rewriteRelativeImages: (...args) => rewriteRelativeImages(...args),
+  markRenderedContentEdited: (...args) => markRenderedContentEdited(...args),
+  state: {
+    get isSource() { return isSource; },
+    set isSource(value) { isSource = value; },
+    get closing() { return closing; },
+    set closing(value) { closing = value; },
+    get editHintTimer() { return editHintTimer; },
+    set editHintTimer(value) { editHintTimer = value; },
+    get sizeHintTimer() { return sizeHintTimer; },
+    set sizeHintTimer(value) { sizeHintTimer = value; },
+  },
+  get Bridge() { return Bridge; },
+  get turndownService() { return turndownService; },
+  get MarkdownPipeline() { return MarkdownPipeline; }
+});
+  let outputBusy = false;
 
-  // Preview-mode feedback: after a rich paste is converted to Markdown, show a
-  // short confirmation bubble so the user knows the conversion happened.
-  function showPastedAsMarkdownHint() {
-    const bubble = document.getElementById('editHintBubble');
-    if (!bubble) return;
-    const sizeBubble = document.getElementById('sizeHintBubble');
-    if (sizeBubble) sizeBubble.classList.remove('visible');
-    clearTimeout(sizeHintTimer);
-    bubble.innerHTML = '<span>' + t('Pasted as Markdown', '已粘贴为 Markdown') + '</span>';
-    bubble.classList.add('visible');
-    clearTimeout(editHintTimer);
-    editHintTimer = setTimeout(() => bubble.classList.remove('visible'), 2000);
-  }
-
-  function readClipboardBest() {
-    if (Bridge.ready()) {
-      return Bridge.callSafe('read_clipboard');
-    }
-    return Promise.resolve({ format: 'none', content: '', plain: '' });
-  }
-
-  function stripHtmlToText(html) {
-    if (!html || !html.trim()) return '';
-    try {
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-      return normalizeWhitespace((doc.body && doc.body.textContent) || '');
-    } catch (e) {
-      return normalizeWhitespace(String(html).replace(/<[^>]*>/g, ' '));
-    }
-  }
-
-  function hasMarkdownSyntax(text) {
-    const s = String(text || '').trim();
-    if (!s) return false;
-    return /(^|\n)\s{0,3}(#{1,6}\s+|([-*+]\s+)|\d+[.)]\s+|>\s+|(```+|~~~+)|[-*_]{3,}\s*$)/.test(s) ||
-      /!\[[^\]]*\]\([^)]*\)|\[[^\]]+\]\([^)]*\)|`[^`]+`|\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~/.test(s) ||
-      /(^|\n)\s*\|.+\|\s*(\n|$)/.test(s);
-  }
-
-  function elementHasMarkdownStyle(el) {
-    const style = ((el && el.getAttribute && el.getAttribute('style')) || '').toLowerCase();
-    if (!style || !normalizeWhitespace(el.textContent || '')) return false;
-    return /font-weight\s*:\s*(bold|[6-9]00)\b/.test(style) ||
-      /font-style\s*:\s*italic\b/.test(style) ||
-      /text-decoration[^;]*(line-through|underline)/.test(style);
-  }
-
-  function htmlHasMarkdownConvertibleFormatting(html, plain) {
-    if (!html || !html.trim()) return false;
-    let doc;
-    try {
-      doc = new DOMParser().parseFromString(html, 'text/html');
-    } catch (e) {
-      return false;
-    }
-    const body = doc.body;
-    if (!body || !normalizeWhitespace(body.textContent || '')) return false;
-
-    // These tags produce meaningful Markdown syntax after conversion. Plain
-    // text wrappers such as <p>, <div>, <span>, <br>, and style-only layout
-    // markup are intentionally ignored to avoid reminders for normal text.
-    if (body.querySelector('table, ul, ol, li, blockquote, pre, code, h1, h2, h3, h4, h5, h6, strong, b, em, i, s, del, hr')) return true;
-
-    const link = body.querySelector('a[href]');
-    if (link) {
-      const href = normalizeWhitespace(link.getAttribute('href') || '');
-      const text = normalizeWhitespace(link.textContent || '');
-      if (href && text && href !== text) return true;
-    }
-
-    return Array.from(body.querySelectorAll('[style]')).some(elementHasMarkdownStyle);
-  }
-
-  function shouldShowSourcePasteHint(clip) {
-    if (!clip) return false;
-    if (clip.format === 'html') return htmlHasMarkdownConvertibleFormatting(clip.content, clip.plain);
-    if (clip.format === 'markdown') return hasMarkdownSyntax(clip.content || clip.plain || '');
-    return false;
-  }
-
-  function unwrapElement(el) {
-    if (!el || !el.parentNode) return;
-    const frag = el.ownerDocument.createDocumentFragment();
-    while (el.firstChild) frag.appendChild(el.firstChild);
-    el.parentNode.replaceChild(frag, el);
-  }
-
-  // Strip Office/Word cruft, unsupported elements (images, math, media) and
-  // normalize code blocks before handing the HTML to turndown.
-  function normalizePastedHtml(html) {
-    if (!html || !html.trim()) return '';
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-    // Remove comments (Word conditional comments, Safari StartFragment markers).
-    const commentWalker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_COMMENT, null, false);
-    const comments = [];
-    let cnode;
-    while ((cnode = commentWalker.nextNode())) comments.push(cnode);
-    comments.forEach(c => c.parentNode && c.parentNode.removeChild(c));
-    // Remove media/interactive/unsupported elements outright.
-    doc.querySelectorAll('script, style, link, meta, title, head, iframe, object, embed, video, audio, canvas, svg, form, button, input, select, textarea, math, .katex, [class*="MathJax"], [class*="katex"]').forEach(el => {
-      if (el.parentNode) el.parentNode.removeChild(el);
-    });
-    // Word/Outlook namespaced tags (o:p, v:*, w:*, m:*) and mso cruft: unwrap,
-    // keeping their text content.
-    doc.querySelectorAll('*').forEach(el => {
-      const tag = (el.tagName || '').toLowerCase();
-      const cls = (el.getAttribute && (el.getAttribute('class') || '')) || '';
-      const name = (el.getAttribute && (el.getAttribute('name') || '')) || '';
-      if (/^(o|v|w|l|m):/.test(tag) || /mso/i.test(cls) || /^_?mso/i.test(name)) unwrapElement(el);
-    });
-    // Drop all images (unsupported in v1).
-    doc.querySelectorAll('img').forEach(el => {
-      if (el.parentNode) el.parentNode.removeChild(el);
-    });
-    // Code blocks: ChatGPT/Claude wrap each line in spans/divs — reduce any
-    // <pre> to <pre><code>textContent</code></pre> so turndown emits a fence.
-    // textContent alone loses line breaks between block children (a <div> per
-    // line yields no whitespace), so rebuild the text with explicit newlines
-    // at every block boundary and <br>.
-    doc.querySelectorAll('pre').forEach(pre => {
-      const lines = [];
-      let current = '';
-      const collect = (node) => {
-        for (const child of node.childNodes) {
-          if (child.nodeType === 3) {
-            current += child.textContent;
-          } else if (child.nodeType === 1) {
-            const tag = child.tagName.toLowerCase();
-            if (tag === 'br') { lines.push(current); current = ''; }
-            else if (tag === 'div' || tag === 'p' || tag === 'tr' || tag === 'table' || tag === 'pre') {
-              collect(child);
-              lines.push(current);
-              current = '';
-            } else {
-              collect(child);
-            }
-          }
-        }
-      };
-      collect(pre);
-      if (current) lines.push(current);
-      const text = lines.join('\n');
-      pre.innerHTML = '';
-      const code = doc.createElement('code');
-      code.textContent = text;
-      pre.appendChild(code);
-    });
-    // Unwrap pointless font/span wrappers (keep their content).
-    doc.querySelectorAll('font, span').forEach(el => unwrapElement(el));
-    // Remove empty paragraphs.
-    doc.querySelectorAll('p').forEach(p => {
-      if (!p.textContent || !p.textContent.trim()) p.parentNode && p.parentNode.removeChild(p);
-    });
-    return doc.body.innerHTML;
-  }
-
-  // Heuristic quality gate: warn when the source converts poorly (Office
-  // HTML, images, math) or the conversion lost almost everything.
-  function checkPasteQuality(html, md) {
-    if (!html) return null;
-    if (/<img\b/i.test(html) || /cid:/i.test(html)) return 'image';
-    if (/mso-|<!--\[if|<\/(o|v|w|m):[a-z]/i.test(html)) return 'office';
-    if (/katex|MathJax|class="[^"]*math/i.test(html)) return 'math';
-    const textLen = html.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().length;
-    if (textLen > 20 && (md || '').trim().length < 2) return 'lost';
-    return null;
-  }
-
-  function showPasteQualityWarning() {
-    setModal(
-      t('Paste as Markdown', '粘贴为 Markdown'),
-      '<p style="margin:0 0 8px;">' + t('The source formatting is messy and the conversion may be inaccurate.', '来源格式混乱，转换可能出错。') + '</p>' +
-      '<p style="margin:0;color:#888;font-size:12px;">' + t('Content was still inserted; check it in the Source view.', '内容已插入，请在源码视图检查效果。') + '</p>'
-    );
-  }
-
-  function blockifyForInsert(md) {
-    const s = String(md || '').trim();
-    if (!s) return '';
-    return s.indexOf('\n') !== -1 ? '\n' + s + '\n' : s;
-  }
-
-  function insertMdAtSourceCaret(md) {
-    insertMarkdownSnippet(blockifyForInsert(md));
-  }
-
-  // Map a caret inside the rendered view back to an offset in the markdown
-  // source using a whitespace-normalized text anchor (the containing block's
-  // text) plus occurrence counting so repeated paragraphs still resolve.
-  // Returns -1 when no anchor matches (caller appends at the end).
-  function mapRenderedCaretToSourceOffset(md, content, caretNode, caretOffset) {
-    let node = caretNode;
-    let blockEl = null;
-    if (node) {
-      if (node.nodeType === 3) node = node.parentElement;
-      if (node && node.nodeType === 1) {
-        blockEl = node.closest('p, h1, h2, h3, h4, h5, h6, li, pre, blockquote, td, th, div');
-      }
-    }
-    let anchor = '';
-    let nth = 0;
-    if (blockEl) {
-      const full = normalizeWhitespace(blockEl.textContent);
-      if (full.length >= 2) {
-        anchor = full.slice(0, 120);
-        const blocks = content.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, pre, blockquote, td, th, div');
-        let count = 0;
-        for (const b of blocks) {
-          if (b === blockEl) break;
-          if (normalizeWhitespace(b.textContent) === full) count++;
-        }
-        nth = count;
-      }
-    }
-    if (!anchor && caretNode && caretNode.nodeType === 3) {
-      anchor = normalizeWhitespace(caretNode.textContent).slice(0, 120);
-      nth = 0;
-    }
-    if (anchor && anchor.length >= 2) {
-      const pos = findNthOccurrenceSourceOffset(md, anchor, nth);
-      if (pos >= 0) return pos;
-    }
-    // Fallback: no text anchor matched (empty paragraph, empty line, caret on
-    // a non-text element). Use the block element's ordinal position among
-    // rendered blocks to approximate the source offset.
-    if (blockEl) {
-      const pos2 = estimateSourceOffsetByBlockOrder(md, content, blockEl, caretOffset);
-      if (pos2 >= 0) return pos2;
-    }
-    return -1;
-  }
-
-  // Estimate a source offset by counting which rendered block the caret is in.
-  // Each rendered block roughly corresponds to a paragraph/block in markdown
-  // separated by blank lines, so we walk the block list, find our block's
-  // index, then scan the source for the same number of block separators.
-  function estimateSourceOffsetByBlockOrder(md, content, targetBlock, caretOffset) {
-    const blocks = Array.from(content.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, pre, blockquote, td, th, div'));
-    let blockIdx = -1;
-    for (let i = 0; i < blocks.length; i++) {
-      if (blocks[i] === targetBlock) { blockIdx = i; break; }
-    }
-    if (blockIdx < 0) return -1;
-    // If the block has text, try to use the text of the *previous* block with
-    // text as an anchor — that's more reliable than counting.
-    for (let j = blockIdx - 1; j >= 0; j--) {
-      const prevText = normalizeWhitespace(blocks[j].textContent);
-      if (prevText.length >= 2) {
-        const pos = findNthOccurrenceSourceOffset(md, prevText.slice(0, 120), 0);
-        if (pos >= 0) {
-          // Position after the previous block's text, past any trailing
-          // whitespace/newlines, landing at the start of the next block.
-          let p = pos;
-          // Skip forward past the matched text and any whitespace to the
-          // start of the next line/block.
-          while (p < md.length && md[p] !== '\n') p++;
-          while (p < md.length && /\s/.test(md[p])) p++;
-          return p;
-        }
-      }
-    }
-    // No previous block with text: caret is in/near the first block.
-    // Find the start of the first non-empty line in the source.
-    let p0 = 0;
-    while (p0 < md.length && /\s/.test(md[p0])) p0++;
-    return p0;
-  }
-
-  function findNthOccurrenceSourceOffset(md, needle, nth) {
-    const norm = [];
-    const orig = [];
-    for (let k = 0; k < md.length; k++) {
-      const ch = md[k];
-      if (/\s/.test(ch)) {
-        if (norm.length && norm[norm.length - 1] !== ' ') { norm.push(' '); orig.push(k); }
-      } else {
-        norm.push(ch); orig.push(k);
-      }
-    }
-    const nstr = norm.join('');
-    let from = 0;
-    let occ = 0;
-    let idx = nstr.indexOf(needle, from);
-    while (idx !== -1) {
-      if (occ === nth) {
-        const endIdx = idx + needle.length - 1;
-        return (endIdx < orig.length) ? orig[endIdx] + 1 : -1;
-      }
-      occ++;
-      from = idx + 1;
-      idx = nstr.indexOf(needle, from);
-    }
-    return -1;
-  }
-
-  function firstMeaningfulLine(md) {
-    const lines = String(md || '').split('\n');
-    for (const line of lines) {
-      const text = line
-        .replace(/^(#{1,6}\s+|\s*[-*+]\s+|\s*\d+\.\s+|\s*>\s+|```+|~~~+|\*\*+|__+|[*_])/, '')
-        .trim();
-      if (text) return text.slice(0, 40);
-    }
-    return '';
-  }
-
-  function placeCaretNearRenderedText(content, anchorText) {
-    const sel = window.getSelection();
-    if (!anchorText) {
-      sel.removeAllRanges();
-      return;
-    }
-    const walker = document.createTreeWalker(content, NodeFilter.SHOW_TEXT, null, false);
-    let node;
-    while ((node = walker.nextNode())) {
-      const idx = node.textContent.indexOf(anchorText);
-      if (idx >= 0) {
-        const range = document.createRange();
-        range.setStart(node, idx);
-        range.collapse(true);
-        sel.removeAllRanges();
-        sel.addRange(range);
-        return;
-      }
-    }
-    const range = document.createRange();
-    range.selectNodeContents(content);
-    range.collapse(false);
-    sel.removeAllRanges();
-    sel.addRange(range);
-  }
-
-  // Preview mode: paste converted markdown as RENDERED HTML directly into the
-  // contenteditable, instead of rewriting the source and re-rendering the whole
-  // document. Two problems with the old full re-render approach:
-  //   1. Any paste path that fell through to the native insertion dropped the
-  //      raw markdown (visible "#" etc.) into the rendered view.
-  //   2. Replacing innerHTML programmatically clears/breaks the browser's
-  //      native undo stack, so Cmd+Z could never undo a paste.
-  // Using execCommand('insertHTML') keeps the paste inside the browser's own
-  // undo stack (Cmd+Z works) and shows WYSIWYG content (no raw markdown).
-  // savedSel is a { node, offset } snapshot taken synchronously at paste time,
-  // so async clipboard reads cannot lose the caret.
-  function pasteMdIntoRendered(md, savedSel) {
-    const content = document.getElementById('content');
-    if (!content) return;
-    const s = String(md || '').trim();
-    if (!s) return;
-    restoreRenderedSelection(savedSel);
-    let html;
-    try {
-      html = MarkdownPipeline.parse(s);
-    } catch (err) {
-      html = escHtml(s);
-    }
-    // marked emits newline text nodes between block elements; turndown would
-    // later write those back as stray blank lines / spaces, so strip pure
-    // whitespace text nodes outside <pre>/<code> before inserting.
-    html = compactRenderedHtml(html);
-    html = sanitizeHtmlString(html);
-    // A single-paragraph paste stays inline so pasting in the middle of a
-    // paragraph does not split it into separate blocks.
-    const singleP = html.match(/^<p>([\s\S]*)<\/p>\s*$/);
-    if (singleP) html = singleP[1].replace(/\n/g, '<br>');
-    let ok = false;
-    try {
-      content.focus({ preventScroll: true });
-      ok = document.execCommand('insertHTML', false, html);
-    } catch (err) {
-      ok = false;
-    }
-    if (!ok) {
-      // Fallback: manual Range insertion (content stays correct; native undo
-      // for this paste is lost, but WKWebView supports insertHTML so this is
-      // only a safety net).
-      const sel = window.getSelection();
-      if (sel && sel.rangeCount) {
-        const range = sel.getRangeAt(0);
-        const frag = range.createContextualFragment(html);
-        range.deleteContents();
-        range.insertNode(frag);
-        range.collapse(false);
-        sel.removeAllRanges();
-        sel.addRange(range);
-      }
-    }
-    balanceTableColumns(content);
-    rewriteRelativeImages(content);
-    markRenderedContentEdited();
-  }
-
-  function compactRenderedHtml(html) {
-    try {
-      const tmp = document.createElement('div');
-      tmp.innerHTML = sanitizeHtmlString(html);
-      const toRemove = [];
-      const walker = document.createTreeWalker(tmp, NodeFilter.SHOW_TEXT, null, false);
-      while (walker.nextNode()) {
-        const n = walker.currentNode;
-        if (n.textContent.trim()) continue;
-        if (n.parentNode && n.parentNode.closest && n.parentNode.closest('pre, code, table')) continue;
-        toRemove.push(n);
-      }
-      toRemove.forEach((n) => n.parentNode && n.parentNode.removeChild(n));
-      return tmp.innerHTML;
-    } catch (e) {
-      return html;
-    }
-  }
-
-  function restoreRenderedSelection(savedSel) {
-    if (!savedSel) return;
-    const sel = window.getSelection();
-    if (!sel) return;
-    const node = savedSel.node;
-    if (!node || !node.parentNode) return;
-    try {
-      const range = document.createRange();
-      range.setStart(node, savedSel.offset);
-      range.collapse(true);
-      sel.removeAllRanges();
-      sel.addRange(range);
-    } catch (e) {}
-  }
-
-  // Entry point for the "Paste as Markdown" menu item, Cmd+Shift+V, and
-  // preview-mode Cmd+V. Reads the best clipboard flavor, converts, inserts.
-  // Guard against double-dispatch: Cmd+V fires the DOM paste event AND a
-  // beforeinput with inputType "insertFromPaste" (menu-driven paste only fires
-  // the latter). Both call pasteAsMarkdown; a short time window collapses them
-  // into one while still allowing genuinely separate pastes.
-  let pasteLastTs = 0;
-  async function pasteAsMarkdown() {
-    const now = Date.now();
-    if (closing || now - pasteLastTs < 50) return;
-    pasteLastTs = now;
-    // Snapshot the current selection synchronously *before* any async call.
-    // pasteAsMarkdown is async (reads clipboard via the pywebbridge); during
-    // those awaits the browser can clear/alter the DOM selection, which makes
-    // mapRenderedCaretToSourceOffset fail and paste at end-of-document.
-    const sel = window.getSelection();
-    let savedSel = null;
-    if (sel && sel.rangeCount > 0) {
-      const range = sel.getRangeAt(0);
-      savedSel = { node: range.startContainer, offset: range.startOffset };
-    }
-    await ensureTurndown();
-    let clip = null;
-    try {
-      clip = await readClipboardBest();
-    } catch (e) {
-      clip = null;
-    }
-    if (!clip || clip.format === 'none') {
-      showStatus(t('Clipboard is empty or unreadable', '剪贴板为空或无法读取'), true);
-      return;
-    }
-    let md;
-    let quality = null;
-    if (clip.format === 'markdown') {
-      md = clip.content;
-    } else if (clip.format === 'html') {
-      const cleaned = normalizePastedHtml(clip.content);
-      md = turndownService ? turndownService.turndown(cleaned) : cleaned;
-      quality = checkPasteQuality(clip.content, md);
-    } else {
-      md = clip.content;
-    }
-    if (!md || !md.trim()) {
-      showStatus(t('Nothing to paste', '没有可粘贴的内容'), true);
-      return;
-    }
-    if (quality) showPasteQualityWarning();
-    if (isSource) {
-      insertMdAtSourceCaret(md);
-    } else {
-      pasteMdIntoRendered(md, savedSel);
-      // Preview mode: confirm the conversion happened for rich pastes.
-      if (clip.format === 'html' || clip.format === 'markdown') showPastedAsMarkdownHint();
-    }
-  }
-
-  function currentDocTitle() {
-    return filePath && filePath !== 'Untitled.md' ? filePath.split('/').pop().replace(/\.[^.]+$/, '') : 'Untitled';
-  }
-
-  async function buildHtml() {
-    const title = currentDocTitle();
-    const clone = document.getElementById('content').cloneNode(true);
-    clone.querySelectorAll('.frontmatter-toggle, .colgroup, colgroup').forEach(el => el.remove());
-    for (const image of clone.querySelectorAll('img[data-original-src]')) {
-      if (!Bridge.ready()) throw new Error(t('Local images cannot be embedded yet. Please retry.', '本地图片尚无法嵌入，请重试。'));
-      const result = await Bridge.call('read_image_for_export', image.getAttribute('data-original-src'), documentSession.id);
-      if (!result.success) throw new Error(t('Image export failed: ', '图片导出失败：') + result.error);
-      image.setAttribute('src', result.data);
-    }
-
-    clone.querySelectorAll('*').forEach(el => {
-      el.removeAttribute('contenteditable');
-      el.removeAttribute('spellcheck');
-      Array.from(el.attributes).forEach(attr => {
-        if (attr.name.startsWith('data-')) el.removeAttribute(attr.name);
-      });
-    });
-    const resources = await Bridge.call('get_export_css');
-    const text = clone.textContent || '';
-    const front = getCurrentMarkdown().match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-    const declared = front && front[1].match(/^lang:\s*["']?([a-zA-Z]{2,8}(?:-[a-zA-Z0-9]{1,8})*)["']?\s*$/m);
-    const lang = declared ? declared[1] : ((text.match(/[㐀-鿿]/g) || []).length / Math.max(1,text.length) > 0.1 ? 'zh-CN' : 'en');
-    const headings = [...clone.querySelectorAll('h1,h2,h3')];
-    let toc = '';
-    if (headings.length >= 5) {
-      toc = '<nav class="export-toc"><details><summary>' + t('Contents','目录') + '</summary><ul>' + headings.map((el,i) => {
-        if (!el.id) el.id = 'export-heading-' + i;
-        return '<li><a href="#' + escHtml(el.id) + '">' + escHtml(el.textContent) + '</a></li>';
-      }).join('') + '</ul></details></nav>';
-    }
-    const options = await Bridge.call('get_output_settings');
-    if (options.hide_frontmatter) clone.querySelectorAll('.frontmatter').forEach(el => el.remove());
-    const html = '<!doctype html>\n<html lang="' + lang + '"><head><meta charset="utf-8">' +
-      '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
-      '<meta name="generator" content="mdPreview ' + escHtml(resources.version) + '"><title>' + escHtml(title) + '</title>' +
-      '<style>' + resources.css + '\nbody{margin:0;background:var(--bg);font-family:var(--font-sans)}.page{max-width:720px;margin:40px auto;padding:0 40px}.export-toc{margin-bottom:24px}</style>' +
-      '</head><body><main class="page">' + toc + '<article class="markdown">' + MarkdownPipeline.cleanExport(clone.innerHTML) + '</article></main></body></html>';
-    return html;
-  }
-
-  // Word (.docx) via html-docx-js 0.3.1: its API is asBlob(html, opts) which
-  // returns a Blob; we read it back as a base64 data URL for the native write.
-  async function buildDocx() {
-    try {
-      if (typeof htmlDocx === 'undefined') {
-        showStatus(t('Word export is not ready yet', 'Word 导出功能尚未就绪'), true);
-        return null;
-      }
-      const html = await buildHtml();
-      const blob = htmlDocx.asBlob(html, {
-        margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
-      });
-      return await new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
-        reader.readAsDataURL(blob);
-      });
-    } catch (err) {
-      showStatus(t('Word export failed: ', 'Word 导出失败：') + (err && err.message ? err.message : err), true);
-      return null;
-    }
-  }
-
-  // ── Export As (File menu): one native panel with a format popup ──
-  async function exportAs() {
-    if (!Bridge.ready()) {
-      showStatus(t('Export is not ready yet', '导出功能尚未就绪'), true);
-      return;
-    }
-    try {
-      const res = await Bridge.call('export_as_choose', currentDocTitle() + '.md');
-      if (!res || !res.success) return;
-      const writeRes = await exportAsWrite(res.path, res.format);
-      if (writeRes && writeRes.success) {
-        showStatus(writeRes.paths ? t('Exported: ', '已导出：') + writeRes.paths.map(p => p.split('/').pop()).join('、') : (writeRes.split ? t('Exported in multiple pages/files', '已分段导出多页或多个文件') : t('Exported', '已导出')));
-      } else {
-        showStatus(t('Export failed: ', '导出失败：') + ((writeRes && writeRes.error) || ''), true);
-      }
-    } catch (err) {
-      showStatus(t('Export failed: ', '导出失败：') + (err && err.message ? err.message : err), true);
-    }
-  }
-
-  // Build the payload for a chosen export format and write it through the
-  // native bridge. Shared by Export As and Save As (non-Markdown formats).
-  // PDF/PNG capture the rendered DOM: in Source mode the textarea is only
-  // viewport-tall and #content is hidden, so a capture would yield just the
-  // visible area (or an empty image). We temporarily switch to Preview and
-  // restore the UI after the write completes.
-  async function exportAsWrite(path, format) {
-    await ensureTurndown();
-    if (outputBusy || closing) return { success: false, error: 'output-busy' };
-    outputBusy = true;
-    let restore;
-    try {
-      const options = await Bridge.call('get_output_settings');
-      if (format !== 'md') restore = await OutputPrep.prepare(format, options);
-      let content = '';
-      if (format === 'md') content = getCurrentMarkdown();
-      else if (format === 'txt') content = toPlainText(document.getElementById('content'));
-      else if (format === 'html') content = await buildHtml();
-      else if (format === 'docx') {
-        await ensureLib('html-docx-js.js', 'htmlDocx');
-        content = await buildDocx();
-      }
-      if (content === null) return { success: false, error: 'conversion-failed' };
-      let pageSize = null;
-      if (format === 'png') {
-        const el = document.querySelector('.page');
-        const box = el.getBoundingClientRect();
-        pageSize = { x: box.left + window.scrollX, y: box.top + window.scrollY, width: Math.ceil(box.width), height: Math.ceil(el.scrollHeight), options };
-      }
-      if (format === 'pdf') {
-        // createPDF defaults to the visible viewport; pass the full document
-        // size so everything is captured. +100px keeps the last line off the
-        // page edge. `breaks` lists the top edge of every block element so the
-        // A4 slicing lands on element boundaries instead of mid-line.
-        pageSize = {
-          width: Math.max(document.body.scrollWidth, window.innerWidth),
-          height: document.body.scrollHeight + 100,
-        };
-      }
-      if (format === 'pdf') {
-        pageSize.options = options;
-        pageSize.meta = { title: currentDocTitle(), author: '', pageNumbers: options.page_numbers,
-          links: [...document.querySelectorAll('#content a[href]')].filter(el => /^https?:/.test(el.href)).map(el => ({text: el.textContent.trim(), url: el.href})),
-          headings: [...document.querySelectorAll('#content h1,#content h2,#content h3')].map(el => ({level:Number(el.tagName[1]),text:el.textContent.trim()})) };
-      }
-      return await Bridge.call('export_as_write', path, format, content, pageSize);
-    } finally {
-      if (restore) restore();
-      outputBusy = false;
-    }
-  }
-
+var {
+  currentDocTitle, buildHtml, buildDocx, exportAs, exportAsWrite, printDocument, copyAsRichText, 
+  copyAsMarkdown,
+} = DocumentOutput.create({
+  document,
+  window,
+  FileReader,
+  t: (...args) => t(...args),
+  showStatus: (...args) => showStatus(...args),
+  documentLanguage: (...args) => documentLanguage(...args),
+  getCurrentMarkdown: (...args) => getCurrentMarkdown(...args),
+  escHtml: (...args) => escHtml(...args),
+  ensureTurndown: (...args) => ensureTurndown(...args),
+  ensureLib: (...args) => ensureLib(...args),
+  toPlainText: (...args) => toPlainText(...args),
+  buildDocxFromMarkdown: (...args) => buildDocxFromMarkdown(...args),
+  buildRichText: (...args) => buildRichText(...args),
+  copyTextToClipboard: (...args) => copyTextToClipboard(...args),
+  state: {
+    get filePath() { return filePath; },
+    set filePath(value) { filePath = value; },
+    get outputBusy() { return outputBusy; },
+    set outputBusy(value) { outputBusy = value; },
+    get closing() { return closing; },
+    set closing(value) { closing = value; },
+    get isSource() { return isSource; },
+    set isSource(value) { isSource = value; },
+  },
+  get Bridge() { return typeof Bridge === 'undefined' ? undefined : Bridge; },
+  get MathRenderer() { return typeof MathRenderer === 'undefined' ? undefined : MathRenderer; },
+  get MarkdownPipeline() { return typeof MarkdownPipeline === 'undefined' ? undefined : MarkdownPipeline; },
+  get OutputPrep() { return typeof OutputPrep === 'undefined' ? undefined : OutputPrep; },
+  get documentSession() { return typeof documentSession === 'undefined' ? undefined : documentSession; },
+  get htmlDocx() { return typeof htmlDocx === 'undefined' ? undefined : htmlDocx; },
+  get turndownService() { return typeof turndownService === 'undefined' ? undefined : turndownService; }
+});
   OutputPrep.configure({
     isSource: () => isSource,
     showPreview: showPreviewForCapture,
     restoreSource: restoreSourceMode,
     resetTheme: () => { mermaidSvgCache.clear(); initMermaid(); },
     renderLight: async () => {
+      await LazyRender.flush();
+      await renderMermaidDiagrams(document.getElementById('content'));
+      await MathRenderer.renderMath(document.getElementById('content'), {eager:true});
       const diagrams = [...document.querySelectorAll('.mermaid-diagram[data-source]')];
       if (!diagrams.length) return;
       await ensureMermaid();
       mermaidSvgCache.clear(); initMermaid();
       for (const el of diagrams) {
-        const result = await mermaid.render('output-' + Math.random().toString(36).slice(2), el.dataset.source);
+        const result = await renderSafeMermaid('output-' + Math.random().toString(36).slice(2), el.dataset.source);
         el.innerHTML = sanitizeMermaidSvg(result.svg);
       }
     }
@@ -2068,25 +585,7 @@ let isSource = false;
     updateEmptyState();
     syncPositionToSource();
   }
-  let outputBusy = false;
-  async function printDocument() {
-    if (outputBusy || closing) return { success: false, error: 'output-busy' };
-    outputBusy = true;
-    let restore;
-    try {
-      const opts = await Bridge.call('get_output_settings');
-      restore = await OutputPrep.prepare('print', opts);
-      const result = await Bridge.call('print_document', opts);
-      if (!result.success && !result.cancelled) showStatus(t('Print failed', '打印失败'), true);
-      return result;
-    } catch (error) {
-      showStatus(t('Print failed', '打印失败'), true);
-      return { success: false, error: 'print-failed' };
-    } finally {
-      if (restore) restore();
-      outputBusy = false;
-    }
-  }
+  document.addEventListener('keydown',event=>{if(event.metaKey&&event.key.toLowerCase()==='c'&&(event.shiftKey||event.altKey)){event.preventDefault();if(event.shiftKey)copyAsRichText();else copyAsMarkdown();}});
 
   async function copyTextToClipboard(text) {
     if (!text || text === '-') return false;
@@ -2116,15 +615,15 @@ let isSource = false;
   let modalPreviousFocus = null;
   function setModal(title, bodyHtml, actionsHtml) {
     imageViewer.close();
-    modalPreviousFocus = document.activeElement;
+    if (!document.getElementById('modalOverlay').classList.contains('visible')) modalPreviousFocus = document.activeElement;
     const header = document.getElementById('modalHeader');
     const body = document.getElementById('modalBody');
     const actions = document.getElementById('modalActions');
     if (header) header.textContent = title;
-    if (body) body.innerHTML = bodyHtml;
-    if (actions) actions.innerHTML = actionsHtml || '<button class="modal-close" onclick="closeModal()">' + t('Close', '关闭') + '</button>';
+    if (body) { body.dataset.version=String(Number(body.dataset.version||0)+1);body.innerHTML = bodyHtml; }
+    if (actions) actions.innerHTML = actionsHtml || '<button class="modal-close">' + t('Close', '关闭') + '</button>';
     document.getElementById('modalOverlay').classList.add('visible');
-    const firstControl = document.querySelector('#modalOverlay button, #modalOverlay a, #modalOverlay input');
+    const firstControl = document.querySelector('#modalOverlay button, #modalOverlay a[href], #modalOverlay input, #modalOverlay select, #modalOverlay textarea');
     if (firstControl) firstControl.focus();
   }
 
@@ -2133,6 +632,13 @@ let isSource = false;
     closePromptVisible = false;
     if (modalPreviousFocus && modalPreviousFocus.isConnected) modalPreviousFocus.focus();
   }
+  document.getElementById('updateBubble').addEventListener('click',event=>{if(!event.target.closest('.update-bubble-close'))installUpdate();});
+  document.querySelector('.update-bubble-body').setAttribute('role','button');
+  document.querySelector('.update-bubble-body').tabIndex=0;
+  document.querySelector('.update-bubble-body').addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();installUpdate();}else if(event.key==='Escape'){dismissUpdateBubble(event);document.getElementById(isSource?'textarea':'content').focus();}});
+  document.querySelector('.update-bubble-close').addEventListener('click',event=>dismissUpdateBubble(event));
+  document.getElementById('content').addEventListener('click',event=>{const button=event.target.closest('.frontmatter-toggle');if(button){event.preventDefault();toggleFrontmatter(button);}});
+  document.getElementById('modalOverlay').addEventListener('click',event=>{if(event.target.closest('.modal-close'))closeModal();});
   document.getElementById('modalOverlay').addEventListener('click', (e) => {
     if (e.target === e.currentTarget) closeModal();
   });
@@ -2201,420 +707,54 @@ let isSource = false;
     }
   });
 
-  const RENDER_BLOCK_SELECTOR = 'p, h1, h2, h3, h4, h5, h6, li, blockquote';
 
-  function isBlankRenderParagraph(el) {
-    return !!(el && el.tagName === 'P' && !el.textContent.trim() && !el.querySelector('img, pre, table, .mermaid-diagram, .math-block'));
-  }
-
-  function lastTextNodeIn(el) {
-    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null, false);
-    let last = null;
-    while (walker.nextNode()) last = walker.currentNode;
-    return last;
-  }
-
-  function placeCaretInRenderedBlock(el, atEnd) {
-    const sel = window.getSelection();
-    if (!sel || !el) return;
-    const r = document.createRange();
-    r.selectNodeContents(el);
-    r.collapse(!atEnd);
-    sel.removeAllRanges();
-    sel.addRange(r);
-  }
-
-  function markRenderedContentEdited() {
-    renderedDirty = true;
-    setDirty(true);
-    schedulePythonSync(PYTHON_SYNC_DEBOUNCE_MS);
-    dismissWelcomeOverlay();
-  }
-
-  function handleRenderedBlockEdgeDelete(e) {
-    const content = document.getElementById('content');
-    if (!content || !content.contains(e.target)) return;
-    if (e.isComposing) return;
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount || !sel.isCollapsed) return;
-    const range = sel.getRangeAt(0);
-    let blockEl = null;
-    const node = range.startContainer;
-    if (node.nodeType === Node.TEXT_NODE) blockEl = node.parentElement ? node.parentElement.closest(RENDER_BLOCK_SELECTOR) : null;
-    else if (node.nodeType === Node.ELEMENT_NODE) blockEl = node.closest(RENDER_BLOCK_SELECTOR);
-    if (!blockEl) return;
-    const blockRange = document.createRange();
-    blockRange.selectNodeContents(blockEl);
-    if (e.key === 'Backspace') {
-      const startRange = blockRange.cloneRange();
-      startRange.collapse(true);
-      if (range.compareBoundaryPoints(Range.START_TO_START, startRange) !== 0) return;
-      e.preventDefault();
-      mergeRenderedBlockWithPrevious(blockEl);
-    } else {
-      const endRange = blockRange.cloneRange();
-      endRange.collapse(false);
-      if (range.compareBoundaryPoints(Range.START_TO_START, endRange) !== 0) return;
-      e.preventDefault();
-      mergeRenderedBlockWithNext(blockEl);
-    }
-  }
-
-  function mergeRenderedBlockWithPrevious(blockEl) {
-    const prev = blockEl.previousElementSibling;
-    if (!prev) return;
-    // Backspace inside an empty paragraph deletes that blank paragraph.
-    if (isBlankRenderParagraph(blockEl)) {
-      blockEl.parentNode.removeChild(blockEl);
-      markRenderedContentEdited();
-      if (prev && prev.matches(RENDER_BLOCK_SELECTOR)) placeCaretInRenderedBlock(prev, true);
-      return;
-    }
-    // Deleting a blank paragraph between two blocks removes the blank line.
-    if (isBlankRenderParagraph(prev)) {
-      prev.parentNode.removeChild(prev);
-      markRenderedContentEdited();
-      placeCaretInRenderedBlock(blockEl, false);
-      return;
-    }
-    if (!prev.matches(RENDER_BLOCK_SELECTOR)) return; // tables/pre/mermaid are not merged
-    const origLastText = lastTextNodeIn(prev);
-    const frag = document.createDocumentFragment();
-    while (blockEl.firstChild) frag.appendChild(blockEl.firstChild);
-    prev.appendChild(frag);
-    blockEl.parentNode.removeChild(blockEl);
-    markRenderedContentEdited();
-    const sel = window.getSelection();
-    if (sel) {
-      const r = document.createRange();
-      if (origLastText) { r.setStart(origLastText, origLastText.length); r.collapse(true); }
-      else { r.selectNodeContents(prev); r.collapse(false); }
-      sel.removeAllRanges();
-      sel.addRange(r);
-    }
-  }
-
-  function mergeRenderedBlockWithNext(blockEl) {
-    let next = blockEl.nextElementSibling;
-    if (!next) return;
-    if (isBlankRenderParagraph(blockEl)) {
-      blockEl.parentNode.removeChild(blockEl);
-      markRenderedContentEdited();
-      if (next && next.matches(RENDER_BLOCK_SELECTOR)) placeCaretInRenderedBlock(next, false);
-      return;
-    }
-    if (isBlankRenderParagraph(next)) {
-      next.parentNode.removeChild(next);
-      markRenderedContentEdited();
-      placeCaretInRenderedBlock(blockEl, true);
-      return;
-    }
-    if (!next.matches(RENDER_BLOCK_SELECTOR)) return;
-    const origLastText = lastTextNodeIn(blockEl);
-    const frag = document.createDocumentFragment();
-    while (next.firstChild) frag.appendChild(next.firstChild);
-    blockEl.appendChild(frag);
-    next.parentNode.removeChild(next);
-    markRenderedContentEdited();
-    const sel = window.getSelection();
-    if (sel) {
-      const r = document.createRange();
-      if (origLastText) { r.setStart(origLastText, origLastText.length); r.collapse(true); }
-      else { r.selectNodeContents(blockEl); r.collapse(false); }
-      sel.removeAllRanges();
-      sel.addRange(r);
-    }
-  }
-
-  // Rendered view: Enter inside a blockquote. Taken over from the browser
-  // because WKWebView's native Enter inserts <div>/<p> junk inside the quote
-  // (and on an empty quote line a NESTED blockquote). Those junk nodes then
-  // round-trip through turndown as stray "> " blank lines: the preview grows
-  // blank lines the source never had, and the source gains "> " lines the
-  // user never typed. Standard editor behavior implemented here:
-  //   - Enter on a non-empty quote line      -> new empty line inside the quote
-  //   - Enter on the last (empty) quote line -> leave the quote: the empty
-  //     line is removed and a new <p> is inserted after the blockquote
-  // Content after the caret moves into the new line (native split semantics).
-  // Note: like the merge helpers above, the manual DOM edit replaces the
-  // native undo entry for this keystroke.
-  function handleRenderedEnter(e) {
-    const content = document.getElementById('content');
-    if (!content || !content.contains(e.target)) return;
-    if (e.isComposing || e.keyCode === 229) return;
-    const sel = window.getSelection();
-    if (!sel || !sel.rangeCount) return;
-    const range = sel.getRangeAt(0);
-    if (!range.collapsed) return; // selection replacement stays native
-    const startNode = range.startContainer;
-    const startEl = startNode.nodeType === Node.ELEMENT_NODE ? startNode : startNode.parentElement;
-    if (!startEl) return;
-    if (startEl.closest('pre, code, table, .mermaid-diagram, .math-block, .frontmatter')) return;
-    const quote = startEl.closest('blockquote');
-    if (!quote || !content.contains(quote)) return;
-    // The line block the caret sits in (innermost block inside the quote).
-    let line = startEl.closest('p, h1, h2, h3, h4, h5, h6, li, div');
-    if (line && (!quote.contains(line) || line === quote)) return; // bare text in quote: stay native
-    if (!line) return;
-    e.preventDefault();
-    // Extract the content after the caret: it moves into the new line.
-    const tail = range.cloneRange();
-    tail.setEnd(line, line.childNodes.length);
-    const frag = tail.extractContents();
-    const isBlankLine = !line.textContent.trim() && !line.querySelector('img');
-    if (isBlankLine && !line.nextElementSibling) {
-      // Leave the quote: drop this empty trailing line, then insert a fresh
-      // paragraph after the blockquote. If the quote has no content left,
-      // remove it entirely.
-      const quoteParent = quote.parentNode;
-      const quoteRef = quote.nextSibling;
-      line.parentNode.removeChild(line);
-      if (!quote.textContent.trim() && !quote.querySelector('img')) quoteParent.removeChild(quote);
-      const p = document.createElement('p');
-      p.appendChild(document.createElement('br'));
-      quoteParent.insertBefore(p, quoteRef);
-      placeCaretInRenderedBlock(p, false);
-      markRenderedContentEdited();
-      return;
-    }
-    // Continuation: a new line inside the quote, carrying the tail content.
-    const tag = line.tagName === 'DIV' ? 'P' : line.tagName;
-    const newLine = document.createElement(tag);
-    if (frag.hasChildNodes()) newLine.appendChild(frag);
-    else newLine.appendChild(document.createElement('br'));
-    line.parentNode.insertBefore(newLine, line.nextSibling);
-    placeCaretInRenderedBlock(newLine, false);
-    markRenderedContentEdited();
-  }
-
-  // Prepares the rendered DOM for markdown conversion (turndown), fixing two
-  // WebKit editing artifacts that would otherwise corrupt the round trip:
-  //   1. Empty <p>/<div> line blocks (only a <br>) at the END of a blockquote
-  //      get written back as stray "> " blank lines in the source — and those
-  //      lines then re-render as even more blank quote lines in the preview.
-  //      Trailing empty quote lines carry no information, so they are dropped.
-  //      Empty lines in the MIDDLE of a quote are preserved ("> " separator).
-  //   2. Paragraph-like <div>s inside a blockquote are inline content for
-  //      turndown, which merges quote lines together; they become <p> first.
-  //      Known wrapper divs (.table-wrap, .mermaid-diagram, ...) are excluded.
-  // Also strips trailing <br> inside quote lines (WebKit keeps a placeholder
-  // <br> after typing into an empty line).
-  // Operates on a detached clone; the live preview DOM is never touched.
-  function normalizeRenderedHtmlForTurndown(html) {
-    try {
-      const tmp = document.createElement('div');
-      tmp.innerHTML = sanitizeHtmlString(html);
-      tmp.querySelectorAll('blockquote').forEach((quote) => {
-        // Nested quotes may already have been removed together with their
-        // ancestor (forEach iterates a static snapshot) — guard each removal.
-        quote.querySelectorAll('blockquote').forEach((nested) => {
-          if (!nested.parentNode) return;
-          if (!nested.textContent.trim() && !nested.querySelector('img')) nested.parentNode.removeChild(nested);
-        });
-        if (!quote.parentNode) return; // removed with an ancestor quote
-        let child = quote.lastElementChild;
-        while (child) {
-          const prev = child.previousElementSibling;
-          const isLineBlock = child.tagName === 'P' || child.tagName === 'DIV';
-          const isEmptyLine = isLineBlock && !child.textContent.trim() &&
-            !child.querySelector('img') && !child.querySelector('table, pre, ul, ol');
-          if (isEmptyLine) child.parentNode.removeChild(child);
-          else break;
-          child = prev;
-        }
-        if (!quote.parentNode) return;
-        if (!quote.textContent.trim() && !quote.querySelector('img')) {
-          quote.parentNode.removeChild(quote);
-          return;
-        }
-      });
-      // Strip trailing <br> from every line block: WebKit keeps a placeholder
-      // <br> after typing into an empty line, and a <br> at the very end of a
-      // block never carries meaning — but it round-trips as a "  " (trailing
-      // spaces) junk line in the markdown source.
-      tmp.querySelectorAll('p, div').forEach((line) => {
-        if (!line.parentNode) return;
-        if (line.closest('.table-wrap, .mermaid-diagram, .math-block, .frontmatter')) return;
-        while (line.lastElementChild && line.lastElementChild.tagName === 'BR') {
-          line.removeChild(line.lastElementChild);
-        }
-      });
-      // Paragraph-like <div>s inside a blockquote are inline content for
-      // turndown, which merges quote lines together; they become <p> first.
-      tmp.querySelectorAll('blockquote div').forEach((d) => {
-        if (!d.parentNode) return;
-        if (d.closest('.table-wrap, .mermaid-diagram, .math-block, .frontmatter')) return;
-        if (d.querySelector('p, div, ul, ol, table, pre, blockquote, h1, h2, h3, h4, h5, h6, img, .mermaid-diagram, .math-block')) return;
-        const p = document.createElement('p');
-        while (d.firstChild) p.appendChild(d.firstChild);
-        d.parentNode.replaceChild(p, d);
-      });
-      return tmp.innerHTML;
-    } catch (err) {
-      return html;
-    }
-  }
-
+var {
+  isBlankRenderParagraph, lastTextNodeIn, placeCaretInRenderedBlock, markRenderedContentEdited, 
+  handleRenderedBlockEdgeDelete, mergeRenderedBlockWithPrevious, mergeRenderedBlockWithNext, 
+  handleRenderedEnter, normalizeRenderedHtmlForTurndown,
+} = RenderedEditing.create({
+  document,
+  window,
+  Node,
+  NodeFilter,
+  Range,
+  setDirty: (...args) => setDirty(...args),
+  schedulePythonSync: (...args) => schedulePythonSync(...args),
+  dismissWelcomeOverlay: (...args) => dismissWelcomeOverlay(...args),
+  sanitizeHtmlString: (...args) => sanitizeHtmlString(...args),
+  state: {
+    get renderedDirty() { return renderedDirty; },
+    set renderedDirty(value) { renderedDirty = value; },
+  },
+  get PYTHON_SYNC_DEBOUNCE_MS() { return typeof PYTHON_SYNC_DEBOUNCE_MS === 'undefined' ? undefined : PYTHON_SYNC_DEBOUNCE_MS; }
+});
   function escHtml(s) {
     if (!s) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  function balanceTableColumns(container) {
-    const tables = container.querySelectorAll('table');
-    const pageWidth = parseInt(getComputedStyle(document.getElementById('page')).getPropertyValue('--page-width').trim()) || 720;
-    const availableWidth = pageWidth - 64;  // padding: 60px 32px → 32+32=64px horizontal
 
-    for (const table of tables) {
-      if (table.rows.length === 0) continue;
-      const colCount = table.rows[0].cells.length;
-      if (colCount === 0) continue;
-
-      const colWidths = new Array(colCount).fill(0);
-      for (let r = 0; r < table.rows.length; r++) {
-        for (let c = 0; c < Math.min(table.rows[r].cells.length, colCount); c++) {
-          const cell = table.rows[r].cells[c];
-          const textLen = cell.textContent.replace(/\s+/g, ' ').length;
-          const estWidth = Math.max(textLen * 8 + 28, 50);
-          colWidths[c] = Math.max(colWidths[c], estWidth);
-        }
-      }
-
-      let totalDesired = colWidths.reduce((a, b) => a + b, 0);
-      const minColWidth = 60;
-      const maxColWidth = Math.min(400, availableWidth * 0.6);
-
-      if (totalDesired > availableWidth) {
-        const ratio = availableWidth / totalDesired;
-        for (let c = 0; c < colCount; c++) colWidths[c] = Math.max(minColWidth, Math.floor(colWidths[c] * ratio));
-      } else if (totalDesired < availableWidth) {
-        const extra = availableWidth - totalDesired;
-        for (let c = 0; c < colCount; c++) colWidths[c] += Math.floor(extra * (colWidths[c] / totalDesired));
-      }
-      for (let c = 0; c < colCount; c++) colWidths[c] = Math.min(colWidths[c], maxColWidth);
-
-      const currentTotal = colWidths.reduce((a, b) => a + b, 0);
-      if (currentTotal < availableWidth) colWidths[colCount - 1] += availableWidth - currentTotal;
-      else if (currentTotal > availableWidth) {
-        colWidths[colCount - 1] -= currentTotal - availableWidth;
-        if (colWidths[colCount - 1] < minColWidth) colWidths[colCount - 1] = minColWidth;
-      }
-
-      // Apply widths through a <colgroup> so columns stay independently
-      // resizable. Tables that already carry a <colgroup> were balanced before
-      // and may have been drag-resized by the user — never re-balance those
-      // (it would silently reset drag-adjusted widths, e.g. after a paste).
-      if (table.querySelector('colgroup')) continue;
-      const total = colWidths.reduce((a, b) => a + b, 0);
-      const colgroup = document.createElement('colgroup');
-      table.insertBefore(colgroup, table.firstChild);
-      colgroup.innerHTML = '';
-      colWidths.forEach((w) => {
-        const col = document.createElement('col');
-        col.style.width = (w / total * 100).toFixed(2) + '%';
-        colgroup.appendChild(col);
-      });
-
-      enableTableResize(table);
-    }
-  }
-
-  // Allow dragging a column's right border to resize it; the space taken/given
-  // is borrowed from the adjacent column so the table width stays constant.
-  function setColumnEdge(table, colIndex, on) {
-    for (let r = 0; r < table.rows.length; r++) {
-      const cells = table.rows[r].cells;
-      if (colIndex >= cells.length) continue;
-      const cell = cells[colIndex];
-      cell.classList.toggle('col-edge', on);
-      cell.style.cursor = on ? 'col-resize' : '';
-    }
-  }
-  function clearColumnEdges(table) {
-    const all = table.querySelectorAll('th, td');
-    for (const cell of all) {
-      cell.classList.remove('col-edge');
-      if (cell.style.cursor === 'col-resize') cell.style.cursor = '';
-    }
-  }
-
-  function getResizeColumnFromEvent(table, e) {
-    const EDGE = 6;
-    const cell = e.target.closest('th, td');
-    if (!cell || !table.contains(cell)) return -1;
-    const cells = Array.from(cell.parentElement.cells);
-    const i = cells.indexOf(cell);
-    if (i < 0 || i >= cells.length - 1) return -1;
-    const rect = cell.getBoundingClientRect();
-    return e.clientX >= rect.right - EDGE && e.clientX <= rect.right + 2 ? i : -1;
-  }
-
-  function enableTableResize(table) {
-    if (table.__resizeReady) return;
-    table.__resizeReady = true;
-    table.addEventListener('mousemove', (e) => {
-      if (table.__dragging) return;
-      const i = getResizeColumnFromEvent(table, e);
-      clearColumnEdges(table);
-      if (i >= 0) setColumnEdge(table, i, true);
-    });
-    table.addEventListener('mouseleave', () => {
-      if (!table.__dragging) clearColumnEdges(table);
-    });
-    table.addEventListener('mousedown', (e) => {
-      const i = getResizeColumnFromEvent(table, e);
-      if (i < 0) return;
-      e.preventDefault();
-      startColDrag(table, i, e);
-    });
-  }
-
-  function startColDrag(table, i, e) {
-    const colgroup = table.querySelector('colgroup');
-    if (!colgroup) return;
-    const cols = Array.from(colgroup.querySelectorAll('col'));
-    if (i + 1 >= cols.length) return;
-
-    const headerCells = Array.from(table.rows[0].cells);
-    const totalPx = table.getBoundingClientRect().width;
-    const widthsPx = headerCells.map((c) => c.getBoundingClientRect().width);
-    const startX = e.clientX;
-    const minPx = 40;
-
-    table.__dragging = true;
-    document.body.style.userSelect = 'none';
-    document.body.style.cursor = 'col-resize';
-
-    const onMove = (ev) => {
-      const deltaPx = ev.clientX - startX;
-      let newCur = widthsPx[i] + deltaPx;
-      let newNext = widthsPx[i + 1] - deltaPx;
-      if (newCur < minPx) { newNext -= minPx - newCur; newCur = minPx; }
-      if (newNext < minPx) { newCur -= minPx - newNext; newNext = minPx; }
-      if (newCur < minPx) newCur = minPx;
-      if (newNext < minPx) newNext = minPx;
-      cols[i].style.width = (newCur / totalPx * 100).toFixed(2) + '%';
-      cols[i + 1].style.width = (newNext / totalPx * 100).toFixed(2) + '%';
-    };
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.body.style.userSelect = '';
-      document.body.style.cursor = '';
-      table.__dragging = false;
-      Array.from(table.querySelectorAll('th, td')).forEach((c) => { c.classList.remove('col-edge'); c.style.cursor = ''; });
-    };
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  }
+var {
+  balanceTableColumns, setColumnEdge, clearColumnEdges, getResizeColumnFromEvent, enableTableResize, 
+  startColDrag,
+} = TableLayout.create({
+  document,
+  getComputedStyle
+});
   async function loadContent(path, content, pageWidth, draftRecovered, zh, meta = {}) {
     imageViewer.close(false);
+    clearTimeout(readingTimer);
     clearTimeout(pythonSyncTimer);
     documentSession.reset({ ...meta, draftRecovered: !!draftRecovered });
     closing = false;
     lastPushedHash = content;
     mermaidSvgCache.clear();
     filePath = path;
+    ReadingFeatures.reset();
+    appSettings={...appSettings,...(meta.settings||{})};
+    I18n.configure(meta.i18n||{locale:appSettings.language==='system'?(zh?'zh-Hans':'en'):appSettings.language,messages:{}});
+    contentFontSize=meta.fontSize||appSettings.font_size;applyFontSize();
+    if(appSettings.language!=='system')zh=appSettings.language.startsWith('zh');
     document.getElementById('textarea').value = content;
     const loadEpoch = documentSession.epoch;
     const loadRevision = documentSession.revision;
@@ -2651,6 +791,8 @@ let isSource = false;
         ta.setSelectionRange(0, 0);
       }
     }
+    deletedOnDisk=false;
+    if(meta.hash)scrollToHash('#'+meta.hash);else restoreReading(meta.readingPosition);
     if (meta.readError) {
       document.getElementById('textarea').readOnly = true;
       document.getElementById('content').setAttribute('contenteditable', 'false');
@@ -2664,30 +806,31 @@ let isSource = false;
     if (Bridge.ready()) Bridge.callSafe('startup_ready', Math.round(performance.now() - _jsT0));
     // Preload turndown.js in background (non-blocking) so it's ready
     // when the user first toggles to source mode.
-    ensureTurndown().catch((error) => showStatus(error.message, true));
+    Onboarding.initialize();
+    // 转换器仅在首次编辑、粘贴或回写时加载。
     if (meta.recoverableDrafts && meta.recoverableDrafts.length && !draftRecovered && isSource) showRecoveryManager(meta.recoverableDrafts);
   }
 
   function showDraftRecoveredBanner() {
     const banner = document.createElement('div');
     banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:950;background:#fff3cd;border-bottom:1px solid #ffc107;color:#856404;padding:8px 16px;font-size:13px;display:flex;align-items:center;gap:12px;justify-content:center;';
-    const msg = isZh
-      ? '已恢复上次未保存的修改。'
-      : 'Unsaved changes from a previous session have been restored.';
-    const discardText = isZh ? '放弃' : 'Discard';
-    const dismissText = isZh ? '忽略' : 'Dismiss';
+    const msg = t('Unsaved changes from a previous session have been restored.','已恢复上次未保存的修改。');
+    const discardText = t('Discard','放弃');
+    const dismissText = t('Dismiss','忽略');
     banner.innerHTML = '<span>' + msg + '</span>' +
       '<a href="#" id="draftDiscard" style="color:#856404;font-weight:600;text-decoration:underline;">' + discardText + '</a>' +
       '<a href="#" id="draftDismiss" style="color:#856404;text-decoration:underline;">' + dismissText + '</a>';
     document.body.appendChild(banner);
     const discard = document.getElementById('draftDiscard');
     const dismiss = document.getElementById('draftDismiss');
-    const remove = () => { if (banner.parentNode) banner.parentNode.removeChild(banner); };
+    const remove = () => { const focused=banner.contains(document.activeElement);if (banner.parentNode) banner.parentNode.removeChild(banner);if(focused)document.getElementById(isSource?'textarea':'content').focus(); };
+    banner.setAttribute('role','status');
+    banner.addEventListener('keydown',event=>{if(event.key==='Escape'){event.preventDefault();remove();}});
     discard.addEventListener('click', async (e) => {
       e.preventDefault();
       if (Bridge.ready()) await Bridge.call('discard_draft');
       if (Bridge.ready()) {
-        Bridge.call('get_initial_content').then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
+        Bridge.call('get_initial_content').then((data) => data.headless ? runHeadlessExport(data) : loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
       }
       remove();
     });
@@ -2695,335 +838,44 @@ let isSource = false;
     setTimeout(remove, STATUS_HIDE_MS);
   }
 
+  let readingTimer=null,deletedOnDisk=false;
+  function readingPosition(){const sw=document.querySelector('.scroll-wrap');return {ratio:sw.scrollTop/Math.max(1,sw.scrollHeight-sw.clientHeight),headingId:getActiveTocTarget()||''};}
+  function restoreReading(position){if(!position)return;if(position.headingId&&document.getElementById(position.headingId))scrollToHash('#'+position.headingId);else{const sw=document.querySelector('.scroll-wrap');sw.scrollTop=(position.ratio||0)*Math.max(0,sw.scrollHeight-sw.clientHeight);}}
+  document.querySelector('.scroll-wrap').addEventListener('scroll',()=>{clearTimeout(readingTimer);if(closing)return;const id=documentSession.id;readingTimer=setTimeout(()=>{if(!closing&&id===documentSession.id)Bridge.callSafe('save_reading_position',readingPosition(),id);},500);},{passive:true});
+  let reloadRequest=0;
+  async function reloadFromDisk(){
+    if(isDirty||closing||outputBusy)return false;
+    const request=++reloadRequest;
+    const id=documentSession.id,revision=documentSession.revision,position=readingPosition();
+    const current=()=>request===reloadRequest&&id===documentSession.id&&revision===documentSession.revision&&!isDirty&&!closing;
+    const conflict=()=>showStatus(isZh?'同步冲突：未确认磁盘版本，请重试刷新或另存为。':'Disk sync conflict: retry reload or use Save As.',true);
+    try {
+      const result=await Bridge.call('reload_from_disk',id,revision);
+      if(!current())return false;
+      if(!result.success){conflict();return false;}
+      document.getElementById('textarea').value=result.content;renderedDirty=false;lastPushedHash=result.content;
+      await renderMarkdown(result.content,document.getElementById('content'));
+      if(!current())return false;
+      const acknowledged=await Bridge.call('ack_reload_from_disk',result.candidateId,id,revision);
+      if(!current())return false;
+      if(!acknowledged?.success){conflict();return false;}
+      syncHighlight();restoreReading(position);showStatus(t('File updated externally','文件已在外部更新'));return true;
+    } catch(error) {
+      if(current())conflict();
+      return false;
+    }
+  }
+  async function handleExternalChange(id,deleted){
+    if(id!==documentSession.id||closing)return;
+    deletedOnDisk=deleted;
+    if(deleted){showStatus(t('File deleted or renamed. Use Save As.','文件已删除或重命名，保存将使用另存为'),true);return;}
+    if(isDirty){showStatus(t('Disk file changed. Keep your changes with Save As.','磁盘文件已变化；保留当前修改，请另存为'),true);const choice=await Bridge.call('native_conflict_prompt',filePath);if(choice?.action==='save_as'||choice==='save_as')await saveAsFile();else if(choice?.action==='overwrite')await saveFile(true);return;}
+    if(appSettings.auto_reload)await reloadFromDisk();else showStatus(t('File updated externally; automatic reload is off.','文件已在外部更新，自动刷新已关闭'),true);
+  }
   function reloadContent() {
     if (Bridge.ready()) {
-      Bridge.call('get_initial_content').then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
+      Bridge.call('get_initial_content').then((data) => data.headless ? runHeadlessExport(data) : loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
     }
-  }
-
-  // ── TOC-based position sync ──
-  // When toggling between source and rendered modes, instead of trying to
-  // map the exact cursor position (which is fragile), we use the currently
-  // active TOC entry as the anchor point and scroll to that heading.
-
-  function getActiveTocTarget() {
-    const toc = document.getElementById('tocSidebar');
-    if (!toc) return null;
-    const active = toc.querySelector('a.toc-active');
-    return active ? active.getAttribute('data-target') : null;
-  }
-
-  // The heading is "current" when its top is at/above this band below the
-  // viewport top. Used by both the rendered-mode scroll-spy and the
-  // source-mode reference line so the two modes agree on the active heading.
-  const TOC_SPY_BAND = 80;
-
-  // The heading the user explicitly clicked (or that a mode switch scrolled
-  // to). While set, the scroll-spy keeps its hands off the highlight, so the
-  // entry the user chose stays highlighted even when the landing geometry
-  // disagrees (e.g. a heading near the document end that cannot reach the
-  // top of the viewport). Cleared as soon as the user scrolls.
-  let explicitTocTarget = null;
-  // The scrollTop our own code last set programmatically; used by
-  // scheduleTocSync() to tell programmatic scrolls from user-initiated ones.
-  let lastProgrammaticScrollTop = -1;
-
-  function setTocActive(headingId) {
-    const toc = document.getElementById('tocSidebar');
-    if (!toc) return;
-    toc.querySelectorAll('a').forEach((a) => {
-      a.classList.toggle('toc-active', a.getAttribute('data-target') === headingId);
-    });
-  }
-
-  function markExplicitTocTarget(headingId) {
-    explicitTocTarget = headingId || null;
-    if (explicitTocTarget) setTocActive(headingId);
-  }
-
-  // Place the caret at the very start of a rendered heading. Used before
-  // focusing the contenteditable so the browser's reveal-caret scroll points
-  // at the heading instead of the document start.
-  function placeCaretAtHeading(headingId) {
-    if (!headingId) return;
-    const h = document.getElementById(headingId);
-    if (!h) return;
-    const sel = window.getSelection();
-    if (!sel) return;
-    const range = document.createRange();
-    const node = h.firstChild && h.firstChild.nodeType === Node.TEXT_NODE ? h.firstChild : h;
-    range.setStart(node, 0);
-    range.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(range);
-  }
-
-  // Collect every heading line in a markdown source together with its slug,
-  // applying the SAME duplicate-suffix rule as applyHeadingAnchors() uses for
-  // the rendered DOM ("foo", "foo-1", "foo-2"). Without this, the source-side
-  // lookup produced the plain slug for repeated headings while the rendered
-  // heading had a -N suffix, so TOC clicks and highlight sync missed (or hit
-  // the wrong copy of) duplicate headings. Fence-aware: heading-looking lines
-  // inside ``` fenced code blocks are ignored.
-  let cachedHeadingText = null;
-  let cachedHeadings = [];
-  function collectMarkdownHeadingSlugs(md) {
-    if (md === cachedHeadingText) return cachedHeadings;
-    const slugs = [];
-    const used = new Map();
-    const lines = md.split('\n');
-    let inFence = false;
-    let fenceMarker = '';
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
-      const fm = line.match(/^[ \t]*(`{3,}|~{3,})/);
-      if (fm) {
-        if (!inFence) { inFence = true; fenceMarker = fm[1][0]; }
-        else if (fm[1][0] === fenceMarker) { inFence = false; }
-        continue;
-      }
-      if (inFence) continue;
-      const m = line.match(/^(#{1,6})\s+(.+)$/);
-      if (!m) continue;
-      let slug = slugifyHeading(m[2].trim().replace(/\s+#+\s*$/, ''));
-      const count = used.get(slug) || 0;
-      used.set(slug, count + 1);
-      if (count > 0) slug = slug + '-' + count;
-      slugs.push({ line: i, slug });
-    }
-    cachedHeadingText = md;
-    cachedHeadings = slugs;
-    return slugs;
-  }
-
-  function findHeadingLineInMarkdown(md, headingId) {
-    if (!headingId) return -1;
-    const found = collectMarkdownHeadingSlugs(md).find((s) => s.slug === headingId);
-    return found ? found.line : -1;
-  }
-
-  // ── Source-mode geometry ──
-  // All source-mode positioning is based on the browser's ACTUAL rendered
-  // geometry of the highlight layer (Range.getClientRects), never on
-  // line-number × line-height math. The math is invalid for two reasons:
-  //  1. The rendered line pitch can differ from CSS line-height (native
-  //     text rendering / sub-pixel rounding), an error that accumulates
-  //     linearly with depth.
-  //  2. Long lines WRAP under white-space:pre-wrap, so a logical line is
-  //     several visual lines tall; a "top = lineN × pitch" formula lands
-  //     below the real heading (this is why the caret was correct — the
-  //     browser placed it at the true geometry — but the content was not at
-  //     the top of the viewport).
-
-  // Top (in the scroll-wrap's content coordinates) of the given logical line
-  // of the highlight layer — i.e. the scrollTop that puts that line at the
-  // very top of the viewport. Empty lines return null.
-  function sourceLineTop(line) {
-    const layer = document.getElementById('highlightLayer');
-    const wrap = document.querySelector('.scroll-wrap');
-    if (!layer || !wrap || !_sourceLineStarts) return null;
-    const start = _sourceLineStarts[line];
-    if (start === undefined) return null;
-    const nl = _sourceLayerText.indexOf('\n', start);
-    const end = nl === -1 ? _sourceLayerText.length : nl;
-    if (end === start) return null; // empty line
-    const range = findRangeBetween(layer, start, end);
-    if (!range) return null;
-    const rects = range.getClientRects();
-    if (!rects || !rects.length) return null;
-    const wrapRect = wrap.getBoundingClientRect();
-    return rects[0].top - wrapRect.top + wrap.scrollTop;
-  }
-
-  // Scroll the source view so that the given logical line sits `offset`
-  // pixels below the top of the viewport, using its measured real position.
-  function scrollTextareaToLine(line, offset = 12) {
-    if (line < 0) return;
-    const wrap = document.querySelector('.scroll-wrap');
-    const top = sourceLineTop(line);
-    if (top === null) return;
-    wrap.scrollTo({ top: Math.max(0, top - offset), behavior: 'auto' });
-    lastProgrammaticScrollTop = wrap.scrollTop;
-  }
-
-  function scrollToTocTarget(headingId) {
-    if (!headingId) return;
-    const target = document.getElementById(headingId);
-    if (!target) return;
-    const wrap = document.querySelector('.scroll-wrap');
-    if (wrap) {
-      // Scroll the wrap directly so the heading lands near the top — more
-      // reliable than scrollIntoView inside the embedded WebView.
-      const top = target.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - 20;
-      wrap.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
-      lastProgrammaticScrollTop = wrap.scrollTop;
-    } else {
-      target.scrollIntoView({ behavior: 'auto', block: 'start' });
-    }
-  }
-
-  function syncPositionToSource() {
-    const textarea = document.getElementById('textarea');
-    const md = textarea.value;
-    const headingId = getActiveTocTarget();
-    const line = findHeadingLineInMarkdown(md, headingId);
-    if (line >= 0) {
-      const lines = md.split('\n');
-      let pos = 0;
-      for (let i = 0; i < line; i++) {
-        pos += lines[i].length + 1;
-      }
-      textarea.setSelectionRange(pos, pos);
-      scrollTextareaToLine(line);
-    }
-    try { textarea.focus({ preventScroll: true }); } catch (e) { textarea.focus(); }
-    updateSourceTocHighlight();
-  }
-
-  // Called after switching to rendered mode: scroll the rendered content to
-  // the heading that was active in the TOC. The heading id is captured by the
-  // caller BEFORE re-rendering, because renderMarkdown() -> buildToc() rebuilds
-  // the TOC and clears the active class.
-  function syncPositionToRendered(headingId) {
-    const content = document.getElementById('content');
-    if (headingId === undefined) headingId = getActiveTocTarget();
-    if (!headingId) {
-      placeCaretAtSafeRenderedLanding(content);
-      return;
-    }
-    scrollToTocTarget(headingId);
-    // Place the caret at the target heading BEFORE focusing: focusing a
-    // contenteditable reveals the caret and scrolls it into view, and with
-    // no caret at the target the browser scrolls back to the document start
-    // (observed in both WKWebView and Blink).
-    placeCaretAtHeading(headingId);
-    try { content.focus({ preventScroll: true }); } catch (e) { content.focus(); }
-    // Focus can trigger an async reveal-caret scroll; run the final
-    // positioning after it so the heading always ends up at the top.
-    scrollToTocTarget(headingId);
-    markExplicitTocTarget(headingId);
-    ensureTocActiveVisible();
-  }
-
-  // ── TOC active-state tracking & auto-reveal ──
-  // In source mode the rendered headings don't exist, so the TOC highlight is
-  // derived from the markdown itself: the most recent heading whose REAL
-  // rendered position (measured from the highlight layer) is at/above the top
-  // band of the viewport. In both modes the TOC sidebar auto-scrolls to keep
-  // the active entry visible, but only when that entry has scrolled outside
-  // the TOC's visible range.
-
-  // The slug of the heading that defines "where the user is" in source mode:
-  // the heading under the caret when the caret is inside the visible viewport
-  // (so moving the caret tracks the outline), otherwise the last heading
-  // whose measured top is within TOC_SPY_BAND of the viewport top. Both
-  // cases use the highlight layer's real rendered geometry, never line math.
-  function sourceActiveHeadingSlug() {
-    const textarea = document.getElementById('textarea');
-    const wrap = document.querySelector('.scroll-wrap');
-    if (!textarea || !wrap) return null;
-    const headings = collectMarkdownHeadingSlugs(textarea.value);
-    if (headings.length === 0) return null;
-    const lastHeadingAtOrAbove = (refLine) => {
-      let active = null;
-      for (const s of headings) {
-        if (s.line > refLine) break;
-        active = s.slug;
-      }
-      return active;
-    };
-    // Caret inside the visible viewport → follow the caret's heading.
-    if (document.activeElement === textarea) {
-      const pos = textarea.selectionStart;
-      const cursorLine = (textarea.value.slice(0, pos).match(/\n/g) || []).length;
-      const cursorTop = sourceLineTop(cursorLine);
-      if (cursorTop !== null && cursorTop >= wrap.scrollTop && cursorTop <= wrap.scrollTop + wrap.clientHeight) {
-        return lastHeadingAtOrAbove(cursorLine);
-      }
-    }
-    // Otherwise the last heading at/above the top band of the viewport.
-    const limit = wrap.scrollTop + TOC_SPY_BAND;
-    let active = null;
-    let low = 0, high = headings.length - 1;
-    while (low <= high) {
-      const middle = (low + high) >> 1;
-      const top = sourceLineTop(headings[middle].line);
-      if (top !== null && top <= limit) { active = headings[middle].slug; low = middle + 1; }
-      else high = middle - 1;
-    }
-    return active;
-  }
-
-  // Scroll the TOC panel so the active entry is visible — only when it has
-  // scrolled outside the TOC's visible range (up or down).
-  function ensureTocActiveVisible() {
-    const toc = document.getElementById('tocSidebar');
-    if (!toc || toc.classList.contains('hidden')) return;
-    const active = toc.querySelector('a.toc-active');
-    if (!active) return;
-    const tocTop = toc.getBoundingClientRect().top;
-    const style = getComputedStyle(toc);
-    const padTop = parseFloat(style.paddingTop) || 0;
-    const padBottom = parseFloat(style.paddingBottom) || 0;
-    const viewTop = tocTop + padTop;
-    const viewBottom = tocTop + toc.clientHeight - padBottom;
-    const actTop = active.getBoundingClientRect().top;
-    const actBottom = active.getBoundingClientRect().bottom;
-    if (actTop >= viewTop && actBottom <= viewBottom) return;
-    if (actTop < viewTop) {
-      toc.scrollTo({ top: Math.max(0, toc.scrollTop - (viewTop - actTop) - 4), behavior: 'smooth' });
-    } else {
-      toc.scrollTo({ top: toc.scrollTop + (actBottom - viewBottom) + 4, behavior: 'smooth' });
-    }
-  }
-
-  function updateSourceTocHighlight() {
-    if (!isSource) return;
-    if (explicitTocTarget) return; // a click is in flight; don't clobber it
-    const toc = document.getElementById('tocSidebar');
-    if (!toc) return;
-    const slug = sourceActiveHeadingSlug();
-    let found = false;
-    toc.querySelectorAll('a').forEach(a => {
-      const on = slug !== null && a.getAttribute('data-target') === slug;
-      a.classList.toggle('toc-active', on);
-      if (on) found = true;
-    });
-    if (found) ensureTocActiveVisible();
-  }
-
-  // Fallback: derive the target heading directly from the current source
-  // position, independent of TOC highlight state.
-  function getSourceActiveHeading() {
-    return sourceActiveHeadingSlug();
-  }
-
-  let sourceTocHighlightRaf = null;
-  function scheduleSourceTocHighlight() {
-    if (!isSource) return;
-    if (sourceTocHighlightRaf) return;
-    sourceTocHighlightRaf = requestAnimationFrame(() => {
-      sourceTocHighlightRaf = null;
-      updateSourceTocHighlight();
-    });
-  }
-
-  function findRangeBetween(root, startOff, endOff) {
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
-    let current = 0;
-    let sn = null, so = 0, en = null, eo = 0;
-    let node;
-    while (node = walker.nextNode()) {
-      const len = node.textContent.length;
-      if (!sn && current + len >= startOff) { sn = node; so = Math.min(startOff - current, len); }
-      if (current + len >= endOff) { en = node; eo = Math.min(endOff - current, len); break; }
-      current += len;
-    }
-    if (!sn) return null;
-    const range = document.createRange();
-    range.setStart(sn, so);
-    range.setEnd(en || sn, en ? eo : so);
-    return range;
   }
 
   async function toggleView() {
@@ -3064,6 +916,7 @@ let isSource = false;
   }
 
   function updateView() {
+    document.querySelectorAll('#replaceInput,.replace-action').forEach(el=>el.hidden=!isSource);
     const content = document.getElementById('content');
     const source = document.getElementById('source');
     const page = document.getElementById('page');
@@ -3104,23 +957,19 @@ let isSource = false;
         overlay = document.createElement('div');
         overlay.id = 'welcomeOverlay';
         overlay.className = 'welcome-overlay';
-        const tips = isZh
-          ? '拖拽 <strong>.md</strong> 文件到此处，或双击打开'
-          : 'or double click a <strong>.md</strong> file to open';
-        const toggleTip = isZh
-          ? '<kbd>⌘</kbd><kbd>E</kbd> 预览'
-          : '<kbd>⌘</kbd><kbd>E</kbd> to preview';
-        const pasteTip = isZh
-          ? '<kbd>⌘</kbd><kbd>⇧</kbd><kbd>V</kbd> 粘贴为 Markdown'
-          : '<kbd>⌘</kbd><kbd>⇧</kbd><kbd>V</kbd> to paste as Markdown';
-        const title = isZh ? '开始书写' : 'Start writing';
+        const tips = t('Drop a .md file here or double-click it to open','拖拽 .md 文件到此处，或双击打开');
+        const toggleTip = '<kbd>⌘</kbd><kbd>E</kbd> '+t('Preview','预览');
+        const pasteTip = '<kbd>⌘</kbd><kbd>⇧</kbd><kbd>V</kbd> '+t('Paste as Markdown','粘贴为 Markdown');
+        const title = t('Start writing','开始书写');
         overlay.innerHTML = '<div class="welcome-icon">&#9998;</div>' +
           '<div class="welcome-title">' + title + '</div>' +
           '<div class="welcome-tip">' + tips + '</div>' +
           '<div class="welcome-tip">' + toggleTip + '</div>' +
           '<div class="welcome-tip">' + pasteTip + '</div>';
         content.parentNode.appendChild(overlay);
-        overlay.addEventListener('click', () => {
+        Onboarding.decorate(overlay);
+        overlay.addEventListener('click', (event) => {
+          if(event.target.closest('button,a'))return;
           // Focus the editor without dismissing the hint — it stays visible
           // until the user actually starts typing (input hides it), so a
           // newly created document always has the caret ready in the source
@@ -3223,115 +1072,33 @@ let isSource = false;
     }
   }
 
-  async function promptBeforeClose(force = false) {
-    await ensureTurndown();
-    if (isDirty) await pushContentToPython(true);
-    if (!force && !isDirty) {
-      forceCloseWindow();
-      return;
-    }
-    if (closePromptVisible) return;
-    closePromptVisible = true;
-    // Native TextEdit-style dialog (keep question + name/location + red
-    // Delete / gray Cancel / blue Save) shown from the Python side. The
-    // in-page modal below is only a fallback for non-Cocoa environments.
-    if (Bridge.ready()) {
-      Bridge.call('native_save_prompt')
-        .then(async (res) => {
-          closePromptVisible = false;
-          if (!res || !res.action) return;
-          if (res.action === 'save') {
-            if (res.path && res.path !== filePath) filePath = res.path;
-            const result = await saveFile(false, null, { closeOnSuccess: true });
-            if (result && result.saved && !isDirty) {
-              await forceCloseWindow();
-            } else {
-              closePromptVisible = false;
-            }
-          } else if (res.action === 'delete') {
-            await forceCloseWindow(true);
-          }
-          // cancel: keep the window open and do nothing
-        })
-        .catch(() => { closePromptVisible = false; });
-      return;
-    }
-    const name = filePath && filePath !== 'Untitled.md' ? filePath.split('/').pop() : 'Untitled.md';
-    const bodyHtml = '<p>' + t('Do you want to save the changes you made to', '是否保存对') + ' <strong>' + escHtml(name) + '</strong> ' + t('?', '所做的更改？') + '</p>' +
-      '<p style="color:#666;margin-bottom:0;">' + t('Your changes will be lost if you do not save them.', '若不保存，更改将丢失。') + '</p>';
-    const actionsHtml = '<button class="modal-button secondary" id="closeCancel">' + t('Cancel', '取消') + '</button>' +
-      '<button class="modal-button danger" id="closeDiscard">' + t("Don't Save", '不保存') + '</button>' +
-      '<button class="modal-button" id="closeSave">' + t('Save', '保存') + '</button>';
-    setModal(t('Save Changes?', '保存更改？'), bodyHtml, actionsHtml);
-    document.getElementById('closeCancel').addEventListener('click', () => {
-      closePromptVisible = false;
-      closeModal();
-    });
-    document.getElementById('closeDiscard').addEventListener('click', async () => {
-      closeModal();
-      await forceCloseWindow(true);
-    });
-    document.getElementById('closeSave').addEventListener('click', async () => {
-      closeModal();
-      closePromptVisible = false;
-      const result = await saveFile(false, null, { closeOnSuccess: true });
-      if (result && result.saved && !isDirty) await forceCloseWindow();
-    });
-  }
 
-  function showSaveConflictDialog(path, markdown, options = {}) {
-    const finishOverwrite = async () => {
-      const result = await saveFile(true);
-      if (options.closeOnSuccess && result && result.saved) await forceCloseWindow();
-    };
-    const finishSaveAs = async () => {
-      const result = await saveAsFile();
-      if (options.closeOnSuccess && result && result.saved) await forceCloseWindow();
-    };
-    const finishCancel = () => {
-      showStatus(t('Save cancelled', '已取消保存'));
-      if (options.closeOnCancel) promptBeforeClose();
-    };
-    // Native macOS sheet (Save Current / Save As / Cancel); the HTML modal
-    // below stays as a fallback for non-Cocoa environments.
-    if (Bridge.ready()) {
-      Bridge.call('native_conflict_prompt', path)
-        .then((res) => {
-          if (!res || !res.action) return finishCancel();
-          if (res.action === 'overwrite') return finishOverwrite();
-          if (res.action === 'save_as') return finishSaveAs();
-          return finishCancel();
-        })
-        .catch(() => finishCancel());
-      return;
-    }
-    const name = path ? path.split('/').pop() : t('this file', '此文件');
-    const bodyHtml = '<p>' + t('The file', '文件') + ' <strong>' + escHtml(name) + '</strong> ' + t('has changed on disk since it was opened or last saved.', '自打开或上次保存以来已在磁盘上发生变化。') + '</p>' +
-      '<p>' + t('Choose how to continue:', '请选择如何继续：') + '</p>' +
-      '<ul style="margin:8px 0 0 18px;padding:0;color:#555;line-height:1.5;">' +
-      '<li><strong>' + t('Save As', '另存为') + '</strong> ' + t('keeps the changed file untouched and saves this document to a new path.', '保持磁盘文件不变，将本文档保存到新路径。') + '</li>' +
-      '<li><strong>' + t('Save Current', '保存当前') + '</strong> ' + t('overwrites the file on disk with the content in this window.', '用当前窗口内容覆盖磁盘文件。') + '</li>' +
-      '<li><strong>' + t('Cancel', '取消') + '</strong> ' + t('stops saving.', '停止保存。') + '</li>' +
-      '</ul>';
-    const actionsHtml = '<button class="modal-button secondary" id="conflictCancel">' + t('Cancel', '取消') + '</button>' +
-      '<button class="modal-button" id="conflictSaveAs">' + t('Save As...', '另存为…') + '</button>' +
-      '<button class="modal-button danger" id="conflictOverwrite">' + t('Save Current', '保存当前') + '</button>';
-    setModal(t('Save Conflict', '保存冲突'), bodyHtml, actionsHtml);
-    document.getElementById('conflictCancel').addEventListener('click', () => {
-      closeModal();
-      finishCancel();
-    });
-    document.getElementById('conflictSaveAs').addEventListener('click', () => {
-      closeModal();
-      finishSaveAs();
-    });
-    document.getElementById('conflictOverwrite').addEventListener('click', () => {
-      closeModal();
-      finishOverwrite();
-    });
-  }
-
+var {
+  promptBeforeClose, showSaveConflictDialog,
+} = SaveDialogs.create({
+  document,
+  t: (...args) => t(...args),
+  escHtml: (...args) => escHtml(...args),
+  ensureTurndown: (...args) => ensureTurndown(...args),
+  pushContentToPython: (...args) => pushContentToPython(...args),
+  forceCloseWindow: (...args) => forceCloseWindow(...args),
+  saveFile: (...args) => saveFile(...args),
+  saveAsFile: (...args) => saveAsFile(...args),
+  setModal: (...args) => setModal(...args),
+  closeModal: (...args) => closeModal(...args),
+  showStatus: (...args) => showStatus(...args),
+  state: {
+    get isDirty() { return isDirty; },
+    set isDirty(value) { isDirty = value; },
+    get filePath() { return filePath; },
+    set filePath(value) { filePath = value; },
+    get closePromptVisible() { return closePromptVisible; },
+    set closePromptVisible(value) { closePromptVisible = value; },
+  },
+  get Bridge() { return typeof Bridge === 'undefined' ? undefined : Bridge; }
+});
   async function saveFile(force = false, suppliedMarkdown = null, options = {}) {
+    if(deletedOnDisk)return saveAsFile();
     if (!Bridge.ready()) {
       showStatus(t('Save is not ready yet', '保存功能尚未就绪'), true);
       return { saved: false, error: 'not-ready' };
@@ -3351,6 +1118,8 @@ let isSource = false;
         const clean = markSaved(markdown, snapshot);
         showStatus(force ? t('Saved current version', '已保存当前版本') : t('Saved', '已保存'));
         return { saved: clean, snapshotSaved: true };
+      } else if (result.deleted) {
+        deletedOnDisk=true;return await saveAsFile(markdown);
       } else if (result.conflict) {
         showSaveConflictDialog(result.path || filePath, markdown, options);
         return { saved: false, conflict: true };
@@ -3383,6 +1152,7 @@ let isSource = false;
           if (saveRes && saveRes.success) {
             if (!documentSession.isCurrent(snapshot)) return { saved: false, stale: true };
             filePath = path;
+            deletedOnDisk=false;
             const clean = markSaved(markdown, snapshot);
             showStatus(t('Saved', '已保存'));
             return { saved: clean, snapshotSaved: true, path };
@@ -3410,439 +1180,61 @@ let isSource = false;
   }
 
   let statusTimer = null;
-  function showStatus(text, isError = false) {
-    const el = document.getElementById('status');
-    el.textContent = text;
-    el.classList.toggle('error', !!isError);
-    el.classList.add('visible');
-    clearTimeout(statusTimer);
-    statusTimer = setTimeout(() => el.classList.remove('visible'), isError ? 5000 : 1500);
-  }
-
-  // ── Non-editable content hint bubble ──
-  // The rendered view is contenteditable, but some blocks are marked
-  // contenteditable="false" (frontmatter, fenced code blocks, math, Mermaid
-  // diagrams, protected blocks). Clicking one of those does nothing visually,
-  // so show a short-lived translucent bubble suggesting the Source view.
   let editHintTimer = null;
   let sizeHintTimer = null;
 
-  function showSizeHint(kind) {
-    const bubble = document.getElementById('sizeHintBubble');
-    if (!bubble) return;
-    const editBubble = document.getElementById('editHintBubble');
-    if (editBubble) editBubble.classList.remove('visible');
-    clearTimeout(editHintTimer);
-    let text;
-    if (kind === 'width') {
-      text = t('Width', '宽度') + ' ' + pageWidthPct + '%';
-    } else {
-      text = t('Font', '字号') + ' ' + contentFontSize + 'px';
-    }
-    bubble.textContent = text;
-    bubble.classList.add('visible');
-    clearTimeout(sizeHintTimer);
-    sizeHintTimer = setTimeout(() => bubble.classList.remove('visible'), 1000);
+var {
+  showStatus, showSizeHint, findNonEditableAncestor, getTableInteractionTarget, getCodeBlockInteractionTarget, 
+  getEditableComplexInteractionTarget, showEditHint, showTableEditHint, applyStaticUiLanguage,
+} = EditorFeedback.create({
+  document,
+  window,
+  setTimeout,
+  clearTimeout,
+  t: (...args) => t(...args),
+  normalizeCodeLanguage: (...args) => normalizeCodeLanguage(...args),
+  state: {
+    get statusTimer() { return statusTimer; },
+    set statusTimer(value) { statusTimer = value; },
+    get editHintTimer() { return editHintTimer; },
+    set editHintTimer(value) { editHintTimer = value; },
+    get sizeHintTimer() { return sizeHintTimer; },
+    set sizeHintTimer(value) { sizeHintTimer = value; },
+    get pageWidthPct() { return pageWidthPct; },
+    set pageWidthPct(value) { pageWidthPct = value; },
+    get contentFontSize() { return contentFontSize; },
+    set contentFontSize(value) { contentFontSize = value; },
   }
+});
 
-  function findNonEditableAncestor(target) {
-    const contentEl = document.getElementById('content');
-    let el = target && target.nodeType === 1 ? target : (target ? target.parentNode : null);
-    while (el && el !== contentEl && el !== document.body) {
-      if (el.getAttribute && el.getAttribute('contenteditable') === 'false') return el;
-      el = el.parentNode;
-    }
-    return null;
+var {
+  setUpdateBubbleText, setUpdateProgress, showUpdateBubble, showUpdateDownloadProgress, 
+  showUpdateDownloadFailed, showManualInstallGuide, dismissUpdateBubble, installUpdate,
+} = UpdateFeedback.create({
+  document,
+  t: (...args) => t(...args),
+  showStatus: (...args) => showStatus(...args),
+  pushContentToPython: (...args) => pushContentToPython(...args),
+  state: {
+    get isDirty() { return isDirty; },
+    set isDirty(value) { isDirty = value; },
+  },
+  get Bridge() { return Bridge; }
+});
+
+var {
+  openFindBar, closeFindBar, getSearchableText, doFind, findInTextarea, scrollToTextareaMatch, 
+  clearFindHighlights, findInContentEditable, highlightCurrentMatch, findNext, findPrev, updateFindButtons,
+} = DocumentFind.create({
+  document,
+  window,
+  scrollTextareaToLine: (...args) => scrollTextareaToLine(...args),
+  findRangeBetween: (...args) => findRangeBetween(...args),
+  state: {
+    get isSource() { return isSource; },
+    set isSource(value) { isSource = value; },
   }
-
-  function getTableInteractionTarget(event) {
-    const contentEl = document.getElementById('content');
-    const fromTarget = event && event.target && event.target.closest ? event.target.closest('table') : null;
-    if (fromTarget && contentEl && contentEl.contains(fromTarget)) return fromTarget;
-    const selection = window.getSelection ? window.getSelection() : null;
-    if (!selection || selection.rangeCount === 0) return null;
-    const node = selection.anchorNode;
-    const el = node && node.nodeType === 1 ? node : (node ? node.parentNode : null);
-    const fromSelection = el && el.closest ? el.closest('table') : null;
-    return fromSelection && contentEl && contentEl.contains(fromSelection) ? fromSelection : null;
-  }
-
-  function getCodeBlockInteractionTarget(event) {
-    const contentEl = document.getElementById('content');
-    function editableCodeBlockFrom(el) {
-      const pre = el && el.closest ? el.closest('pre') : null;
-      if (!pre || !contentEl || !contentEl.contains(pre)) return null;
-      const code = pre.querySelector('code');
-      if (code && normalizeCodeLanguage(code) === 'mermaid') return null;
-      return pre;
-    }
-    const targetEl = event && event.target && event.target.nodeType === 1 ? event.target : (event && event.target ? event.target.parentNode : null);
-    const fromTarget = editableCodeBlockFrom(targetEl);
-    if (fromTarget) return fromTarget;
-    const selection = window.getSelection ? window.getSelection() : null;
-    if (!selection || selection.rangeCount === 0) return null;
-    const node = selection.anchorNode;
-    const el = node && node.nodeType === 1 ? node : (node ? node.parentNode : null);
-    return editableCodeBlockFrom(el);
-  }
-
-  function getEditableComplexInteractionTarget(event) {
-    return getTableInteractionTarget(event) || getCodeBlockInteractionTarget(event);
-  }
-
-  function showEditHint(anchor) {
-    const bubble = document.getElementById('editHintBubble');
-    if (!bubble) return;
-    const sizeBubble = document.getElementById('sizeHintBubble');
-    if (sizeBubble) sizeBubble.classList.remove('visible');
-    clearTimeout(sizeHintTimer);
-    // ⌘E-first copy: the shortcut is the anchor, the verb follows. Kept as
-    // constant strings (no user input) so innerHTML is safe.
-    bubble.innerHTML = '<span class="edit-hint-key">⌘E</span><span>' + t('to edit in Source', '使用源码模式编辑') + '</span>';
-    bubble.classList.add('visible');
-    clearTimeout(editHintTimer);
-    editHintTimer = setTimeout(() => bubble.classList.remove('visible'), 1600);
-  }
-
-  function showTableEditHint() {
-    const bubble = document.getElementById('editHintBubble');
-    if (!bubble) return;
-    const sizeBubble = document.getElementById('sizeHintBubble');
-    if (sizeBubble) sizeBubble.classList.remove('visible');
-    clearTimeout(sizeHintTimer);
-    bubble.innerHTML = '<span class="edit-hint-copy">Switch to Source mode</span>' +
-      '<span class="edit-hint-keys"><span class="edit-hint-key">⌘</span><span class="edit-hint-key">E</span></span>' +
-      '<span class="edit-hint-copy">to keep your formatting intact</span>';
-    bubble.classList.add('visible');
-    clearTimeout(editHintTimer);
-    editHintTimer = setTimeout(() => bubble.classList.remove('visible'), 1800);
-  }
-
-  // Apply bilingual text to static UI elements declared in index.html.
-  // Called whenever isZh is (re)set, i.e. after each loadContent().
-  function applyStaticUiLanguage() {
-    document.documentElement.lang = isZh ? 'zh-Hans' : 'en';
-    const findInput = document.getElementById('findInput');
-    if (findInput) findInput.placeholder = t('Find', '查找');
-    const findPrev = document.getElementById('findPrev');
-    if (findPrev) findPrev.title = t('Previous (Shift+Cmd+G)', '上一个 (Shift+Cmd+G)');
-    const findNext = document.getElementById('findNext');
-    if (findNext) findNext.title = t('Next (Cmd+G)', '下一个 (Cmd+G)');
-    const findClose = document.getElementById('findClose');
-    if (findClose) findClose.title = t('Close (Esc)', '关闭 (Esc)');
-    const tocToggle = document.getElementById('tocToggle');
-    if (tocToggle) {
-      const label = t('Show outline', '显示大纲');
-      tocToggle.title = label;
-      tocToggle.setAttribute('aria-label', label);
-    }
-      const ub = document.getElementById('updateBubble');
-    if (ub) {
-      const txt = ub.querySelector('.update-bubble-text');
-      if (txt && !ub.classList.contains('installing') && !ub.classList.contains('downloading')) {
-        txt.textContent = t('Update available, click to install...', '有新版本可用，点击安装…');
-      }
-      const closeBtn = ub.querySelector('.update-bubble-close');
-      if (closeBtn) {
-        const dismiss = t('Dismiss', '忽略');
-        closeBtn.title = dismiss;
-        closeBtn.setAttribute('aria-label', dismiss);
-      }
-    }
-  }
-
-  let _updateBubbleDismissed = false;
-
-  function setUpdateBubbleText(text) {
-    const el = document.getElementById('updateBubble');
-    const txt = el ? el.querySelector('.update-bubble-text') : null;
-    if (txt) txt.textContent = text;
-  }
-
-  function setUpdateProgress(percent) {
-    const bar = document.getElementById('updateProgressBar');
-    if (bar) bar.style.width = Math.max(0, Math.min(100, percent || 0)) + '%';
-  }
-
-  function showUpdateBubble() {
-    if (_updateBubbleDismissed) return;
-    const el = document.getElementById('updateBubble');
-    if (el) {
-      el.classList.remove('downloading');
-      el.classList.add('visible');
-      setUpdateProgress(0);
-      setUpdateBubbleText(t('Update available, click to install...', '有新版本可用，点击安装…'));
-    }
-  }
-
-  function showUpdateDownloadProgress(percent) {
-    _updateBubbleDismissed = false;
-    const el = document.getElementById('updateBubble');
-    const p = Math.max(0, Math.min(100, Math.round(percent || 0)));
-    if (el) {
-      el.classList.remove('installing');
-      el.classList.add('visible', 'downloading');
-      setUpdateProgress(p);
-      setUpdateBubbleText(t('Downloading update... ', '正在下载更新… ') + p + '%');
-    }
-  }
-
-  function showUpdateDownloadFailed(code, detail) {
-    // `code` comes from the Python updater: 'network' | 'incomplete' |
-    // 'mount' | 'verify' | 'unknown'. `detail` is an already-localized
-    // sentence from Python (may be empty) for the status bar.
-    const reasons = {
-      network: t('Network error. Check your connection.', '网络错误，请检查网络连接。'),
-      incomplete: t('The downloaded file is incomplete.', '下载的文件不完整。'),
-      mount: t('Failed to open the update image.', '安装包无法打开。'),
-      verify: t('The update failed the version check.', '更新未通过版本校验。'),
-      unknown: t('Unexpected error.', '未知错误。'),
-    };
-    const reason = reasons[code] || reasons.unknown;
-    const el = document.getElementById('updateBubble');
-    if (el) {
-      el.classList.remove('downloading', 'installing');
-      el.classList.add('visible');
-      setUpdateProgress(0);
-      setUpdateBubbleText(t('Download failed: ', '下载失败：') + reason);
-    }
-    showStatus(t('Update download failed: ', '更新下载失败：') + (detail || reason), true);
-  }
-
-  function showManualInstallGuide(dmgPath, message) {
-    const hint = dmgPath
-      ? t(' Open the DMG and drag mdPreview to Applications: ', ' 请打开 DMG，并将 mdPreview 拖到 Applications：') + dmgPath
-      : t(' Please download the DMG manually and drag mdPreview to Applications.', ' 请手动下载 DMG，并将 mdPreview 拖到 Applications。');
-    showStatus((message || t('Update failed.', '更新失败。')) + hint, true);
-  }
-
-  function dismissUpdateBubble(event) {
-    if (event) event.stopPropagation();
-    _updateBubbleDismissed = true;
-    const el = document.getElementById('updateBubble');
-    if (el) el.classList.remove('visible');
-  }
-
-  async function installUpdate() {
-    if (isDirty) await pushContentToPython(true);
-    const el = document.getElementById('updateBubble');
-    if (el && (el.classList.contains('installing') || el.classList.contains('downloading'))) return;
-    if (el) {
-      setUpdateBubbleText(t('Installing...', '正在安装…'));
-      el.classList.remove('downloading');
-      el.classList.add('installing');
-    }
-    showStatus(t('Installing update...', '正在安装更新…'));
-    if (Bridge.ready()) {
-      Bridge.call('perform_auto_install').then(function(result) {
-        if (result && result.success) {
-          showStatus(t('Update prepared. Finish saving to restart.', '更新已准备，请完成保存以重启。'));
-        } else {
-          const error = result ? result.error : t('unknown', '未知');
-          if (result && result.manual_install) {
-            showManualInstallGuide(result.manual_dmg_path || '', t('Automatic install failed.', '自动安装失败。'));
-          } else {
-            showStatus(t('Update failed: ', '更新失败：') + error, true);
-          }
-          if (el) {
-            setUpdateBubbleText(t('Update available, click to install...', '有新版本可用，点击安装…'));
-            el.classList.remove('installing');
-          }
-        }
-      }).catch(function(err) {
-        showStatus(t('Update failed: ', '更新失败：') + err, true);
-        if (el) {
-          setUpdateBubbleText(t('Update available, click to install...', '有新版本可用，点击安装…'));
-          el.classList.remove('installing');
-        }
-      });
-    }
-  }
-
-  let findState = { query: '', matches: [], currentIdx: -1, scrollTop: 0 };
-
-  function openFindBar() {
-    const bar = document.getElementById('findBar');
-    const input = document.getElementById('findInput');
-    bar.classList.add('visible');
-    // Push content down so the bar doesn't overlap
-    document.querySelector('.scroll-wrap').style.top = '40px';
-    input.focus();
-    const sel = window.getSelection().toString();
-    if (sel) { input.value = sel; doFind(); }
-    else { input.select(); }
-  }
-
-  function closeFindBar() {
-    const bar = document.getElementById('findBar');
-    bar.classList.remove('visible');
-    document.querySelector('.scroll-wrap').style.top = '';
-    clearFindHighlights();
-    document.getElementById('findCount').textContent = '';
-    findState = { query: '', matches: [], currentIdx: -1, scrollTop: 0 };
-    if (isSource) document.getElementById('textarea').focus();
-    else document.getElementById('content').focus();
-  }
-
-  function getSearchableText() {
-    if (isSource) return document.getElementById('textarea');
-    return document.getElementById('content');
-  }
-
-  function doFind() {
-    const query = document.getElementById('findInput').value;
-    if (!query) {
-      clearFindHighlights();
-      document.getElementById('findCount').textContent = '';
-      findState = { query: '', matches: [], currentIdx: -1, scrollTop: 0 };
-      return;
-    }
-
-    if (isSource) {
-      findInTextarea(query);
-    } else {
-      findInContentEditable(query);
-    }
-  }
-
-  function findInTextarea(query) {
-    const textarea = document.getElementById('textarea');
-    const text = textarea.value;
-    const matches = [];
-    const lowerText = text.toLowerCase();
-    const lowerQuery = query.toLowerCase();
-    let pos = 0;
-    while (true) {
-      const idx = lowerText.indexOf(lowerQuery, pos);
-      if (idx === -1) break;
-      matches.push(idx);
-      pos = idx + query.length;
-    }
-    findState.query = query;
-    findState.matches = matches;
-
-    const countEl = document.getElementById('findCount');
-    if (matches.length === 0) {
-      countEl.textContent = '0/0';
-      findState.currentIdx = -1;
-    } else {
-      const cursor = textarea.selectionStart;
-      let idx = 0;
-      for (let i = 0; i < matches.length; i++) {
-        if (matches[i] >= cursor) { idx = i; break; }
-        idx = i;
-      }
-      findState.currentIdx = idx;
-      countEl.textContent = (idx + 1) + '/' + matches.length;
-      scrollToTextareaMatch(idx);
-    }
-    updateFindButtons();
-  }
-
-  function scrollToTextareaMatch(idx) {
-    const textarea = document.getElementById('textarea');
-    const start = findState.matches[idx];
-    const end = start + findState.query.length;
-    const lines = textarea.value.substring(0, start).split('\n').length; // 1-based
-    // Scroll first (leaving ~100px of context above), then select and focus:
-    // focusing reveals the caret, and a pre-scrolled caret doesn't fight it.
-    scrollTextareaToLine(lines - 1, 100);
-    textarea.setSelectionRange(start, end);
-    try { textarea.focus({ preventScroll: true }); } catch (e) { textarea.focus(); }
-  }
-
-  function clearFindHighlights() {
-    const content = document.getElementById('content');
-    const marks = content.querySelectorAll('mark.find-highlight');
-    for (const mark of marks) {
-      const parent = mark.parentNode;
-      parent.replaceChild(document.createTextNode(mark.textContent), mark);
-      parent.normalize();
-    }
-  }
-
-  function findInContentEditable(query) {
-    clearFindHighlights();
-    const content = document.getElementById('content');
-    const matches = [];
-    const lowerQuery = query.toLowerCase();
-    const text = content.textContent || '';
-    const lowerText = text.toLowerCase();
-    let pos = 0;
-    while (true) {
-      const idx = lowerText.indexOf(lowerQuery, pos);
-      if (idx === -1) break;
-      matches.push(idx);
-      pos = idx + query.length;
-    }
-
-    findState.query = query;
-    findState.matches = matches;
-
-    const countEl = document.getElementById('findCount');
-    if (matches.length === 0) {
-      countEl.textContent = '0/0';
-      findState.currentIdx = -1;
-    } else {
-      findState.currentIdx = 0;
-      countEl.textContent = '1/' + matches.length;
-      highlightCurrentMatch();
-    }
-    updateFindButtons();
-  }
-
-  function highlightCurrentMatch() {
-    clearFindHighlights();
-    const content = document.getElementById('content');
-    if (findState.currentIdx < 0 || findState.currentIdx >= findState.matches.length) return;
-    const start = findState.matches[findState.currentIdx];
-    const range = findRangeBetween(content, start, start + findState.query.length);
-    if (!range) return;
-    const mark = document.createElement('mark');
-    mark.className = 'find-highlight current';
-    try {
-      range.surroundContents(mark);
-    } catch (e) {
-      return;
-    }
-    const rect = mark.getBoundingClientRect();
-    const wrap = document.querySelector('.scroll-wrap');
-    const wrapRect = wrap.getBoundingClientRect();
-    if (rect.top < wrapRect.top + 60 || rect.bottom > wrapRect.bottom) {
-      wrap.scrollTo({ top: wrap.scrollTop + rect.top - wrapRect.top - 80, behavior: 'auto' });
-    }
-  }
-
-  function findNext() {
-    if (findState.matches.length === 0) return;
-    findState.currentIdx = (findState.currentIdx + 1) % findState.matches.length;
-    if (isSource) {
-      scrollToTextareaMatch(findState.currentIdx);
-    } else {
-      highlightCurrentMatch();
-    }
-    document.getElementById('findCount').textContent = (findState.currentIdx + 1) + '/' + findState.matches.length;
-    updateFindButtons();
-  }
-
-  function findPrev() {
-    if (findState.matches.length === 0) return;
-    findState.currentIdx = (findState.currentIdx - 1 + findState.matches.length) % findState.matches.length;
-    if (isSource) {
-      scrollToTextareaMatch(findState.currentIdx);
-    } else {
-      highlightCurrentMatch();
-    }
-    document.getElementById('findCount').textContent = (findState.currentIdx + 1) + '/' + findState.matches.length;
-    updateFindButtons();
-  }
-
-  function updateFindButtons() {
-    const has = findState.matches.length > 0;
-    document.getElementById('findNext').disabled = !has;
-    document.getElementById('findPrev').disabled = !has;
-  }
-
+});
   document.getElementById('findInput').addEventListener('input', () => { doFind(); });
   document.getElementById('findInput').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') { e.preventDefault(); e.shiftKey ? findPrev() : findNext(); }
@@ -3859,14 +1251,13 @@ let isSource = false;
     if (cmd && e.altKey && e.key === 'o') { e.preventDefault(); toggleToc(); return; }
     if (cmd && e.key === 'o') { e.preventDefault(); openFile(); }
     if (cmd && e.key === 'w') { e.preventDefault(); closeWindow(); }
-    if (cmd && e.key === '0') { e.preventDefault(); resetPageWidth(); }
+    if (cmd && e.key === '0') { e.preventDefault(); e.altKey?resetPageWidth():resetFontSize(); }
     // Zoom: ⌘= / ⌘- (View menu). WebKit may not forward ⌘= to JS when the
     // menu item handles it, so this is a JS-level fallback as well.
-    if (cmd && e.key === '=') { e.preventDefault(); zoomIn(); }
-    if (cmd && e.key === '-') { e.preventDefault(); zoomOut(); }
+    if (cmd && e.key === '=') { e.preventDefault(); e.altKey?adjustPageWidth(10):zoomIn(); }
+    if (cmd && e.key === '-') { e.preventDefault(); e.altKey?adjustPageWidth(-10):zoomOut(); }
     // Width: ⌘. / ⌘, (moved off ⌘= / ⌘- which are now Zoom).
-    if (cmd && e.key === '.') { e.preventDefault(); adjustPageWidth(10); }
-    if (cmd && e.key === ',') { e.preventDefault(); adjustPageWidth(-10); }
+    if (cmd && e.key === ',') { e.preventDefault(); openSettings(); }
     if (cmd && e.key === 'e') { e.preventDefault(); toggleView(); }
     if (cmd && e.key === 'f') { e.preventDefault(); openFindBar(); }
     if (cmd && e.key === 'g') { e.preventDefault(); e.shiftKey ? findPrev() : findNext(); }
@@ -3902,9 +1293,13 @@ let isSource = false;
       if (Bridge.ready()) Bridge.callSafe('open_external_link', href);
       return;
     }
-    // Keep relative document links from navigating the editor webview away.
-    // Image-relative support is handled during rendering; relative document links can be opened later.
     e.preventDefault();
+    try {
+      const split=href.indexOf('#'),path=decodeURIComponent(split<0?href:href.slice(0,split)),hash=split<0?'':decodeURIComponent(href.slice(split+1));
+      if(!filePath||filePath==='Untitled.md'){showStatus(t('Save the document before opening relative links','请先保存文档再打开相对链接'),true);return;}
+      const base=new URL('file://'+filePath.split('/').map(encodeURIComponent).join('/'));const absolute=decodeURIComponent(new URL(path.split('/').map(encodeURIComponent).join('/'),base).pathname);
+      Bridge.call('open_linked_document',absolute,hash,e.metaKey).then(result=>{if(!result.success&&!result.cancelled)showStatus(result.error==='dirty-document'?t('Save your changes first','请先保存当前修改'):t('Linked file missing or unavailable','找不到链接的文件或无法打开'),true);}).catch(()=>showStatus(t('Could not open link','无法打开链接'),true));
+    }catch(error){showStatus(t('Invalid link','链接格式无效'),true);}
   });
 
   function contentHash(text) {
@@ -3921,6 +1316,8 @@ let isSource = false;
   function prepareForClose() {
     imageViewer.close(false);
     closing = true;
+    LazyRender.reset();
+    clearTimeout(readingTimer);
     clearTimeout(pythonSyncTimer);
     clearTimeout(highlightTimer);
     if (highlightRaf !== null) { cancelAnimationFrame(highlightRaf); highlightRaf = null; }
@@ -3935,6 +1332,7 @@ let isSource = false;
     if (closing || !Bridge.ready()) return false;
     if (!force && !isDirty) return true;
     if (syncInFlight) { await syncInFlight; return pushContentToPython(force); }
+    if (renderedDirty) await ensureTurndown();
     const markdown = getCurrentMarkdown();
     const snapshot = documentSession.snapshot(markdown);
     if (!force && markdown === lastPushedHash && snapshot.revision <= documentSession.ackRevision) return true;
@@ -3978,7 +1376,8 @@ let isSource = false;
   sourceTextarea.addEventListener('keyup', scheduleSourceTocHighlight);
   sourceTextarea.addEventListener('input', scheduleSourceTocHighlight);
   document.addEventListener('dragover', (e) => e.preventDefault());
-  document.addEventListener('drop', handleImageDrop);
+  EditorFeatures.install();
+  document.addEventListener('drop', handleDrop);
   // Paste interception:
   //   source  : keep native plain-text paste; if the clipboard is rich, show
   //             the Cmd+Shift+V reminder bubble.
@@ -4007,7 +1406,7 @@ let isSource = false;
   keepAliveTimer = setInterval(() => { if (!closing && isSource) pushContentToPython(false); }, 5000);
 
   window.addEventListener('pywebviewready', () => {
-    Bridge.call('get_initial_content').then((data) => loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
+    Bridge.call('get_initial_content').then((data) => data.headless ? runHeadlessExport(data) : loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
   });
 
   function showRecoveryManager(drafts) {

@@ -1,8 +1,20 @@
 .markdown { outline: none; min-height: calc(100vh - 180px); font-size: var(--content-font-size, 16px); line-height: var(--content-line-height); color: var(--fg); }
+:lang(zh) .markdown { line-height: 1.8; text-autospace: normal; }
+:lang(zh) .markdown strong { font-weight: 600; }
+:lang(en) .markdown h1 { letter-spacing: -0.5px; }
+:lang(en) .markdown h2 { letter-spacing: -0.3px; }
+#tocSidebar ul { list-style: none; margin: 0; padding: 0; }
+.welcome-overlay, .welcome-overlay .welcome-title, .welcome-overlay .welcome-tip { color: #6e6e73 !important; }
+@media (prefers-color-scheme: dark) {
+  .welcome-overlay, .welcome-overlay .welcome-title, .welcome-overlay .welcome-tip { color: #a1a1a6 !important; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}
 .markdown:empty::before { content: ''; }
 .markdown.hidden { display: none; }
-.markdown h1 { font-size: calc(var(--content-font-size, 16px) * 1.875); font-weight: 700; margin: 0 0 20px; letter-spacing: -0.5px; line-height: 1.3; }
-.markdown h2 { font-size: calc(var(--content-font-size, 16px) * 1.4375); font-weight: 600; margin: 32px 0 14px; letter-spacing: -0.3px; line-height: 1.3; }
+.markdown h1 { font-size: calc(var(--content-font-size, 16px) * 1.875); font-weight: 700; margin: 0 0 20px; letter-spacing: normal; line-height: 1.3; }
+.markdown h2 { font-size: calc(var(--content-font-size, 16px) * 1.4375); font-weight: 600; margin: 32px 0 14px; letter-spacing: normal; line-height: 1.3; }
 .markdown h3 { font-size: calc(var(--content-font-size, 16px) * 1.125); font-weight: 600; margin: 26px 0 10px; line-height: 1.4; }
 .markdown h4 { font-size: calc(var(--content-font-size, 16px) * 0.9375); font-weight: 600; margin: 22px 0 8px; }
 .markdown h5 { font-size: calc(var(--content-font-size, 16px) * 0.875); font-weight: 600; margin: 18px 0 8px; color: var(--color-2); }
@@ -104,3 +116,18 @@
 :where(:root:not([data-output])) .mermaid-diagram, :where(:root:not([data-output])) .math-inline, :where(:root:not([data-output])) .math-block { background: var(--dark-18); border-color: var(--dark-4); }
 }
 .markdown:focus-visible { outline:none; }
+.markdown .math-inline.math-rendered, .markdown .math-block.math-rendered { background:none; border:0; font-family:inherit; color:inherit; padding:0; }
+.markdown .math-error.math-rendered { color:#b00020; background:var(--code-bg); font-family:var(--font-mono); }
+.markdown .markdown-alert {border-left:4px solid var(--alert-note);padding:8px 16px;margin:16px 0;}
+.markdown .markdown-alert-tip {border-color:var(--alert-tip)}
+.markdown .markdown-alert-important {border-color:var(--alert-important)}
+.markdown .markdown-alert-warning {border-color:var(--alert-warning)}
+.markdown .markdown-alert-caution {border-color:var(--alert-caution)}
+.markdown .markdown-alert-title {font-weight:600}
+.markdown .code-copy-btn {position:absolute;right:70px;top:6px;opacity:0;cursor:pointer}
+.markdown pre:hover .code-copy-btn,.markdown .code-copy-btn:focus {opacity:1}
+.markdown .task-toggle {background:none;border:0;color:inherit;font:inherit;cursor:pointer;padding:0 6px 0 0}
+.markdown .remote-image-bar {padding:12px;background:var(--code-bg);font-size:13px}
+.markdown img[data-remote-src]:not([src]) {min-width:120px;min-height:40px;border:1px dashed var(--border)}
+@media print {.code-copy-btn,.remote-image-bar {display:none!important}}
+.markdown .math-block .katex-display { overflow-x:auto; overflow-y:hidden; }

@@ -1,9 +1,9 @@
 """原生 PDF 后处理；所有变更完成后才原子替换目标文件。"""
 from pathlib import Path
-from mdpreview_core.storage import atomic_write
+from mdpreview_core.storage import atomic_write, atomic_create
 
 
-def finalize(src, dst, meta, commit_guard=None):
+def finalize(src, dst, meta, commit_guard=None, no_clobber=False):
     import AppKit
     import Foundation
     import Quartz
@@ -89,4 +89,4 @@ def finalize(src, dst, meta, commit_guard=None):
         raise OSError('pdf-serialization-failed')
     from contextlib import nullcontext
     with commit_guard() if commit_guard else nullcontext():
-        atomic_write(dst, bytes(data))
+        (atomic_create if no_clobber else atomic_write)(dst, bytes(data))

@@ -29,6 +29,7 @@ window.OutputPrep = (() => {
         const scroll = sw ? [sw.scrollLeft, sw.scrollTop] : null;
         if (scroll) undo.push(() => sw.scrollTo(...scroll));
         if (hooks.isSource()) { undo.push(hooks.restoreSource); await hooks.showPreview(); }
+        await ReadingFeatures.beforeOutput(kind);
         const old = root.getAttribute('data-output');
         undo.push(() => { if (old === null) root.removeAttribute('data-output'); else root.setAttribute('data-output', old); hooks.resetTheme(); });
         root.dataset.output = kind;

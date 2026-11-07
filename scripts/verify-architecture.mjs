@@ -1,0 +1,5 @@
+import fs from 'node:fs';import path from 'node:path';import {spawnSync} from 'node:child_process';
+const [app,expected]=process.argv.slice(2);if(!app||!['arm64','x86_64','universal'].includes(expected))throw new Error('需要APP路径与目标架构');
+let count=0;const required=expected==='universal'?['arm64','x86_64']:[expected];
+function walk(folder){for(const entry of fs.readdirSync(folder,{withFileTypes:true})){const file=path.join(folder,entry.name);if(entry.isSymbolicLink())continue;if(entry.isDirectory()){walk(file);continue;}if(!entry.isFile())continue;const fd=fs.openSync(file,'r'),magic=Buffer.alloc(4);fs.readSync(fd,magic,0,4,0);fs.closeSync(fd);if(!['feedface','feedfacf','cefaedfe','cffaedfe','cafebabe','bebafeca','cafebabf'].includes(magic.toString('hex')))continue;count++;const result=spawnSync('/usr/bin/lipo',['-archs',file],{encoding:'utf8'});if(result.status!==0||!required.every(a=>result.stdout.trim().split(/\s+/).includes(a)))throw new Error('架构检查失败：'+file);}}
+walk(app);if(!count)throw new Error('没有检测到Mach-O，不能认定架构通过');console.log('通过Mach-O架构检查',count,'个文件；未代替原生运行验收');

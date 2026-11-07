@@ -54,7 +54,41 @@ def verify_asset(payload_digest, size, asset):
         raise ValueError('Update asset differs from the published GitHub release')
 
 
-def transactional_install(staged, destination, verify, launch, wait_ready):
+def bundle_snapshot(app):
+    app = Path(app).absolute()
+    if app.is_symlink() or app.resolve() != app or not app.is_dir() or app.suffix != '.app':
+        raise ValueError('unsafe-install-destination')
+    executable = app / 'Contents/MacOS/mdPreview'
+    if executable.is_symlink() or not executable.is_file():
+        raise ValueError('unsafe-main-executable')
+    current, parent, binary = app.stat(), app.parent.stat(), executable.stat()
+    return {'path': str(app), 'device': current.st_dev, 'inode': current.st_ino,
+            'parentDevice': parent.st_dev, 'parentInode': parent.st_ino,
+            'executableDevice': binary.st_dev, 'executableInode': binary.st_ino}
+
+
+def check_startup_snapshot(app, snapshot):
+    if not snapshot or bundle_snapshot(app) != snapshot:
+        raise ValueError('running-copy-changed-restart-required')
+
+
+def installation_identity(app):
+    app = Path(app).absolute()
+    if app.is_symlink() or app.resolve() != app or not app.is_dir() or app.suffix != '.app':
+        raise ValueError('unsafe-install-destination')
+    version = verify_bundle(app)
+    if not os.access(app.parent, os.W_OK):
+        raise PermissionError('application-parent-not-writable')
+    return dict(bundle_snapshot(app), version=version)
+
+
+def check_installation_identity(app, expected):
+    if installation_identity(app) != expected:
+        raise ValueError('installed-copy-changed')
+    return Path(app)
+
+
+def transactional_install(staged, destination, verify, launch, wait_ready, destination_identity=None):
     """Pre-copy on the target volume; restore the exact old path on failure."""
     staged, destination = Path(staged), Path(destination)
     token = uuid.uuid4().hex
@@ -65,6 +99,8 @@ def transactional_install(staged, destination, verify, launch, wait_ready):
     try:
         shutil.copytree(staged, prepared, symlinks=True)
         verify(prepared)
+        if destination_identity is not None:
+            check_installation_identity(destination, destination_identity)
         if destination.exists():
             os.replace(destination, previous)
             old_moved = True
