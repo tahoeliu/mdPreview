@@ -54,6 +54,8 @@
     a.btn.primary { background: var(--accent); color:#fff; }
     a.btn.ghost { border:1px solid var(--line); color: var(--ink); }
     section { padding: 48px 0; border-top: 1px solid var(--line); }
+    pre.cmd { background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 10px; white-space: pre-wrap; word-break: break-all; font-size: 14px; line-height: 1.5; }
+    .note { color: var(--muted, #64748b); font-size: 14px; }
     h2 { font-size: 30px; letter-spacing:-0.01em; margin: 0 0 8px; }
     .sub { color: var(--muted); margin: 0 0 28px; }
     .features { display:grid; grid-template-columns: 1fr 1fr; gap: 18px; }
@@ -91,12 +93,36 @@
     </div>
   </div>
 
+  <section id="install">
+    <div class="wrap">
+      <h2>Install</h2>
+      <p class="sub">One line in Terminal. It verifies a signature and checksum before installing, and macOS shows no security prompt.</p>
+      <pre class="cmd">curl -fsSL https://raw.githubusercontent.com/tahoeliu/mdPreview/main/scripts/get.sh | bash</pre>
+      <p class="note">Or <code>brew install --cask --no-quarantine tahoeliu/tap/mdpreview</code>, or download the disk image from <a href="https://github.com/tahoeliu/mdPreview/releases/latest" target="_blank" rel="noopener">Releases</a> (Apple Silicon and Intel). mdPreview is free open-source software with an ad-hoc signature, so a browser-downloaded copy needs <em>System Settings → Privacy &amp; Security → Open Anyway</em> once. Requires macOS 13 or later.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="wrap">
+      <h2>Share it properly</h2>
+      <p class="sub">The part most Markdown viewers get wrong.</p>
+      <div class="features">
+        <div class="feature"><h3>📄 PDF that looks right</h3><p>Real pagination, page numbers, bookmarks, compact print typography, and Chinese text you can search and copy.</p></div>
+        <div class="feature"><h3>📝 Native Word files</h3><p>Real heading styles, tables, images and footnotes — not HTML in disguise.</p></div>
+        <div class="feature"><h3>📋 Copy as Rich Text</h3><p>Paste formatted text into Mail, Notes, Word or chat apps.</p></div>
+        <div class="feature"><h3>🧮 Math &amp; diagrams</h3><p>KaTeX formulas and Mermaid diagrams render in the app and in every export.</p></div>
+        <div class="feature"><h3>🖨️ Print-ready</h3><p>10.5&nbsp;pt body text independent of your on-screen zoom; code and table backgrounds print.</p></div>
+        <div class="feature"><h3>⌨️ Command line</h3><p><code>mdpreview export notes.md --to pdf</code> — headless export for scripts.</p></div>
+      </div>
+    </div>
+  </section>
+
   <section>
     <div class="wrap">
       <h2>Features</h2>
       <p class="sub">Built for people who just want to read and write Markdown on a Mac.</p>
       <div class="features">
-        <div class="feature"><h3>⚡ Live preview</h3><p>Double-click a <code>.md</code> file and see it rendered instantly with marked.js.</p></div>
+        <div class="feature"><h3>⚡ Live preview</h3><p>Double-click a <code>.md</code> file and see it rendered instantly — tables, code, math, footnotes and alerts.</p></div>
         <div class="feature"><h3>✏️ Edit mode</h3><p>Toggle between preview and source editing with one key (⌘E).</p></div>
         <div class="feature"><h3>🌙 Dark mode</h3><p>Follows your macOS appearance automatically.</p></div>
         <div class="feature"><h3>🔍 In-file search</h3><p>Quickly find content inside any document.</p></div>

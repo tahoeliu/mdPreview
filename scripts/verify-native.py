@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 root=Path(__file__).resolve().parent.parent
-parser=argparse.ArgumentParser();parser.add_argument('--app',default=str(root/'WorkSpace/dist/release-1.5.0/mdPreview.app'))
+parser=argparse.ArgumentParser();parser.add_argument('--app',default=str(root/'WorkSpace/dist'/('release-'+(root/'VERSION').read_text().strip())/'mdPreview.app'))
 args=parser.parse_args();app=Path(args.app)
 data=root/'WorkSpace/native-verification'/str(time.time_ns());data.mkdir(parents=True)
 source=data/'native.md';source.write_text('# Native verification\n\nInitial document',encoding='utf-8')

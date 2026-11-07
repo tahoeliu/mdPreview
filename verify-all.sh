@@ -1,31 +1,48 @@
 #!/bin/bash
+# 发布前的完整本地验收（不会安装、不会发布）：
+#   MDPREVIEW_VERIFY_APP=path/to/mdPreview.app MDPREVIEW_VERIFY_ARCH=arm64 ./verify-all.sh
+# 可选：MDPREVIEW_COMPAT_MATRIX=path/to/matrix.json —— 在 Word/WPS/微信等真实软件里人工验证导出文件的证据。
+# 提供了就必须通过校验；没提供则明确提示“跨软件兼容性未独立验证”，README 也不会声称它。
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 : "${MDPREVIEW_VERIFY_APP:?必须指定待验收应用，不会自动安装}"
-: "${MDPREVIEW_VERIFY_ARCH:?必须明确arm64/x86_64/universal}"
-: "${MDPREVIEW_COMPAT_MATRIX:?必须提供完整人工兼容性证据JSON}"
-: "${MDPREVIEW_COLD_START_RESULT:?必须提供原生冷启动实测JSON}"
-export PLAYWRIGHT_BROWSERS_PATH="$ROOT/WorkSpace/browsers"
-export MDPREVIEW_VERIFY_APP MDPREVIEW_COLD_START_RESULT
+: "${MDPREVIEW_VERIFY_ARCH:?必须明确 arm64 或 x86_64}"
+export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$ROOT/WorkSpace/browsers}"
+export MDPREVIEW_DISABLE_UPDATES=1
 VERSION="$(<VERSION)"
-for file in tests/test_output_quality.py tests/test_release_signatures.py tests/test_release_zip.py tests/test_security_review_native.py tests/test_security_review.js tests/test_release_headless.js tests/perf.spec.js tests/accessibility.spec.js tests/release-playwright.config.js; do
-  [[ -f "$file" ]] || { printf '缺失必要门禁：%s\n' "$file" >&2; exit 1; }
-done
-node -e 'require.resolve("@axe-core/playwright")'
+PY=.venv/bin/python
+
+echo '== 静态与供应链检查'
+$PY -m ruff check mdpreview_core scripts mdPreview.py --select F821,E9
 node scripts/extract-i18n.mjs --check
 node scripts/vendor.mjs --check
-node -e 'const fs=require("fs"),cp=require("child_process");for(const name of fs.readdirSync("WorkSpace/tests").filter(x=>/^test_.*\.js$/.test(x)&&x!=="test_vendor.js")){const r=cp.spawnSync(process.execPath,["tests/"+name],{encoding:"utf8"});process.stdout.write(r.stdout+r.stderr);if(r.status!==0||/Uncaught/.test(r.stderr))process.exit(1);}'
-.venv/bin/python scripts/test-python.py
-.venv/bin/python tests/test_output_quality.py
-.venv/bin/python tests/test_release_signatures.py
-.venv/bin/python tests/test_release_zip.py
-.venv/bin/python tests/test_security_review_native.py
+npm audit --audit-level=high
+
+echo '== 单元与浏览器测试'
+npm test
+$PY scripts/test-python.py
 node node_modules/@playwright/test/cli.js test --config=playwright.config.js
-node node_modules/@playwright/test/cli.js test --config=tests/release-playwright.config.js --project=webkit
-.venv/bin/python scripts/check_release.py --app "$MDPREVIEW_VERIFY_APP"
-.venv/bin/python scripts/verify-native.py --app "$MDPREVIEW_VERIFY_APP"
+
+echo '== 对已构建应用的原生验收'
+$PY scripts/check_release.py --app "$MDPREVIEW_VERIFY_APP"
+$PY scripts/verify-native.py --app "$MDPREVIEW_VERIFY_APP"
+$PY scripts/verify-headless.py --app "$MDPREVIEW_VERIFY_APP"
+$PY scripts/verify-update-e2e.py --app "$MDPREVIEW_VERIFY_APP"
 node scripts/verify-architecture.mjs "$MDPREVIEW_VERIFY_APP" "$MDPREVIEW_VERIFY_ARCH"
-node scripts/verify-matrix.mjs "$MDPREVIEW_COMPAT_MATRIX" "$MDPREVIEW_VERIFY_APP" "$VERSION"
-.venv/bin/python -c 'from mdpreview_core.release_sig import configured; assert configured(), "生产发布公钥未配置"'
-printf '%s\n' '所有必要门禁通过；未执行安装或发布。'
+
+echo '== 冷启动实测与性能/无障碍预算'
+COLD="$(mktemp -u "$ROOT/WorkSpace/cold-start.XXXXXX.json")"
+$PY scripts/measure-cold-start.py --app "$MDPREVIEW_VERIFY_APP" --out "$COLD"
+MDPREVIEW_COLD_START_RESULT="$COLD" MDPREVIEW_VERIFY_APP="$MDPREVIEW_VERIFY_APP" \
+  node node_modules/@playwright/test/cli.js test --config=tests/release-playwright.config.js --project=webkit
+
+echo '== 发布公钥与（可选）人工兼容性矩阵'
+if [[ -n "${MDPREVIEW_COMPAT_MATRIX:-}" ]]; then
+  node scripts/verify-matrix.mjs "$MDPREVIEW_COMPAT_MATRIX" "$MDPREVIEW_VERIFY_APP" "$VERSION"
+else
+  echo '提示：未提供 MDPREVIEW_COMPAT_MATRIX，跨软件（Word/WPS/微信等）与跨系统兼容性未经独立验证。'
+fi
+$PY -c 'from mdpreview_core.release_sig import configured; assert configured(), "生产发布公钥未配置"'
+
+printf '%s\n' '所有门禁通过；未执行安装或发布。'

@@ -10,8 +10,8 @@ window.DocumentOutline = {
       if (!toggle) return;
       toggle.classList.toggle('collapsed', hidden);
       toggle.setAttribute('aria-expanded', hidden ? 'false' : 'true');
-      toggle.setAttribute('aria-label', hidden ? t('Show outline', '显示目录') : t('Hide outline', '隐藏目录'));
-      toggle.setAttribute('title', hidden ? t('Show outline', '显示目录') : t('Hide outline', '隐藏目录'));
+      toggle.setAttribute('aria-label', hidden ? t('Show outline', '显示大纲') : t('Hide outline', '隐藏大纲'));
+      toggle.setAttribute('title', hidden ? t('Show outline', '显示大纲') : t('Hide outline', '隐藏大纲'));
     }
 
 

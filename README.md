@@ -1,400 +1,158 @@
 # mdPreview — A Minimal Markdown Viewer & Editor for macOS
 
-[简体中文](README.zh-CN.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Release gates](RELEASE.md)
-
-> **Development branch status:** signed ZIP updates, CLI export and release gates are under development. No production release public key is configured: signed installation is disabled, not silently downgraded. Native acceptance, browser performance budgets and universal2 compatibility have not been verified. The separate Homebrew tap has not been created. No end-to-end demo GIF is available yet.
-
-### Installation channels
-
-- **DMG:** inspect the existing Releases assets below. Ad-hoc signing is not Apple notarization; follow macOS prompts only after verifying the source.
-- **Command-line installer:** `scripts/get.sh` currently fails closed until the publisher trust root is configured. Standalone curl-to-shell installation is not ready; do not advertise it as working.
-- **Homebrew:** the local Cask is retained; no uncreated tap or unverified installation command is advertised.
-
-### Privacy and export verification
-
-Automatic update checks are off by default. Remote images require permission. Manual update checks contact GitHub. Diagnostic archives contain allowlisted settings and structured events only, never arbitrary raw log text. Headless export disables remote access and dialogs. Word, rich-text and native output interoperability still require the manual matrix in RELEASE.md.
-
-### CLI (development)
-
-Run `bash scripts/mdpreview export input.md --to pdf -o output.pdf` against an installed app, or set `MDPREVIEW_APP` to an explicitly selected application bundle. Existing output files are refused. Exit codes: 0 success, 1 invalid arguments, 2 rendering/export failure. Native hidden-window acceptance is pending.
-
-### Frequently asked questions
-
-**Why are signed updates disabled?** A maintainer must independently verify and configure the production P-256 public key. Missing trust roots, invalid signatures and digest mismatches are fatal.
-
-**Is universal2 supported?** Not yet verified. Architecture labels require inspection of every bundled Mach-O binary and native compatibility evidence.
-
-**Quick Look?** The optional extension has not passed its installation gate and is not implemented in this branch.
-
-**Where are the tests and CI?** Local test resources and workflow templates live under ignored `WorkSpace/`; GitHub does not automatically run them there. Missing release gates are failures, not green skips.
+[简体中文](README.zh-CN.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 <div align="center">
 
-**Open, read, edit, and export Markdown files on Mac — with a clean, distraction-free interface.**
+**Open, read, edit and share Markdown files on Mac — in a clean, distraction-free window.**
 
-[Download mdPreview for macOS](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg)
+[Download for macOS](https://github.com/tahoeliu/mdPreview/releases/latest) · Free · Open source (MIT) · Works offline
 
 </div>
-
----
-
-## The easiest way to open `.md` files on Mac
-
-Markdown files are everywhere now: AI chat exports, product notes, README files, technical docs, meeting summaries, research notes, and personal knowledge bases.
-
-But for many people, opening a `.md` file still feels unnecessarily technical.
-
-**mdPreview makes Markdown feel simple.**
-
-Double-click a Markdown file and read it in a beautiful native macOS window — no browser, no account, no setup, no heavy editor.
 
 <p align="center">
   <img src="images/screenshot-reading.png" alt="Clean reading view with outline" width="49%">
   &nbsp;
   <img src="images/screenshot-mermaid.png" alt="Mermaid diagrams and math rendering" width="49%">
 </p>
-<p align="center">
-  <em>Left: clean reading view with outline &nbsp;•&nbsp; Right: Mermaid diagrams & math rendering</em>
-</p>
 
 ---
 
 ## Why mdPreview?
 
-### Minimal by design
+Markdown files are everywhere: AI chat exports, README files, meeting notes, research notes, personal knowledge bases. But opening a `.md` file still feels technical.
 
-mdPreview is built around one idea:
+**Double-click a Markdown file and read it like a normal document** — no browser, no account, no heavy editor. When you need to share it, export a properly typeset PDF or Word file, or copy it as rich text into Mail, Notes, Word or a chat app.
 
-> Your document should be the focus, not the app.
-
-The interface stays quiet and clean. No side panels unless you need them. No workspace setup. No project management. No account login. No visual clutter.
-
-Just open a Markdown file and read.
-
-### Made for non-technical users
-
-You do not need to understand Markdown syntax to use mdPreview.
-
-If someone sends you a `.md` file, or if you export a response from ChatGPT, Claude, Gemini, or another AI tool, mdPreview lets you open it like a normal document.
-
-### Useful when you need more
-
-When reading is not enough, mdPreview also lets you edit, search, navigate long documents, and export your file into formats that are easier to share.
-
----
-
-## What you can do with mdPreview
-
-| Need | What mdPreview does |
+| You want to… | mdPreview |
 |---|---|
-| Read AI-generated content | Open ChatGPT / Claude Markdown exports cleanly |
-| Read long documents | Use the built-in outline / table of contents |
-| Edit content | Switch between preview and source editing |
-| Paste formatted content | Paste rich text from web pages, docs, or AI chats and convert it cleanly into Markdown |
-| Share with others | Export to PDF, Word, PNG, HTML, plain text, or Markdown |
-| Work offline | No internet connection required |
-| Keep things private | No login, no tracking, no cloud upload |
+| Read AI-generated answers (ChatGPT, Claude, Gemini…) | Renders tables, code, math, Mermaid diagrams and footnotes correctly |
+| Read a long document | Outline sidebar, remembers where you stopped, reloads when the file changes |
+| Hand it to someone who doesn't use Markdown | PDF, Word, HTML, PNG, plain text — or **Copy as Rich Text** |
+| Print it | Compact 10.5 pt typography, real pagination, page numbers |
+| Fix a typo or two | Switch to source mode (`⌘E`) or edit the preview directly |
+| Keep things private | No account, no telemetry, no cloud, works offline |
 
----
+## Install
 
-## Highlights in the latest version
+**Option A — one line, no security prompt (recommended).** Open Terminal and run:
 
-mdPreview has recently become more useful, safer, and more comfortable for everyday writing and reading.
+```bash
+curl -fsSL https://raw.githubusercontent.com/tahoeliu/mdPreview/main/scripts/get.sh | bash
+```
 
-### Cleaner reading experience
+The script is short and worth reading first. It downloads the latest release for your Mac (Apple Silicon or Intel), verifies an ECDSA signature over the checksum list and the archive checksum, checks the app's identity, and installs it into `/Applications`. Files fetched with `curl` are not quarantined by macOS, so no Gatekeeper dialog appears. It never uses `sudo` and never touches quarantine attributes.
 
-- Minimal macOS-style interface
-- Better typography for long-form reading
-- Dark Mode support
-- Adjustable text size with keyboard shortcuts
-- A collapsible outline for long documents
+**Option B — Homebrew:**
 
-### Better editing workflow
+```bash
+brew install --cask --no-quarantine tahoeliu/tap/mdpreview
+```
 
-- One-click switch between rendered preview and Markdown source
-- Unsaved-change indicator in the window title
-- Autosaved drafts to help recover work after unexpected quits
-- Safer save behavior designed to avoid accidental data loss
+**Option C — disk image:** download `mdPreview-<version>-arm64.dmg` (Apple Silicon) or `-x86_64.dmg` (Intel) from [Releases](https://github.com/tahoeliu/mdPreview/releases/latest) and drag the app into Applications.
 
-### More export options
+> **Why does macOS warn me about the disk image?** mdPreview is free open-source software signed with an *ad-hoc* signature rather than a paid Apple Developer certificate, so it is not notarized. A browser-downloaded copy is therefore blocked on first launch. Open **System Settings → Privacy & Security** and click **Open Anyway** next to mdPreview (macOS 15 and later; on 13–14 you can also Control-click → Open). You only need to do this once. Options A and B avoid the prompt.
 
-Export your Markdown document as:
+The release signing key fingerprint (SHA-256 of the public key) is published in [SECURITY.md](SECURITY.md).
 
-- PDF
-- Word document
-- PNG image
-- Web page
-- Plain text
-- Markdown
+Requires macOS 13 or later. Apple Silicon builds are verified by the maintainer; Intel builds are produced and smoke-tested by CI on an Intel runner.
 
-This makes mdPreview useful not only for reading Markdown, but also for sharing documents with people who do not use Markdown.
+### Make it the default for `.md` files
 
-### Better support for modern Markdown
+Select any `.md` file in Finder → **File → Get Info → Open with → mdPreview → Change All…**
 
-mdPreview supports common Markdown features including:
+## What it can do
 
-- Headings
-- Lists
-- Tables
-- Links and images
-- Code blocks
-- Blockquotes
-- Mermaid diagrams
-- Footnotes
-- Inline and block-style math text
-- Front matter
+### Reading
+- Outline sidebar, dark mode, adjustable text size (`⌘=` / `⌘-`, reset `⌘0`) and reading width (`⌥⌘=` / `⌥⌘-`)
+- Remembers your window position, text size and reading position per document
+- Reloads automatically when another program (or an AI agent) changes the file
+- Find (`⌘F`), multiple windows, open linked `.md` files with a click, drag a `.md` file onto the window
+- Tables, task lists (click to tick), footnotes, front matter, syntax-highlighted code with a copy button
+- **Math** with KaTeX (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`), **Mermaid** diagrams, GitHub-style alerts (`> [!NOTE]`)
+- Chinese typography done properly (language-aware fonts, spacing)
 
-### Safer rendering
+### Editing
+- Edit the rendered view directly, or switch to source (`⌘E`) with `⌘B` / `⌘I` / `⌘K`, list continuation and Tab indenting
+- **Paste as Markdown** (`⇧⌘V`): paste formatted text from web pages, docs and AI chats and get clean Markdown
+- Paste or drop images: they are saved next to the document in `assets/` and linked with relative paths
+- Drafts are autosaved; saving never overwrites changes you made while the disk write was pending
 
-Markdown files can contain HTML and diagrams. mdPreview includes safer rendering behavior for risky content, including additional cleanup around embedded HTML and Mermaid output.
+### Sharing
+Export with **File → Export As…** or print with `⌘P`:
 
-The goal is simple: open Markdown files with less worry.
+| Format | Notes |
+|---|---|
+| **PDF** | Real pagination on A4 or Letter, compact 10.5 pt body independent of on-screen zoom, page numbers, bookmarks from headings, searchable and copyable Chinese text, links kept |
+| **Word (.docx)** | Native Word document: real Heading styles, tables with repeating header rows, images, footnotes; formulas and diagrams as images |
+| **HTML** | One self-contained file (images embedded), print styles included, works in dark mode |
+| **PNG** | One long, light-themed image |
+| **Plain text / Markdown** | Real plain text (no `##` or `**`), or the Markdown source |
+| **Copy as Rich Text** (`⇧⌘C`) | Puts HTML, RTF and plain text on the clipboard, so headings, tables and code keep their formatting when pasted into apps such as Mail, Notes, Word or chat tools |
 
----
+Export options (paper, margins, font size, page numbers, front matter…) are in **Settings** (`⌘,`) and remembered.
 
-## Download & install
+### Command line
+**mdPreview → Install Command Line Tool…** adds `mdpreview`:
 
-### 1. Download
-
-[Download mdPreview.dmg](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg)
-
-### 2. Install
-
-Open the `.dmg` file and drag **mdPreview** into your **Applications** folder.
-
-### 3. Open it the first time
-
-Because mdPreview is an open-source app and may not be signed with an Apple Developer certificate, macOS may show a security warning the first time you open it.
-
-First verify the asset source and publisher-provided integrity information. Follow the controls offered by your macOS version; a right-click override is not available in every version. This development branch has not passed fresh-account Gatekeeper acceptance. Do not disable system protections to bypass an unexplained verification failure.
-
----
-
-## Make mdPreview the default app for Markdown files
-
-If you want every `.md` file to open with mdPreview:
-
-1. Find any `.md` file in Finder
-2. Right-click it and choose **Get Info**
-3. Find **Open with**
-4. Select **mdPreview**
-5. Click **Change All...**
-
-Now Markdown files will open in mdPreview by default.
-
----
+```bash
+mdpreview notes.md                                  # open in the app
+mdpreview export notes.md --to pdf -o notes.pdf     # headless export: pdf, html, docx, txt, png
+```
 
 ## Keyboard shortcuts
 
-| Shortcut | Action |
-|---|---|
-| `⌘ N` | New file |
-| `⌘ O` | Open file |
-| `⌘ W` | Close window |
-| `⌘ S` | Save |
-| `⌘ ⇧ S` | Save As |
-| `⌘ P` | Print |
-| `⌘ E` | Switch between preview and source |
-| `⌘ ⇧ V` | Paste as Markdown |
-| `⌘ F` | Find |
-| `⌘ G` | Find next |
-| `⌘ ⇧ G` | Find previous |
-| `⌘ =` | Increase text size |
-| `⌘ -` | Decrease text size |
-| `⌘ ⌥ =` | Increase reading width |
-| `⌘ ⌥ -` | Decrease reading width |
-| `⌘ ,` | Settings |
-| `⌘ 0` | Reset reading width |
-| `⌘ ⌥ O` | Toggle outline |
-| `⌘ ⌥ F` | Enter full screen |
-| `⌘ I` | Show file properties |
+| Shortcut | Action | Shortcut | Action |
+|---|---|---|---|
+| `⌘N` | New | `⌘F` / `⌘G` / `⇧⌘G` | Find / next / previous |
+| `⌘O` | Open | `⌘=` / `⌘-` / `⌘0` | Bigger / smaller / reset text |
+| `⌘S` / `⇧⌘S` | Save / Save As | `⌥⌘=` / `⌥⌘-` / `⌥⌘0` | Wider / narrower / reset width |
+| `⌘P` | Print | `⌥⌘O` | Show / hide outline |
+| `⌘E` | Preview ⇄ Source | `⌃⌘F` | Full screen |
+| `⇧⌘V` | Paste as Markdown | `⇧⌘C` / `⌥⌘C` | Copy as Rich Text / as Markdown |
+| `⌘,` | Settings | `⌘I` | Properties |
 
----
-
-## Who is mdPreview for?
-
-mdPreview is a good fit if you:
-
-- Receive Markdown files but do not want to open a code editor
-- Save AI-generated answers as `.md` files
-- Want a lightweight Typora or MacDown alternative
-- Need a simple Markdown reader for macOS
-- Prefer offline tools
-- Like clean, minimal interfaces
-- Want a free and open-source app
-
-It is intentionally not a full writing studio, project manager, or IDE.
-
-It is a focused Markdown viewer and editor.
-
----
-
-## Feature scope and verification
-
-| Capability | This development branch | Remaining acceptance |
-|---|---|---|
-| Local reading and source editing | Implemented | Current packaged-app regression |
-| Mermaid and KaTeX | Vendored and integrated | Native fonts and large-document rendering |
-| PDF / Word / HTML / TXT / PNG | Shared output pipeline | Third-party viewer matrix |
-| Rich-text copying | HTML / RTF / text integration | Native clipboard and target applications |
-| CLI export | Hidden-window entry and shared pipeline | Native visibility and zero-network observation |
-| Signed updates | Fail closed without publisher key | Production verifier and rollback testing |
-
-No current pricing or feature claims are made about third-party products without a dated comparison.
-
----
+The Help menu has the full list, a sample document, **Report an Issue…** (pre-fills only version and OS) and **Export Diagnostics…**.
 
 ## Privacy
 
-mdPreview runs locally on your Mac.
+- No account, no ads, no telemetry, no cloud sync, no document upload.
+- **Remote images are not loaded by default** — a bar offers *Load* / *Always load*, because loading an image tells its server that you opened the file. Mermaid, math and everything else render locally.
+- The only network access is an optional **update check**: one request to GitHub's releases API, on by default, switch it off in Settings. Updates are verified against the release signing key before anything is installed.
+- Diagnostic archives contain allow-listed settings and structured events only — never document text or paths. Inspect them before sharing.
 
-- No account
-- No ads
-- No telemetry
-- No cloud sync
-- No document upload
-- No internet required for normal use
+## Safety
 
-Your Markdown files stay on your computer.
-
----
+Markdown can contain HTML. All rendered content goes through DOMPurify with URL filtering, and the page runs under a strict Content-Security-Policy (no inline scripts, no `eval`). Third-party libraries are vendored, checksummed and listed with their licenses in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## FAQ
 
-### What is mdPreview?
+**Do I need to know Markdown?** No. Use it as a reader; switch to source only when you want to.
 
-mdPreview is a free, open-source Markdown viewer and editor for macOS. It lets you open, read, edit, and export `.md` files in a clean native Mac interface.
+**Is it really free?** Yes, MIT-licensed. If it saves you time, a GitHub star helps others find it.
 
-### Do I need to know Markdown?
+**Does it work offline?** Yes. Nothing is needed from the network except the optional update check.
 
-No. You can use mdPreview simply as a reader. If you want to edit the source text, you can switch to edit mode anytime.
+**Does it support Finder's spacebar preview (Quick Look)?** Not in official builds. An experimental extension lives in [`quicklook/`](quicklook/README.md); the page is tested, but macOS launching it could not be verified.
 
-### Is mdPreview free?
+**Is it a replacement for Typora / VS Code?** No — it is a focused reader with convenient editing and best-in-class sharing, not a writing studio or an IDE.
 
-Yes. mdPreview is free and open source under the MIT License.
-
-### Does it work offline?
-
-Yes. mdPreview works offline and does not require an account.
-
-### Why does macOS say the app cannot be opened?
-
-Ad-hoc signing is not Apple notarization. Verify the download source and follow the controls offered by your macOS version; this branch does not claim that one override works across all supported systems.
-
-### Can I export Markdown to PDF or Word?
-
-Yes. mdPreview supports exporting Markdown documents to PDF, Word, PNG, HTML, plain text, and Markdown.
-
-### Is this a replacement for VS Code?
-
-Not exactly. VS Code is a full development environment. mdPreview is for people who want a simple, focused way to read and edit Markdown files.
-
----
-
-## For developers
-
-mdPreview is built with:
-
-- Python 3.13
-- macOS 13 or later (architecture/OS combinations must be tested before claiming support)
-- Node 22+ for development tests; no Node runtime needed in the app
-- pywebview
-- WKWebView on macOS
-- marked.js
-- Mermaid
-- Native macOS menus and file dialogs
-
-### Build from source
+## Build from source
 
 ```bash
 python3.13 -m venv .venv
 .venv/bin/python -m pip install -r requirements-lock.txt
-npm ci
-npm test
-.venv/bin/python scripts/test-python.py
-./build_dmg.sh
-# Build only. Installation and release require separate approval and acceptance.
+npm ci --ignore-scripts && npm run vendor
+npm test && .venv/bin/python scripts/test-python.py
+./build.sh            # → WorkSpace/dist/release-<version>/mdPreview.app
 ```
 
-### Project structure
-
-```text
-mdPreview/
-├── mdPreview.py    # Python app, window, menu, and file APIs
-├── index.html            # WebView shell
-├── css/                  # Screen, content and print styles
-├── app.js                # Application integration
-├── frontend/             # Bridge, rendering, output, language and CLI modules
-├── mdpreview_core/       # Native output, storage, diagnostics and release logic
-├── vendor/               # Locked libraries, fonts, licences and checksums
-├── WorkSpace/            # Local tests, evidence and inactive CI templates
-├── app_icon.icns         # Application icon
-├── Info.plist            # macOS app metadata
-├── VERSION               # App version
-├── build.sh              # Build script
-├── install.sh            # Local install script
-└── README.md
-```
-
----
-
-## Contributing
-
-Contributions are welcome.
-
-You can help by:
-
-- Reporting bugs
-- Suggesting improvements
-- Improving documentation
-- Testing new releases
-- Opening pull requests
-
-Please use [GitHub Issues](https://github.com/tahoeliu/mdPreview/issues) for bug reports and feature requests.
-
----
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the project layout and rules, and [RELEASE.md](RELEASE.md) for how releases are cut and verified.
 
 ## License
 
-mdPreview is released under the MIT License.
-
-See [LICENSE](LICENSE) for details.
+MIT — see [LICENSE](LICENSE). Made by [Tahoe Liu](https://github.com/tahoeliu).
 
 ---
 
-<div align="center">
-
-**A minimal Markdown app for people who just want to read the file.**
-
-Made by [Tahoe Liu](https://github.com/tahoeliu)
-
-[Download mdPreview](https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg) · [Back to top](#mdpreview--a-minimal-markdown-viewer--editor-for-macos)
-
-</div>
-
----
-
-**Keywords:** macOS Markdown viewer, Markdown reader for Mac, free Markdown editor for Mac, minimal Markdown app, open .md files on Mac, AI Markdown viewer, ChatGPT Markdown viewer, Claude Markdown export, Typora alternative, MacDown alternative, open source Markdown viewer, Mermaid Markdown viewer
-
-
-## Reliability work in 1.5.0
-
-Revision-aware saves preserve edits made while disk writes are pending. Each
-untitled document has its own recoverable draft. Markdown math/footnotes and
-formatted table cells retain their source when editing the rendered document.
-HTML and Word exports render the current document revision; local raster images
-inside the document directory are embedded in HTML for portable sharing.
-Those historical notes are not the current export contract: this branch adds paged
-PDF and KaTeX typesetting, whose latest native acceptance remains pending.
-
-The renderer uses vendored DOMPurify and rejects unsafe URLs and UI-ID shadowing.
-Updates verify the exact versioned GitHub asset size/SHA-256, app identity, and
-code signature; installation keeps a recoverable previous app until UI readiness.
-Distribution intentionally uses ad-hoc signing, without Developer ID notarization.
-
-After an authorized build, run `./verify-all.sh` with the explicit candidate app,
-architecture, compatibility matrix and native cold-start evidence described in
-RELEASE.md. It checks regressions, WebKit budgets and native/CLI outputs; it does
-not build, install or publish automatically.
-Builds are generated under WorkSpace/; tests never replace /Applications or use
-real application drafts. Successful unit tests alone are not release certification.
+**Keywords:** macOS Markdown viewer, Markdown reader for Mac, open .md files on Mac, Markdown to PDF, Markdown to Word, AI Markdown viewer, ChatGPT Markdown, Claude Markdown export, Typora alternative, MacDown alternative, open source Markdown viewer, Mermaid, KaTeX
