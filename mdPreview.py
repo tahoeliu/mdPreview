@@ -3440,7 +3440,7 @@ if HAS_COCOA:
                 deadline = time.time() + 10
                 while time.time() < deadline and id(win) not in _windows_js_ready:
                     time.sleep(0.05)
-                _dispatch_js_to(win, 'pasteAsMarkdown()')
+                _dispatch_js_to(win, 'pasteClipboardAndRead()')
             threading.Thread(target=run, daemon=True).start()
 
         def findAction_(self, sender):

@@ -32,7 +32,8 @@ $PY scripts/verify-update-e2e.py --app "$MDPREVIEW_VERIFY_APP"
 node scripts/verify-architecture.mjs "$MDPREVIEW_VERIFY_APP" "$MDPREVIEW_VERIFY_ARCH"
 
 echo '== 冷启动实测与性能/无障碍预算'
-COLD="$(mktemp -u "$ROOT/WorkSpace/cold-start.XXXXXX.json")"
+COLD="$ROOT/WorkSpace/cold-start-$$.json"
+trap 'rm -f "$COLD"' EXIT
 $PY scripts/measure-cold-start.py --app "$MDPREVIEW_VERIFY_APP" --out "$COLD"
 MDPREVIEW_COLD_START_RESULT="$COLD" MDPREVIEW_VERIFY_APP="$MDPREVIEW_VERIFY_APP" \
   node node_modules/@playwright/test/cli.js test --config=tests/release-playwright.config.js --project=webkit

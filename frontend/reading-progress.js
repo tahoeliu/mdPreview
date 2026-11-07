@@ -45,7 +45,7 @@ window.ReadingProgress = (() => {
     const scroller = deps.scroller || document.querySelector('.scroll-wrap');
     const content = deps.content || document.getElementById('content');
     const page = deps.page || document.getElementById('page');
-    const T = deps.t || ((en, zh) => (window.I18n && I18n.t ? I18n.t(en, zh) : en));
+    const t = deps.t || ((en, zh) => (window.I18n && I18n.t ? I18n.t(en, zh) : en));
     if (!scroller || !content || !page) return null;
 
     const bar = document.createElement('div'); bar.className = 'read-progress'; bar.setAttribute('aria-hidden', 'true');
@@ -69,7 +69,7 @@ window.ReadingProgress = (() => {
     function textFor(progress) {
       const left = total * (1 - progress), n = label(left);
       const pct = Math.round(progress * 100) + '%';
-      return (n === null ? T('Almost done', '快读完了') : T(n + ' min left', '还剩约 ' + n + ' 分钟')) + ' · ' + pct;
+      return (n === null ? t('Almost done', '快读完了') : t('{n} min left', '还剩约 {n} 分钟').replace('{n}', n)) + ' · ' + pct;
     }
     function update(reveal) {
       frame = 0;
@@ -81,10 +81,10 @@ window.ReadingProgress = (() => {
       bar.classList.add('on');
       const total1 = label(total);
       end.hidden = false;
-      end.textContent = total1 ? T('End · about ' + total1 + ' min read', '全文完 · 约 ' + total1 + ' 分钟') : T('End', '全文完');
+      end.textContent = total1 ? t('End · about {n} min read', '全文完 · 约 {n} 分钟').replace('{n}', total1) : t('End', '全文完');
       if (progress >= 0.995) { hud.classList.remove('on'); return; }
       hud.textContent = scroller.scrollTop < 8 && reveal === 'open'
-        ? T('About ' + (label(total) || 1) + ' min read', '约 ' + (label(total) || 1) + ' 分钟读完')
+        ? t('About {n} min read', '约 {n} 分钟读完').replace('{n}', label(total) || 1)
         : textFor(progress);
       hud.classList.add('on');
       clearTimeout(hideTimer);

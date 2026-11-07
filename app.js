@@ -1465,3 +1465,12 @@ var {
     if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
     else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });
+
+
+// "New from Clipboard": paste into the blank document, then show it rendered
+// (a blank document starts in source mode, but the goal here is reading).
+window.pasteClipboardAndRead = async function () {
+  await Promise.resolve(pasteAsMarkdown());
+  await new Promise(resolve => setTimeout(resolve, 150));
+  if (isSource && getCurrentMarkdown().trim()) await toggleView();
+};

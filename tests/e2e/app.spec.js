@@ -80,6 +80,8 @@ test('selecting text shows the formatting toolbar and bold round-trips to Markdo
   await bold.click();
   await expect(page.locator('#content strong, #content b')).toHaveText('brave');
   expect(await page.evaluate(()=>getCurrentMarkdown())).toContain('**brave**');
+  await page.keyboard.press('Meta+e');
+  await expect(page.locator('.format-toolbar')).toBeHidden();
 });
 test('long document renders its tail and source outline navigates',async({page},testInfo)=>{
   const measurements=await page.evaluate(async()=>{

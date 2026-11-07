@@ -205,3 +205,5 @@ body:not(.has-toc) .page { margin: 0 auto; max-width: var(--page-width, 720px); 
 .format-toolbar input { width: 280px; height: 28px; border: 0; outline: none; padding: 0 8px; font-size: 13px; background: transparent; color: inherit; }
 @media (prefers-color-scheme: dark) { .format-toolbar { background: #2c2c2e; color: #f0f0f0; border-color: rgba(255,255,255,.14); } .format-toolbar button:hover { background: rgba(255,255,255,.1); } }
 @media print { .format-toolbar { display: none !important; } }
+
+.scroll-wrap:focus, .goto-box ul:focus { outline: none; }

@@ -20,15 +20,15 @@ window.GoToHeading = (() => {
   }
   function open() {
     const content = document.getElementById('content');
-    const T = (en, zh) => (window.I18n && I18n.t ? I18n.t(en, zh) : en);
-    if (!content || content.classList.contains('hidden')) { showStatus(T('Switch to preview to jump to a heading', '请先切换到预览再跳转标题')); return; }
+    const t = (en, zh) => (window.I18n && I18n.t ? I18n.t(en, zh) : en);
+    if (!content || content.classList.contains('hidden')) { showStatus(t('Switch to preview to jump to a heading', '请先切换到预览再跳转标题')); return; }
     const all = headings(content);
-    if (!all.length) { showStatus(T('This document has no headings', '此文档没有标题')); return; }
+    if (!all.length) { showStatus(t('This document has no headings', '此文档没有标题')); return; }
     close();
     const overlay = document.createElement('div'); overlay.className = 'goto-overlay'; overlay.id = 'gotoOverlay';
-    const box = document.createElement('div'); box.className = 'goto-box'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', T('Go to heading', '跳转到标题'));
-    const input = document.createElement('input'); input.type = 'text'; input.placeholder = T('Go to heading…', '跳转到标题…'); input.setAttribute('aria-label', input.placeholder);
-    const list = document.createElement('ul'); list.setAttribute('role', 'listbox');
+    const box = document.createElement('div'); box.className = 'goto-box'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', t('Go to heading', '跳转到标题'));
+    const input = document.createElement('input'); input.type = 'text'; input.placeholder = t('Go to heading…', '跳转到标题…'); input.setAttribute('aria-label', input.placeholder);
+    const list = document.createElement('ul'); list.setAttribute('role', 'listbox'); list.setAttribute('aria-label', t('Headings', '标题')); list.tabIndex = 0;
     box.append(input, list); overlay.append(box); document.body.append(overlay);
     let shown = [], active = 0;
     function render() {
@@ -40,7 +40,7 @@ window.GoToHeading = (() => {
         li.addEventListener('mousedown', e => { e.preventDefault(); go(item); });
         list.append(li);
       }
-      if (!shown.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = T('No matching heading', '没有匹配的标题'); list.append(li); }
+      if (!shown.length) { const li = document.createElement('li'); li.className = 'empty'; li.textContent = t('No matching heading', '没有匹配的标题'); list.append(li); }
       list.querySelector('.active')?.scrollIntoView({ block: 'nearest' });
     }
     function go(item) {
@@ -50,13 +50,13 @@ window.GoToHeading = (() => {
       else item.el.scrollIntoView({ block: 'start' });
     }
     input.addEventListener('input', () => { active = 0; render(); });
-    input.addEventListener('keydown', e => {
+    box.addEventListener('keydown', e => {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); }
       else if (e.key === 'ArrowDown') { e.preventDefault(); active = Math.min(shown.length - 1, active + 1); render(); }
       else if (e.key === 'ArrowUp') { e.preventDefault(); active = Math.max(0, active - 1); render(); }
       else if (e.key === 'Enter') { e.preventDefault(); if (shown[active]) go(shown[active]); }
     });
-    input.addEventListener('blur', () => setTimeout(close, 120));
+    box.addEventListener('focusout', () => setTimeout(() => { if (!box.contains(document.activeElement)) close(); }, 120));
     overlay.addEventListener('mousedown', e => { if (e.target === overlay) close(); });
     render(); input.focus();
   }

@@ -3,7 +3,7 @@ const path=require('node:path');const {pathToFileURL}=require('node:url');
 
 const SETTINGS={language:'system',restore_session:false,auto_update:false,font_size:16,page_width:720,remote_images:'ask',auto_reload:true};
 const OUTPUT={paper:'auto',margins:'normal',font:'normal',page_numbers:true,show_urls:false,hide_frontmatter:true,h1_new_page:false,pdf_layout:'paged',png_width:'original'};
-const DOCUMENT='# 标题\n\n## 第二节\n\n- [ ] 任务\n\n> [!NOTE]\n> 提示块\n\n```js\nconst x=1;\n```\n\n| 列 A | 列 B |\n| --- | --- |\n| 一 | 二 |\n\n[链接](https://example.com)';
+const DOCUMENT='# 标题\n\n## 第二节\n\n正文里的**加粗**文字\n\n- [ ] 任务\n\n> [!NOTE]\n> 提示块\n\n```js\nconst x=1;\n```\n\n| 列 A | 列 B |\n| --- | --- |\n| 一 | 二 |\n\n[链接](https://example.com)';
 
 async function violations(page){
  const AxeBuilder=require('@axe-core/playwright').default;
@@ -20,6 +20,16 @@ for(const [state,prepare] of [
    await page.evaluate(()=>openSettings());await page.waitForSelector('#modalOverlay.visible');}],
  ['查找栏',async page=>{await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),DOCUMENT);await page.evaluate(()=>openFindBar());await page.waitForSelector('#findBar.visible');}],
  ['空白文档欢迎页',async page=>{await page.evaluate(()=>loadContent('Untitled.md','',720,false,true));}],
+ ['长文阅读辅助与跳转标题',async page=>{
+   const long='# 长文\n\n'+Array.from({length:12},(_,i)=>'## 第 '+(i+1)+' 节\n\n'+'这是一段很长的正文，用来让文档超过两屏。'.repeat(40)+'\n').join('\n');
+   await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),long);
+   await page.evaluate(()=>{document.querySelector('.scroll-wrap').scrollTop=800;});
+   await page.waitForSelector('.read-hud.on');
+   await page.evaluate(()=>openGoToHeading());await page.waitForSelector('#gotoOverlay');}],
+ ['选区格式工具栏',async page=>{
+   await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),DOCUMENT);
+   await page.evaluate(()=>{const p=document.querySelector('#content p, #content li');const r=document.createRange();r.selectNodeContents(p);const s=getSelection();s.removeAllRanges();s.addRange(r);document.dispatchEvent(new Event('mouseup'));});
+   await page.waitForSelector('.format-toolbar:not([hidden])');}],
  ['源码视图',async page=>{await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),DOCUMENT);await page.evaluate(()=>toggleView());}],
 ]){
  for(const colorScheme of ['light','dark']){
