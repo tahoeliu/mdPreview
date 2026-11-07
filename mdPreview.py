@@ -423,12 +423,13 @@ if HAS_COCOA:
     def _make_output_controls(holder):
         from AppKit import NSPopUpButton, NSButton, NSTextField, NSSwitchButton, NSMakeRect, NSRightTextAlignment
         from mdpreview_core.export.settings import CHOICES
-        specs = [('paper','纸张',('pdf',)), ('margins','边距',('pdf',)), ('font','字号',('pdf',)),
-                 ('pdf_layout','PDF布局',('pdf',)), ('page_numbers','页码',('pdf',)),
-                 ('show_urls','显示链接',('pdf',)), ('hide_frontmatter','隐藏元数据',('pdf','html','png')),
-                 ('h1_new_page','一级标题换页',('pdf',)), ('png_width','图片宽度',('png',))]
-        names = {'auto':'自动','a4':'A4','letter':'Letter','narrow':'窄','normal':'标准','wide':'宽',
-                 'small':'小','large':'大','paged':'分页','continuous':'连续长页','original':'当前宽度','mobile':'手机 540px'}
+        specs = [('paper',_t('Paper','纸张'),('pdf',)), ('margins',_t('Margins','边距'),('pdf',)), ('font',_t('Font size','字号'),('pdf',)),
+                 ('pdf_layout',_t('PDF layout','PDF布局'),('pdf',)), ('page_numbers',_t('Page numbers','页码'),('pdf',)),
+                 ('show_urls',_t('Show links','显示链接'),('pdf',)), ('hide_frontmatter',_t('Hide metadata','隐藏元数据'),('pdf','html','png')),
+                 ('h1_new_page',_t('Start heading 1 on new page','一级标题另页'),('pdf',)), ('png_width',_t('PNG width','PNG宽度'),('png',))]
+        names = {'auto':_t('Auto','自动'),'a4':'A4','letter':'Letter','narrow':_t('Narrow','窄'),'normal':_t('Normal','标准'),'wide':_t('Wide','宽'),
+                 'small':_t('Small','小'),'large':_t('Large','大'),'paged':_t('Paged','分页'),'continuous':_t('Continuous long page','连续长页'),
+                 'original':_t('Current width','当前宽度'),'mobile':_t('Phone 540px','手机 540px')}
         values = MarkdownAPI().get_output_settings()
         rows = []
         for key, title, formats in specs:
@@ -1471,7 +1472,7 @@ class MarkdownAPI:
                 self.deleted_on_disk = True
                 window = self.window
                 if HAS_COCOA:
-                    AppHelper.callAfter(lambda: window.set_title(os.path.basename(path) + '（已删除）'))
+                    AppHelper.callAfter(lambda: window.set_title(os.path.basename(path) + _t(' (deleted)', '（已删除）')))
         _dispatch_js_to(self.window, 'handleExternalChange('+json.dumps(identity)+','+json.dumps(stamp is None)+')')
 
     def reload_from_disk(self, document_id, revision):
@@ -1683,7 +1684,7 @@ class MarkdownAPI:
                 alert = NSAlert.alloc().init()
                 alert.setMessageText_(_t('Open this file with the default application?', '使用系统默认程序打开此文件？'))
                 alert.setInformativeText_(path)
-                alert.addButtonWithTitle_('取消'); alert.addButtonWithTitle_('打开')
+                alert.addButtonWithTitle_(_t('Cancel', '取消')); alert.addButtonWithTitle_(_t('Open', '打开'))
                 if alert.runModal() == NSAlertFirstButtonReturn + 1:
                     result['success'] = bool(NSWorkspace.sharedWorkspace().openURL_(NSURL.fileURLWithPath_(path)))
                 else:
@@ -1893,7 +1894,9 @@ class MarkdownAPI:
                     # Native vertical layout (top to bottom): Delete, Save, Cancel.
                     # Response codes: First=Delete(1000), Second=Cancel(1001),
                     # Third=Save(1002).
-                    alert.addButtonWithTitle_(_t('Delete', '删除'))
+                    # "Delete" only fits a brand-new document; for an existing file it
+                    # would read as deleting the file itself.
+                    alert.addButtonWithTitle_(_t('Delete', '删除') if is_untitled else _t("Don't Save", '不保存'))
                     alert.addButtonWithTitle_(_t('Cancel', '取消'))
                     alert.addButtonWithTitle_(_t('Save', '保存'))
                     buttons = alert.buttons()
@@ -2891,8 +2894,7 @@ if HAS_COCOA:
                         break
 
                 if view_menu:
-                    # Keep the existing first section (Tab navigation) intact,
-                    # then rebuild the rest so separators and native items have
+                    # Rebuild the whole menu so separators and native items have
                     # a stable order.
                     first_section_end = view_menu.numberOfItems()
                     for idx in range(view_menu.numberOfItems()):
@@ -2901,6 +2903,12 @@ if HAS_COCOA:
                             break
                     while view_menu.numberOfItems() > first_section_end:
                         view_menu.removeItemAtIndex_(first_section_end)
+                    # Every document is its own window, so drop AppKit's tab
+                    # and system full-screen items (ours is added below);
+                    # otherwise "Enter Full Screen" appears twice.
+                    while first_section_end > 0:
+                        view_menu.removeItemAtIndex_(0)
+                        first_section_end -= 1
 
                     # Section 2: Preview/Source + Outline.
                     toggle_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
@@ -3056,6 +3064,18 @@ if HAS_COCOA:
                     # "Paste as Markdown": insert right after the native Paste
                     # item (or at the top of the Edit menu if it is absent).
                     # Cmd+Shift+V overrides macOS' default "Paste and Match Style".
+                    # Undo / Redo go to the first responder (the web view), which
+                    # owns the editing history. Add them when AppKit's menu has none.
+                    existing_actions = [str(edit_menu.itemAtIndex_(i).action() or '')
+                                        for i in range(edit_menu.numberOfItems())]
+                    if 'undo:' not in existing_actions:
+                        undo_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t('Undo', '撤销'), 'undo:', 'z')
+                        undo_item.setKeyEquivalentModifierMask_(1 << 20)
+                        redo_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t('Redo', '重做'), 'redo:', 'z')
+                        redo_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 17))
+                        edit_menu.insertItem_atIndex_(undo_item, 0)
+                        edit_menu.insertItem_atIndex_(redo_item, 1)
+                        edit_menu.insertItem_atIndex_(NSMenuItem.separatorItem(), 2)
                     paste_insert_at = 0
                     for idx in range(edit_menu.numberOfItems()):
                         it = edit_menu.itemAtIndex_(idx)
@@ -3096,7 +3116,7 @@ if HAS_COCOA:
                                       (_t('Keyboard Shortcuts', '快捷键一览'), 'keyboardShortcuts:'),
                                       (_t('Open Example', '打开示例文档'), 'openExample:'),
                                       (_t('Report Issue…', '报告问题…'), 'reportIssue:'),
-                                      (_t('Export Diagnostics', '导出诊断信息'), 'exportDiagnostics:')]:
+                                      (_t('Export Diagnostics…', '导出诊断信息…'), 'exportDiagnostics:')]:
                     item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, action, '')
                     item.setTarget_(_view_menu_handler)
                     help_menu.addItem_(item)
@@ -3694,6 +3714,12 @@ def main():
     install(get_resource_path)
     _start_log('main entered')
     if HAS_COCOA:
+        try:
+            # One document per window: hides AppKit's "Show Tab Bar" menu items.
+            from AppKit import NSWindow
+            NSWindow.setAllowsAutomaticWindowTabbing_(False)
+        except Exception:
+            log_exception('disable window tabbing failed')
         patch_app_delegate()
         patch_window_close_behavior()
         patch_evaluate_js()
@@ -3708,6 +3734,11 @@ def main():
 
     if file_path:
         _initial_file_handled = True
+        # macOS also delivers argv files as application:openFiles:; register
+        # the path now so that event focuses this window instead of opening a
+        # duplicate.
+        with _state_lock:
+            _opened_files.add(os.path.abspath(file_path))
 
     main_api = MarkdownAPI(file_path)
     html_path = get_resource_path('index.html')

@@ -87,6 +87,15 @@ class IntegrityTests(unittest.TestCase):
         self.assertTrue(link.is_symlink());self.assertEqual(path.read_text(),'after')
         self.assertEqual(path.stat().st_mode&0o777,0o644);self.assertEqual(subprocess.check_output(['xattr','-p','com.mdpreview.test',str(path)]).strip(),b'metadata')
 
+    def test_new_files_follow_the_umask_not_0600(self):
+        from mdpreview_core.storage import atomic_create, _UMASK
+        expected=0o666&~_UMASK
+        real=Path(os.path.realpath(self.root))  # atomic_create refuses symlinked parents (/var)
+        created=real/'created.html';atomic_create(created,b'x')
+        written=real/'written.html';atomic_write(written,b'x')
+        self.assertEqual(created.stat().st_mode&0o777,expected)
+        self.assertEqual(written.stat().st_mode&0o777,expected)
+
     def test_failed_replace_preserves_original(self):
         path=self.root/'doc.md';path.write_text('original')
         with mock.patch('mdpreview_core.storage.os.replace',side_effect=OSError('disk failure')):

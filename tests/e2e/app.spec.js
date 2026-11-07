@@ -58,6 +58,20 @@ test('Mermaid is rendered and included in export',async({page})=>{
   await page.evaluate(()=>exportAsWrite('/tmp/out.html','html'));
   expect(await page.evaluate(()=>window.__export.content)).toContain('<svg');
 });
+test('a heading named like a library does not break lazy-loaded Mermaid',async({page})=>{
+  await page.evaluate(()=>loadContent('/tmp/doc.md','## Mermaid\n\n```mermaid\nflowchart LR\n A[Start] --> B[End]\n```',720,false,false));
+  await expect(page.locator('#content .mermaid-diagram svg')).toBeVisible();
+});
+test('replace controls are hidden in preview and shown in source mode',async({page})=>{
+  await page.evaluate(()=>loadContent('/tmp/doc.md','alpha',720,false,false));
+  await page.keyboard.press('Meta+f');
+  await expect(page.locator('#findBar')).toBeVisible();
+  await expect(page.locator('.replace-action').first()).toBeHidden();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Meta+e');
+  await page.keyboard.press('Meta+f');
+  await expect(page.locator('.replace-action').first()).toBeVisible();
+});
 test('long document renders its tail and source outline navigates',async({page},testInfo)=>{
   const measurements=await page.evaluate(async()=>{
     const text=Array.from({length:800},(_,i)=>'# Section '+i+'\n\n'+('Reading text 中文. '.repeat(10))).join('\n\n');

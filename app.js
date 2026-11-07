@@ -59,11 +59,19 @@ let isSource = false;
   let _mermaidLoaded = false;
   let _mermaidLoadingPromise = null;
 
+  // A heading such as "## Mermaid" gets id="mermaid", and browsers expose
+  // elements with an id as window.mermaid. Treat DOM nodes as "not loaded".
+  function libraryReady(name) {
+    const value = window[name];
+    return value !== undefined && value !== null &&
+      !(value instanceof Element) && !(value instanceof HTMLCollection);
+  }
+
   function ensureLib(src, globalName) {
     // Load a vendored library on demand; resolves when its global is present.
-    if (window[globalName] !== undefined) return Promise.resolve();
+    if (libraryReady(globalName)) return Promise.resolve();
     return _loadScript(src).then(() => {
-      if (window[globalName] === undefined) {
+      if (!libraryReady(globalName)) {
         throw new Error(globalName + ' failed to load');
       }
     });
@@ -101,7 +109,7 @@ var {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'default';
   }
   function initMermaid() {
-    if (typeof mermaid === 'undefined') return;
+    if (!libraryReady('mermaid')) return;
     mermaid.initialize({
       startOnLoad: false,
       theme: getMermaidTheme(),
@@ -117,7 +125,7 @@ var {
   function ensureMermaid() {
     if (_mermaidLoaded) return Promise.resolve();
     if (_mermaidLoadingPromise) return _mermaidLoadingPromise;
-    if (typeof mermaid !== 'undefined') { initMermaid(); _mermaidLoaded = true; return Promise.resolve(); }
+    if (libraryReady('mermaid')) { initMermaid(); _mermaidLoaded = true; return Promise.resolve(); }
     _mermaidLoadingPromise = _loadScript('vendor/mermaid.min.js').then(() => { initMermaid(); _mermaidLoaded = true; }).finally(() => { _mermaidLoadingPromise = null; });
     return _mermaidLoadingPromise;
   }
@@ -160,7 +168,7 @@ var {
     const generation = renderJobId;
     if (codeBlocks.length === 0) return;
     try { await ensureMermaid(); } catch (error) { showStatus(error.message, true); return; }
-    if (typeof mermaid === 'undefined') return;
+    if (!libraryReady('mermaid')) return;
     for (const code of codeBlocks) {
       if (generation !== renderJobId || closing || !code.isConnected) return;
       const pre = code.parentElement;

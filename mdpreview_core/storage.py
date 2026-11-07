@@ -13,6 +13,11 @@ import sys
 from pathlib import Path
 
 
+# Read once at import (os.umask can only be read by setting it).
+_UMASK = os.umask(0)
+os.umask(_UMASK)
+
+
 def atomic_write(path, payload: bytes):
     # Follow the final symlink, preserving the link the user opened.
     target = Path(os.path.realpath(os.path.abspath(path)))
@@ -22,6 +27,9 @@ def atomic_write(path, payload: bytes):
     try:
         with os.fdopen(fd, 'wb') as stream:
             stream.write(payload)
+            if not old_stat:
+                # mkstemp creates 0600; new files should follow the user's umask.
+                os.fchmod(stream.fileno(), 0o666 & ~_UMASK)
             if old_stat:
                 os.fchmod(stream.fileno(), stat.S_IMODE(old_stat.st_mode))
                 if sys.platform == 'darwin':
@@ -66,7 +74,7 @@ def atomic_create(path, payload: bytes):
             os.close(directory)
             directory = child
         fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                     0o600, dir_fd=directory)
+                     0o666, dir_fd=directory)  # the umask yields the usual 0644
         created = True
         with os.fdopen(fd, 'wb') as stream:
             stream.write(payload)
