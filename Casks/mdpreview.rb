@@ -12,5 +12,6 @@ cask "mdpreview" do
   zap trash: [
     "~/Library/Application Support/mdPreview",
     "~/Library/Logs/mdPreview.log",
+    "~/Library/Logs/mdPreview",
   ]
 end

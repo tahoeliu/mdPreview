@@ -1,5 +1,33 @@
 # mdPreview — A Minimal Markdown Viewer & Editor for macOS
 
+[简体中文](README.zh-CN.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Release gates](RELEASE.md)
+
+> **Development branch status:** signed ZIP updates, CLI export and release gates are under development. No production release public key is configured: signed installation is disabled, not silently downgraded. Native acceptance, browser performance budgets and universal2 compatibility have not been verified. The separate Homebrew tap has not been created. No end-to-end demo GIF is available yet.
+
+### Installation channels
+
+- **DMG:** inspect the existing Releases assets below. Ad-hoc signing is not Apple notarization; follow macOS prompts only after verifying the source.
+- **Command-line installer:** `scripts/get.sh` currently fails closed until the publisher trust root is configured. Standalone curl-to-shell installation is not ready; do not advertise it as working.
+- **Homebrew:** the local Cask is retained; no uncreated tap or unverified installation command is advertised.
+
+### Privacy and export verification
+
+Automatic update checks are off by default. Remote images require permission. Manual update checks contact GitHub. Diagnostic archives contain allowlisted settings and structured events only, never arbitrary raw log text. Headless export disables remote access and dialogs. Word, rich-text and native output interoperability still require the manual matrix in RELEASE.md.
+
+### CLI (development)
+
+Run `bash scripts/mdpreview export input.md --to pdf -o output.pdf` against an installed app, or set `MDPREVIEW_APP` to an explicitly selected application bundle. Existing output files are refused. Exit codes: 0 success, 1 invalid arguments, 2 rendering/export failure. Native hidden-window acceptance is pending.
+
+### Frequently asked questions
+
+**Why are signed updates disabled?** A maintainer must independently verify and configure the production P-256 public key. Missing trust roots, invalid signatures and digest mismatches are fatal.
+
+**Is universal2 supported?** Not yet verified. Architecture labels require inspection of every bundled Mach-O binary and native compatibility evidence.
+
+**Quick Look?** The optional extension has not passed its installation gate and is not implemented in this branch.
+
+**Where are the tests and CI?** Local test resources and workflow templates live under ignored `WorkSpace/`; GitHub does not automatically run them there. Missing release gates are failures, not green skips.
+
 <div align="center">
 
 **Open, read, edit, and export Markdown files on Mac — with a clean, distraction-free interface.**
@@ -138,14 +166,7 @@ Open the `.dmg` file and drag **mdPreview** into your **Applications** folder.
 
 Because mdPreview is an open-source app and may not be signed with an Apple Developer certificate, macOS may show a security warning the first time you open it.
 
-To open it:
-
-1. Go to **Applications**
-2. Right-click **mdPreview**
-3. Choose **Open**
-4. Click **Open** again in the dialog
-
-You only need to do this once.
+First verify the asset source and publisher-provided integrity information. Follow the controls offered by your macOS version; a right-click override is not available in every version. This development branch has not passed fresh-account Gatekeeper acceptance. Do not disable system protections to bypass an unexplained verification failure.
 
 ---
 
@@ -180,8 +201,9 @@ Now Markdown files will open in mdPreview by default.
 | `⌘ ⇧ G` | Find previous |
 | `⌘ =` | Increase text size |
 | `⌘ -` | Decrease text size |
-| `⌘ .` | Increase reading width |
-| `⌘ ,` | Decrease reading width |
+| `⌘ ⌥ =` | Increase reading width |
+| `⌘ ⌥ -` | Decrease reading width |
+| `⌘ ,` | Settings |
 | `⌘ 0` | Reset reading width |
 | `⌘ ⌥ O` | Toggle outline |
 | `⌘ ⌥ F` | Enter full screen |
@@ -207,20 +229,18 @@ It is a focused Markdown viewer and editor.
 
 ---
 
-## mdPreview vs other Markdown apps
+## Feature scope and verification
 
-| Feature | mdPreview | Typora | MacDown | Bear | VS Code |
-|---|:---:|:---:|:---:|:---:|:---:|
-| Free | Yes | No | Yes | Limited | Yes |
-| Open source | Yes | No | Yes | No | Yes |
-| Minimal UI | Yes | Yes | Partial | Yes | No |
-| Double-click `.md` files | Yes | Yes | Yes | Yes | Requires setup |
-| Works offline | Yes | Yes | Yes | Partial | Yes |
-| No account required | Yes | Yes | Yes | No | Yes |
-| Lightweight | Yes | Partial | Yes | Yes | No |
-| Edit and preview | Yes | Yes | Yes | Yes | Requires extensions |
-| Mermaid support | Yes | Partial | No | No | Requires extensions |
-| Export options | Yes | Yes | Limited | Limited | Requires extensions |
+| Capability | This development branch | Remaining acceptance |
+|---|---|---|
+| Local reading and source editing | Implemented | Current packaged-app regression |
+| Mermaid and KaTeX | Vendored and integrated | Native fonts and large-document rendering |
+| PDF / Word / HTML / TXT / PNG | Shared output pipeline | Third-party viewer matrix |
+| Rich-text copying | HTML / RTF / text integration | Native clipboard and target applications |
+| CLI export | Hidden-window entry and shared pipeline | Native visibility and zero-network observation |
+| Signed updates | Fail closed without publisher key | Production verifier and rollback testing |
+
+No current pricing or feature claims are made about third-party products without a dated comparison.
 
 ---
 
@@ -259,7 +279,7 @@ Yes. mdPreview works offline and does not require an account.
 
 ### Why does macOS say the app cannot be opened?
 
-macOS may warn you because the app is open source and may not be signed with an Apple Developer certificate. Right-click the app, choose **Open**, then confirm. You only need to do this once.
+Ad-hoc signing is not Apple notarization. Verify the download source and follow the controls offered by your macOS version; this branch does not claim that one override works across all supported systems.
 
 ### Can I export Markdown to PDF or Word?
 
@@ -293,7 +313,7 @@ npm ci
 npm test
 .venv/bin/python scripts/test-python.py
 ./build_dmg.sh
-./install.sh
+# Build only. Installation and release require separate approval and acceptance.
 ```
 
 ### Project structure
@@ -302,11 +322,12 @@ npm test
 mdPreview/
 ├── mdPreview.py    # Python app, window, menu, and file APIs
 ├── index.html            # WebView shell
-├── styles.css            # App styles
-├── app.js                # Editor, rendering, search, export, and bridge logic
-├── marked.min.js         # Markdown renderer
-├── turndown.js           # HTML to Markdown converter
-├── mermaid.min.js        # Mermaid diagram support
+├── css/                  # Screen, content and print styles
+├── app.js                # Application integration
+├── frontend/             # Bridge, rendering, output, language and CLI modules
+├── mdpreview_core/       # Native output, storage, diagnostics and release logic
+├── vendor/               # Locked libraries, fonts, licences and checksums
+├── WorkSpace/            # Local tests, evidence and inactive CI templates
 ├── app_icon.icns         # Application icon
 ├── Info.plist            # macOS app metadata
 ├── VERSION               # App version
@@ -363,15 +384,17 @@ untitled document has its own recoverable draft. Markdown math/footnotes and
 formatted table cells retain their source when editing the rendered document.
 HTML and Word exports render the current document revision; local raster images
 inside the document directory are embedded in HTML for portable sharing.
-PDF exports remain continuous pages; mathematical expressions are source text,
-not a TeX typesetting engine.
+Those historical notes are not the current export contract: this branch adds paged
+PDF and KaTeX typesetting, whose latest native acceptance remains pending.
 
 The renderer uses vendored DOMPurify and rejects unsafe URLs and UI-ID shadowing.
 Updates verify the exact versioned GitHub asset size/SHA-256, app identity, and
 code signature; installation keeps a recoverable previous app until UI readiness.
 Distribution intentionally uses ad-hoc signing, without Developer ID notarization.
 
-Run `./verify-all.sh` from an ordinary macOS Terminal to perform regressions,
-Chromium/WebKit tests, packaging, and native WKWebView save/PDF/quit verification.
+After an authorized build, run `./verify-all.sh` with the explicit candidate app,
+architecture, compatibility matrix and native cold-start evidence described in
+RELEASE.md. It checks regressions, WebKit budgets and native/CLI outputs; it does
+not build, install or publish automatically.
 Builds are generated under WorkSpace/; tests never replace /Applications or use
 real application drafts. Successful unit tests alone are not release certification.
