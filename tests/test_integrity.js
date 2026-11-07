@@ -52,7 +52,7 @@ function check(value,message){assert.ok(value,message);assertions++;}
     const svg=w.sanitizeMermaidSvg('<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(1)</script><text>safe</text></svg>');check(!/onload|<script/i.test(svg)&&svg.includes('safe'),'SVG fail-closed sanitation');
     // Deterministic adversarial dollars/brackets in code never participate in extensions.
     for(let i=0;i<60;i++){const text='var'+i+' = "$HOME $USER $$x$$ [^note] <tag>"';await app.load('```text\n'+text+'\n```');check(w.document.querySelector('#content code').textContent===text+'\n','Code preservation case '+i);}
-    await require('./t32-contract.cjs')(w);
+    await require('./module-contract.cjs')(w);
     console.log('Integrity/security: '+assertions+' assertions PASS');
   } finally {app.close();}
 })().catch(error=>{console.error(error);process.exitCode=1});

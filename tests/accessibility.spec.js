@@ -2,7 +2,7 @@ const {test,expect}=require('@playwright/test');
 const path=require('node:path');const {pathToFileURL}=require('node:url');
 
 const SETTINGS={language:'system',restore_session:false,auto_update:false,font_size:16,page_width:720,remote_images:'ask',auto_reload:true};
-const OUTPUT={paper:'auto',margins:'normal',font:'normal',page_numbers:true,show_urls:false,hide_frontmatter:true,h1_new_page:false,pdf_layout:'paged',png_width:'original',legacy_docx:false};
+const OUTPUT={paper:'auto',margins:'normal',font:'normal',page_numbers:true,show_urls:false,hide_frontmatter:true,h1_new_page:false,pdf_layout:'paged',png_width:'original'};
 const DOCUMENT='# 标题\n\n## 第二节\n\n- [ ] 任务\n\n> [!NOTE]\n> 提示块\n\n```js\nconst x=1;\n```\n\n| 列 A | 列 B |\n| --- | --- |\n| 一 | 二 |\n\n[链接](https://example.com)';
 
 async function violations(page){

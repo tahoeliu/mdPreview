@@ -43,14 +43,14 @@ module.exports = async function verifyModules(w) {
   state.isSource = false;
   assert.equal(find.getSearchableText().id, 'content');
 
-  // 旧版DOCX必须保留真实动态库标识，并在失败时释放同一个输出忙状态。
+  // Word 导出失败时必须释放同一个输出忙状态。
   const outputState = { outputBusy: false, closing: false, isSource: false, filePath: '/tmp/t32.md' };
   let requested = null;
   const output = w.DocumentOutput.create({ document: w.document, window: w, state: outputState,
-    ensureTurndown: async () => {}, ensureLib: async (...args) => { requested = args; throw new Error('测试加载失败'); },
-    Bridge: { call: async () => ({ legacy_docx: true }) }, OutputPrep: { prepare: async () => () => {} } });
+    ensureTurndown: async () => {}, ensureLib: async (...args) => { requested = args; },
+    getCurrentMarkdown: () => '# t32', documentSession: { id: 't32' }, buildDocxFromMarkdown: async () => { throw new Error('测试加载失败'); },
+    Bridge: { call: async () => ({}) }, OutputPrep: { prepare: async () => () => {} } });
   await assert.rejects(output.exportAsWrite('/tmp/t32.docx', 'docx'), /测试加载失败/);
-  assert.deepEqual(requested, ['vendor/html-docx-js.js', 'htmlDocx']);
   assert.equal(outputState.outputBusy, false);
   outputState.closing = true;
   assert.equal((await output.exportAsWrite('/tmp/t32.txt', 'txt')).error, 'output-busy');

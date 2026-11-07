@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, '..');
 const read = p => fs.readFileSync(path.join(root, p));
 const json = p => JSON.parse(read(p));
 const manifest = json('vendor/manifest.json');
-const expected = ['docx', 'dompurify', 'html-docx-js', 'katex', 'marked', 'marked-footnote', 'mermaid', 'turndown'];
+const expected = ['docx', 'dompurify', 'katex', 'marked', 'marked-footnote', 'mermaid', 'turndown'];
 assert.deepEqual(manifest.libraries.map(p => p.name).sort(), expected);
 assert.equal(json('package.json').devDependencies.marked, '12.0.0');
 for (const lib of manifest.libraries) {

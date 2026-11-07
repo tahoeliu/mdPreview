@@ -1,28 +1,166 @@
-# 本地审查模板：WorkSpace被忽略，不会触发GitHub Actions。
-# 不包含发布权限、Secrets读写、tap更新或自动上传。
-name: Release candidate verification
+name: Release
+
+# Push a tag that equals the VERSION file, e.g. `git tag v2.0.0 && git push origin v2.0.0`.
+# Each architecture is built and verified on a native runner. A separate job, which is the only
+# one with write access and the signing secret, signs SHA256SUMS and publishes the GitHub release.
 on:
-  workflow_dispatch:
+  push:
+    tags: ['v*']
+
 permissions:
   contents: read
+
 jobs:
-  verify:
-    runs-on: macos-14
+  build:
+    name: Build and verify (${{ matrix.arch }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: arm64
+            runner: macos-14
+          - arch: x86_64
+            runner: macos-15-intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/WorkSpace/browsers
+      MDPREVIEW_DISABLE_UPDATES: '1'
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
+
+      - name: Tag must equal VERSION
+        run: |
+          test "v$(cat VERSION)" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match VERSION $(cat VERSION)"; exit 1; }
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
-      - name: Require separately provisioned local tests
-        run: test -d WorkSpace/tests
-      - run: npm ci --ignore-scripts
-      - run: npm audit --audit-level=high
-      - run: python -m pip install -r requirements-dev.txt
-      - run: python -m pip_audit -r requirements-lock.txt
-      - name: Verify all mandatory evidence
-        run: bash verify-all.sh
-      # 必须由维护者提供实测APP/架构/冷启动/人工矩阵；缺失就失败。
-      # 后续签名、Release与tap更新需要单独批准，不能将此模板视为发布完成。
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install locked dependencies
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
+          .venv/bin/python -m pip install -r requirements-lock.txt
+          npm ci --ignore-scripts
+          npx playwright install chromium webkit
+
+      - name: Tests
+        run: |
+          node scripts/vendor.mjs --check
+          npm test
+          .venv/bin/python scripts/test-python.py
+          npm run test:e2e
+
+      - name: Build app and disk image
+        run: ./build_dmg.sh
+
+      - name: Build must be a single native architecture
+        run: |
+          APP="$PWD/WorkSpace/dist/release-$(cat VERSION)/mdPreview.app"
+          test "$(lipo -archs "$APP/Contents/MacOS/mdPreview")" = "${{ matrix.arch }}"
+          codesign --verify --deep --strict "$APP"
+
+      - name: Native acceptance on this architecture
+        run: |
+          APP="$PWD/WorkSpace/dist/release-$(cat VERSION)/mdPreview.app"
+          .venv/bin/python scripts/verify-headless.py --app "$APP"
+          .venv/bin/python scripts/verify-native.py --app "$APP"
+          .venv/bin/python scripts/verify-update-e2e.py --app "$APP"
+
+      - name: Package
+        run: |
+          VERSION="$(cat VERSION)"
+          DIST="$PWD/WorkSpace/dist/release-$VERSION"
+          mkdir -p out
+          .venv/bin/python scripts/package-release.py --app "$DIST/mdPreview.app" --out out
+          cp "$DIST/mdPreview-$VERSION-${{ matrix.arch }}.dmg" out/
+          # Releases up to 1.5.0 (arm64 only) look for an asset named mdPreview.dmg.
+          if [ "${{ matrix.arch }}" = arm64 ]; then cp "$DIST/mdPreview.dmg" out/; fi
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.arch }}
+          path: out/*
+          if-no-files-found: error
+
+  publish:
+    name: Sign and publish
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Both architectures must be present
+        run: |
+          VERSION="$(cat VERSION)"
+          for arch in arm64 x86_64; do
+            for kind in zip dmg; do test -f "dist/mdPreview-$VERSION-$arch.$kind" || { echo "missing $arch $kind"; exit 1; }
+            done
+          done
+          ls -la dist
+
+      - name: Sign the checksum list
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          test -n "$RELEASE_SIGNING_KEY" || { echo "secret RELEASE_SIGNING_KEY is not configured"; exit 1; }
+          umask 077
+          KEY="$RUNNER_TEMP/release-key.pem"
+          printf '%s\n' "$RELEASE_SIGNING_KEY" > "$KEY"
+          node scripts/sign-release.mjs dist "$KEY"
+          rm -f "$KEY"
+          # Defence in depth: the signature must verify against the key published in the repository.
+          openssl dgst -sha256 -verify scripts/release-pubkey.pem -signature dist/SHA256SUMS.sig dist/SHA256SUMS
+          cat dist/SHA256SUMS
+
+      - name: Release notes from CHANGELOG
+        run: python3 scripts/prepare-release.py notes --version "$(cat VERSION)" > release-notes.md
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --verify-tag \
+            --title "mdPreview $(cat VERSION)" \
+            --notes-file release-notes.md
+
+      - name: Check out the Homebrew tap
+        if: env.TAP_TOKEN != ''
+        uses: actions/checkout@v4
+        with:
+          repository: tahoeliu/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Update the Homebrew cask
+        if: env.TAP_TOKEN != ''
+        run: |
+          python3 scripts/prepare-release.py cask --sums dist/SHA256SUMS --out tap/Casks/mdpreview.rb --version "$(cat VERSION)"
+          cd tap
+          git config user.name "mdPreview release bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add Casks/mdpreview.rb
+          git diff --cached --quiet || git commit -m "mdpreview $(cat ../VERSION)"
+          git push

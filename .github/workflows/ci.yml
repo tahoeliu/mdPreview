@@ -1,50 +1,93 @@
-name: Quality and distribution gates
-on: [push, pull_request, workflow_dispatch]
+name: CI
+
+on:
+  push:
+    branches: [main, 'release/**']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
-    runs-on: macos-latest
-    timeout-minutes: 30
+    runs-on: macos-14
+    timeout-minutes: 45
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/WorkSpace/browsers
       MDPREVIEW_DISABLE_UPDATES: '1'
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Install pinned tools
+          cache: npm
+
+      - name: Install locked dependencies
         run: |
           python -m venv .venv
+          .venv/bin/python -m pip install --upgrade pip
           .venv/bin/python -m pip install -r requirements-lock.txt
-          npm ci
+          npm ci --ignore-scripts
           npx playwright install chromium webkit
-      - name: Regression and failure injection
+
+      - name: Static and supply-chain checks
         run: |
-          npm test
-          .venv/bin/python scripts/test-python.py
           .venv/bin/ruff check mdpreview_core scripts mdPreview.py --select F821,E9
-      - name: Real browser verification
+          node scripts/vendor.mjs --check
+          node scripts/extract-i18n.mjs --check
+          npm audit --audit-level=high
+
+      - name: JavaScript tests
+        run: npm test
+
+      - name: Python tests (coverage gate 90% on mdpreview_core)
+        run: .venv/bin/python scripts/test-python.py
+
+      - name: Browser end-to-end (Chromium + WebKit)
         run: npm run test:e2e
-      - name: Build and native app verification
+
+      - name: Large-document performance and accessibility (WebKit)
+        run: >
+          node node_modules/@playwright/test/cli.js test
+          --config=tests/release-playwright.config.js --project=webkit
+          --grep-invert "原生冷启动"
+
+      - name: Build the application
+        run: ./build.sh
+
+      - name: Native acceptance on the built app
         run: |
-          ./build_dmg.sh
-          .venv/bin/python scripts/verify-native.py
-      - name: Preserve evidence
+          APP="$PWD/WorkSpace/dist/release-$(cat VERSION)/mdPreview.app"
+          .venv/bin/python scripts/verify-headless.py --app "$APP"
+          .venv/bin/python scripts/verify-native.py --app "$APP"
+          .venv/bin/python scripts/verify-update-e2e.py --app "$APP"
+
+      - name: Measure cold start (reported, not a CI gate on shared runners)
+        continue-on-error: true
+        run: >
+          .venv/bin/python scripts/measure-cold-start.py
+          --app "$PWD/WorkSpace/dist/release-$(cat VERSION)/mdPreview.app"
+          --out WorkSpace/cold-start.json
+
+      - name: Keep evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: verification-evidence
+          name: ci-evidence
+          if-no-files-found: ignore
           path: |
-            WorkSpace/*test*.log
+            WorkSpace/perf.json
+            WorkSpace/cold-start.json
             WorkSpace/browser-results.json
             WorkSpace/python-coverage.json
-            WorkSpace/native-verification/
-            test-results/
-      - name: Preserve checked release candidate
-        uses: actions/upload-artifact@v4
-        with:
-          name: mdPreview-release-candidate
-          path: WorkSpace/dist/release-*/mdPreview*.dmg*
+            WorkSpace/test-results/

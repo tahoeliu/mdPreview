@@ -20,19 +20,27 @@ const libraries = [
   { name: 'turndown', files: [['dist/turndown.js', 'vendor/turndown.js']] },
   { name: 'katex', files: [['dist/katex.min.js', 'vendor/katex/katex.min.js'], ['dist/katex.min.css', 'vendor/katex/katex.min.css']], fonts: 'dist/fonts' },
   { name: 'docx', files: [['dist/index.umd.cjs', 'vendor/docx.umd.js']] },
-  { name: 'html-docx-js', files: [['dist/html-docx.js', 'vendor/html-docx-js.js']], legacy: true }
 ];
 const supplementalLicenses = {
   'marked-footnote@1.4.0': {
     file: 'vendor/license-sources/marked-footnote-LICENSE',
     url: 'https://raw.githubusercontent.com/bent10/marked-extensions/faab750f00af4788397948286fb8f7fe0c929a7e/license',
     reason: 'npm 包 files 白名单遗漏许可证；取 npm view marked-footnote@1.4.0 gitHead 对应上游提交。'
+  },
+  'fastdom@1.0.12': {
+    file: 'vendor/license-sources/fastdom-LICENSE',
+    url: 'https://github.com/wilsonpage/fastdom/blob/a7b9044d58952b970c8b918dcf0e7c8824ba0ff5/README.md#license',
+    reason: 'npm 包没有 LICENSE 文件；许可证全文取自该包自带的 README.md 的 License 章节（package.json 声明 MIT）。'
+  },
+  'strictdom@1.0.1': {
+    file: 'vendor/license-sources/strictdom-LICENSE',
+    url: 'https://github.com/wilsonpage/strictdom/blob/a3bbf19013ecc9c9d165dd4ed89e94757161443e/README.md#license',
+    reason: 'npm 包没有 LICENSE 文件；许可证全文取自该包自带的 README.md 的 License 章节（package.json 声明 MIT）。'
   }
 };
 const policy = [
   'marked 固定 12.0.0：cjkEmStrong 依赖 Tokenizer.prototype.emStrong 内部签名，本卡不升级应用使用的大版本。Mermaid 私有依赖中的 marked 不替换应用的 marked。',
-  'Mermaid 固定 11.16.0，与旧资源声明版本一致；本卡不引入 Mermaid 12 的集成变化。',
-  'html-docx-js 仅作为 legacy Word 回退保留一个版本（下个版本删除）；html2canvas 已移出依赖与资源清单。',
+  'Mermaid 固定 11.17.2（11.x 内的安全修复版本）；不引入 Mermaid 12 的集成变化。',
   '许可证覆盖八个直接库的完整已安装运行时依赖闭包（含 peer、类型及 CLI 依赖，保守多收集），并保留浏览器包内嵌的捆绑依赖声明。安装树版本不等于上游预构建包内每个捆绑组件版本；内嵌声明单独保留，不虚构映射。',
   'npm ci --ignore-scripts 后运行 npm run vendor；npm run vendor:check 只校验不写文件。所有资源字节直接复制自 npm 包，不重新压缩或修改。',
   'vendor/Credits.rtf 由同一份许可证声明自动生成，随应用打包为“关于”面板的致谢。'

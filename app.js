@@ -531,7 +531,6 @@ var {
   get MarkdownPipeline() { return typeof MarkdownPipeline === 'undefined' ? undefined : MarkdownPipeline; },
   get OutputPrep() { return typeof OutputPrep === 'undefined' ? undefined : OutputPrep; },
   get documentSession() { return typeof documentSession === 'undefined' ? undefined : documentSession; },
-  get htmlDocx() { return typeof htmlDocx === 'undefined' ? undefined : htmlDocx; },
   get turndownService() { return typeof turndownService === 'undefined' ? undefined : turndownService; }
 });
   OutputPrep.configure({

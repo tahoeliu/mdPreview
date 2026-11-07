@@ -7,7 +7,7 @@ CHOICES = {'paper': ('auto', 'a4', 'letter'), 'margins': ('narrow', 'normal', 'w
 def defaults():
     return {'paper': 'auto', 'margins': 'normal', 'font': 'normal',
             'page_numbers': True, 'show_urls': False, 'hide_frontmatter': True,
-            'h1_new_page': False, 'pdf_layout': 'paged', 'png_width': 'original', 'legacy_docx': False}
+            'h1_new_page': False, 'pdf_layout': 'paged', 'png_width': 'original'}
 
 
 def validate(options):

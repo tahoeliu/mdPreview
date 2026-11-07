@@ -5,7 +5,13 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),crypto=require(
  const original=w.exportAsWrite;w.exportAsWrite=async(...values)=>{args=values;return {success:true};};
  await w.runHeadlessExport({headless:true,path:'test.md',content:'# Export',outputPath:'/tmp/result.txt',outputFormat:'txt',settings:{remote_images:'never',auto_update:false,language:'en'}});
  assert.deepEqual(args,['/tmp/result.txt','txt']);assert.equal(finished,true);w.exportAsWrite=original;
- const code=fs.readFileSync('mdpreview_core/release_sig.py','utf8');assert.match(code,/RELEASE_PUBKEY_B64 = ''/);assert.match(code,/if not configured\(\)/);
+ const code=fs.readFileSync('mdpreview_core/release_sig.py','utf8');const pinned=/^RELEASE_PUBKEY_B64 = '([A-Za-z0-9+\/=]+)'/m.exec(code);assert.ok(pinned,'生产发布公钥必须已固定');
+ const point=Buffer.from(pinned[1],'base64');assert.equal(point.length,65,'必须是 P-256 未压缩公钥点');assert.equal(point[0],4);
+ // 与独立发布的 PEM、get.sh 内嵌的公钥是同一把钥匙。
+ const pem=fs.readFileSync('scripts/release-pubkey.pem','utf8');
+ assert.ok(crypto.createPublicKey(pem).export({format:'der',type:'spki'}).subarray(-65).equals(point),'release-pubkey.pem 与固定公钥一致');
+ assert.ok(fs.readFileSync('scripts/get.sh','utf8').includes(pem.trim().split('\n')[1]),'get.sh 内嵌了同一把公钥');
+ assert.match(code,/if not configured\(\)/);
  const download=fs.readFileSync('mdpreview_core/update_download.py','utf8');assert.ok(download.indexOf('if not configured()')<download.indexOf('metadata = json.loads'));
  const pair=crypto.generateKeyPairSync('ec',{namedCurve:'prime256v1'}),other=crypto.generateKeyPairSync('ec',{namedCurve:'prime256v1'});
  const message=Buffer.from('isolated-test-only'),signature=crypto.sign('sha256',message,pair.privateKey);

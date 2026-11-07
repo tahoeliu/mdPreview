@@ -2,8 +2,7 @@
   "schemaVersion": 1,
   "policy": [
     "marked 固定 12.0.0：cjkEmStrong 依赖 Tokenizer.prototype.emStrong 内部签名，本卡不升级应用使用的大版本。Mermaid 私有依赖中的 marked 不替换应用的 marked。",
-    "Mermaid 固定 11.16.0，与旧资源声明版本一致；本卡不引入 Mermaid 12 的集成变化。",
-    "html-docx-js 仅作为 legacy Word 回退保留一个版本（下个版本删除）；html2canvas 已移出依赖与资源清单。",
+    "Mermaid 固定 11.17.2（11.x 内的安全修复版本）；不引入 Mermaid 12 的集成变化。",
     "许可证覆盖八个直接库的完整已安装运行时依赖闭包（含 peer、类型及 CLI 依赖，保守多收集），并保留浏览器包内嵌的捆绑依赖声明。安装树版本不等于上游预构建包内每个捆绑组件版本；内嵌声明单独保留，不虚构映射。",
     "npm ci --ignore-scripts 后运行 npm run vendor；npm run vendor:check 只校验不写文件。所有资源字节直接复制自 npm 包，不重新压缩或修改。",
     "vendor/Credits.rtf 由同一份许可证声明自动生成，随应用打包为“关于”面板的致谢。"
@@ -37,26 +36,26 @@
     },
     {
       "name": "dompurify",
-      "version": "3.4.16",
+      "version": "3.4.17",
       "legacy": false,
       "files": [
         {
           "source": "node_modules/dompurify/dist/purify.min.js",
           "target": "vendor/purify.min.js",
-          "sha256": "2c90a9b46d6463f26038a29b686e82bc91de01fdac9d5229e7cfe3b360134ea2"
+          "sha256": "cd37898f9782adf54820c413191b5691803f0f137c799d6edcfd38523b4c2c31"
         }
       ],
       "bundledNotices": "vendor/bundled-notices/dompurify.txt"
     },
     {
       "name": "mermaid",
-      "version": "11.16.0",
+      "version": "11.17.2",
       "legacy": false,
       "files": [
         {
           "source": "node_modules/mermaid/dist/mermaid.min.js",
           "target": "vendor/mermaid.min.js",
-          "sha256": "74d7c46dabca328c2294733910a8aa1ed0c37451776e8d5295da38a2b758fb9b"
+          "sha256": "581ed7d74bd9048d0e3a91363927d72ef22942d7722546b27f7cc29e35390eb8"
         }
       ],
       "bundledNotices": "vendor/bundled-notices/mermaid.txt",
@@ -104,6 +103,7 @@
         "dayjs",
         "dompurify",
         "es-toolkit",
+        "fastdom",
         "internmap",
         "js-yaml",
         "katex",
@@ -450,29 +450,16 @@
     },
     {
       "name": "docx",
-      "version": "9.15.2",
+      "version": "9.15.3",
       "legacy": false,
       "files": [
         {
           "source": "node_modules/docx/dist/index.umd.cjs",
           "target": "vendor/docx.umd.js",
-          "sha256": "4c834bd3a541c3271395ac068cb64a512b23fe747bf042158616dc4116eae105"
+          "sha256": "f19b5b1e6d90067d2538551fd8bf29b421cfecd1d9a02b1271a7ae2dbf90cc00"
         }
       ],
       "bundledNotices": "vendor/bundled-notices/docx.txt"
-    },
-    {
-      "name": "html-docx-js",
-      "version": "0.3.1",
-      "legacy": true,
-      "files": [
-        {
-          "source": "node_modules/html-docx-js/dist/html-docx.js",
-          "target": "vendor/html-docx-js.js",
-          "sha256": "fd3277a33db519c6c0ba6cf2ae26cbe0d1593df98f7431e987224c4001034b1a"
-        }
-      ],
-      "bundledNotices": "vendor/bundled-notices/html-docx-js.txt"
     }
   ],
   "packages": [
@@ -2103,11 +2090,11 @@
     {
       "id": "node_modules/docx",
       "name": "docx",
-      "version": "9.15.2",
+      "version": "9.15.3",
       "license": "MIT",
-      "resolved": "https://registry.npmjs.org/docx/-/docx-9.15.2.tgz",
-      "integrity": "sha512-G/R41dlYE5RS3TG2ybX1DIodQv+TchMspmdvrrovFyzTpvLZe0pLKVqiGosBhZszLkRonrK9+zxJDPWHDYx4NA==",
-      "licenseFile": "vendor/licenses/docx@9.15.2.txt",
+      "resolved": "https://registry.npmjs.org/docx/-/docx-9.15.3.tgz",
+      "integrity": "sha512-3FnU6K5cuvGXEAn24yhvP3mfrZ1G8k9+hH8pSVDYsMR+mGmfK/t0NR5AwoMQodnaaxiRt2e+SvckffcJe/NvTQ==",
+      "licenseFile": "vendor/licenses/docx@9.15.3.txt",
       "licenseSources": [
         "node_modules/docx/LICENSE"
       ],
@@ -2123,11 +2110,11 @@
     {
       "id": "node_modules/dompurify",
       "name": "dompurify",
-      "version": "3.4.16",
+      "version": "3.4.17",
       "license": "(MPL-2.0 OR Apache-2.0)",
-      "resolved": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.16.tgz",
-      "integrity": "sha512-sqo+pNp3qRhCIpbgRi1y8Tgk27Bo2Ry7w0dC1NBeNTdZChWjz9Xb/KOoZbRP/R6pQZ80Qw8YhXw13hWWBbMRnQ==",
-      "licenseFile": "vendor/licenses/dompurify@3.4.16.txt",
+      "resolved": "https://registry.npmjs.org/dompurify/-/dompurify-3.4.17.tgz",
+      "integrity": "sha512-B/pSlYVHQ58kqISD/yDjuJ1yfzI34m1gF4lAod2bwSRhiN4K5Cl3H8Af7hqB2PmTL911tdEudnnXn5FnhRoz0w==",
+      "licenseFile": "vendor/licenses/dompurify@3.4.17.txt",
       "licenseSources": [
         "node_modules/dompurify/LICENSE",
         "node_modules/dompurify/LICENSE-MPL",
@@ -2154,6 +2141,29 @@
         "node_modules/es-toolkit/NOTICE"
       ],
       "dependencies": [],
+      "usedBy": [
+        "mermaid"
+      ]
+    },
+    {
+      "id": "node_modules/fastdom",
+      "name": "fastdom",
+      "version": "1.0.12",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/fastdom/-/fastdom-1.0.12.tgz",
+      "integrity": "sha512-LB+xjSTEbjHE1cWsxu+tN2Xqr1kpi+V9aADI7sVM5ZMaXyYGPHULQMzpJMYqOTULK/73pUkWVzzObFRBkPr+hg==",
+      "licenseFile": "vendor/licenses/fastdom@1.0.12.txt",
+      "licenseSources": [
+        "vendor/license-sources/fastdom-LICENSE"
+      ],
+      "supplementalSource": {
+        "file": "vendor/license-sources/fastdom-LICENSE",
+        "url": "https://github.com/wilsonpage/fastdom/blob/a7b9044d58952b970c8b918dcf0e7c8824ba0ff5/README.md#license",
+        "reason": "npm 包没有 LICENSE 文件；许可证全文取自该包自带的 README.md 的 License 章节（package.json 声明 MIT）。"
+      },
+      "dependencies": [
+        "node_modules/strictdom"
+      ],
       "usedBy": [
         "mermaid"
       ]
@@ -2188,26 +2198,6 @@
       "dependencies": [],
       "usedBy": [
         "mermaid"
-      ]
-    },
-    {
-      "id": "node_modules/html-docx-js",
-      "name": "html-docx-js",
-      "version": "0.3.1",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/html-docx-js/-/html-docx-js-0.3.1.tgz",
-      "integrity": "sha512-QSrMiRhxesqxYCa3f+2Z3ttIHPzSjDOL1tCOmIDIEET7HdabxXND6tAbsFMXAgRG4RADQ3wbl74ydMmjidaDPA==",
-      "licenseFile": "vendor/licenses/html-docx-js@0.3.1.txt",
-      "licenseSources": [
-        "node_modules/html-docx-js/LICENSE"
-      ],
-      "dependencies": [
-        "node_modules/jszip",
-        "node_modules/lodash.escape",
-        "node_modules/lodash.merge"
-      ],
-      "usedBy": [
-        "html-docx-js"
       ]
     },
     {
@@ -2263,11 +2253,11 @@
     {
       "id": "node_modules/js-yaml",
       "name": "js-yaml",
-      "version": "4.1.1",
+      "version": "4.3.2",
       "license": "MIT",
-      "resolved": "https://registry.npmjs.org/js-yaml/-/js-yaml-4.1.1.tgz",
-      "integrity": "sha512-qQKT4zQxXl8lLwBtHMWwaTcGfFOZviOJet3Oy/xmGk2gZH677CJM9EvtfdSkgWcATZhj/55JZ0rmy3myCT5lsA==",
-      "licenseFile": "vendor/licenses/js-yaml@4.1.1.txt",
+      "resolved": "https://registry.npmjs.org/js-yaml/-/js-yaml-4.3.2.tgz",
+      "integrity": "sha512-SFNOvSJ+Dgf/9An904Yx+CgSlIPCkIpao4qo51lpee25TIRejdH3rhR4EZMGoNx3/TP3O+wzWuiTFl4sqbltzA==",
+      "licenseFile": "vendor/licenses/js-yaml@4.3.2.txt",
       "licenseSources": [
         "node_modules/js-yaml/LICENSE"
       ],
@@ -2276,25 +2266,6 @@
       ],
       "usedBy": [
         "mermaid"
-      ]
-    },
-    {
-      "id": "node_modules/jszip",
-      "name": "jszip",
-      "version": "2.7.0",
-      "license": "(MIT OR GPL-3.0)",
-      "resolved": "https://registry.npmjs.org/jszip/-/jszip-2.7.0.tgz",
-      "integrity": "sha512-JIsRKRVC3gTRo2vM4Wy9WBC3TRcfnIZU8k65Phi3izkvPH975FowRYtKGT6PxevA0XnJ/yO8b0QwV0ydVyQwfw==",
-      "licenseFile": "vendor/licenses/jszip@2.7.0.txt",
-      "licenseSources": [
-        "node_modules/jszip/LICENSE.markdown",
-        "node_modules/jszip/lib/license_header.js"
-      ],
-      "dependencies": [
-        "node_modules/pako"
-      ],
-      "usedBy": [
-        "html-docx-js"
       ]
     },
     {
@@ -2364,342 +2335,6 @@
       ]
     },
     {
-      "id": "node_modules/lodash._arraycopy",
-      "name": "lodash._arraycopy",
-      "version": "3.0.0",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash._arraycopy/-/lodash._arraycopy-3.0.0.tgz",
-      "integrity": "sha512-RHShTDnPKP7aWxlvXKiDT6IX2jCs6YZLCtNhOru/OX2Q/tzX295vVBK5oX1ECtN+2r86S0Ogy8ykP1sgCZAN0A==",
-      "licenseFile": "vendor/licenses/lodash._arraycopy@3.0.0.txt",
-      "licenseSources": [
-        "node_modules/lodash._arraycopy/LICENSE.txt"
-      ],
-      "dependencies": [],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash._arrayeach",
-      "name": "lodash._arrayeach",
-      "version": "3.0.0",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash._arrayeach/-/lodash._arrayeach-3.0.0.tgz",
-      "integrity": "sha512-Mn7HidOVcl3mkQtbPsuKR0Fj0N6Q6DQB77CtYncZcJc0bx5qv2q4Gl6a0LC1AN+GSxpnBDNnK3CKEm9XNA4zqQ==",
-      "licenseFile": "vendor/licenses/lodash._arrayeach@3.0.0.txt",
-      "licenseSources": [
-        "node_modules/lodash._arrayeach/LICENSE.txt"
-      ],
-      "dependencies": [],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash._basecopy",
-      "name": "lodash._basecopy",
-      "version": "3.0.1",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash._basecopy/-/lodash._basecopy-3.0.1.tgz",
-      "integrity": "sha512-rFR6Vpm4HeCK1WPGvjZSJ+7yik8d8PVUdCJx5rT2pogG4Ve/2ZS7kfmO5l5T2o5V2mqlNIfSF5MZlr1+xOoYQQ==",
-      "licenseFile": "vendor/licenses/lodash._basecopy@3.0.1.txt",
-      "licenseSources": [
-        "node_modules/lodash._basecopy/LICENSE.txt"
-      ],
-      "dependencies": [],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash._basefor",
-      "name": "lodash._basefor",
-      "version": "3.0.3",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash._basefor/-/lodash._basefor-3.0.3.tgz",
-      "integrity": "sha512-6bc3b8grkpMgDcVJv9JYZAk/mHgcqMljzm7OsbmcE2FGUMmmLQTPHlh/dFqR8LA0GQ7z4K67JSotVKu5058v1A==",
-      "licenseFile": "vendor/licenses/lodash._basefor@3.0.3.txt",
-      "licenseSources": [
-        "node_modules/lodash._basefor/LICENSE"
-      ],
-      "dependencies": [],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash._bindcallback",
-      "name": "lodash._bindcallback",
-      "version": "3.0.1",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash._bindcallback/-/lodash._bindcallback-3.0.1.tgz",
-      "integrity": "sha512-2wlI0JRAGX8WEf4Gm1p/mv/SZ+jLijpj0jyaE/AXeuQphzCgD8ZQW4oSpoN8JAopujOFGU3KMuq7qfHBWlGpjQ==",
-      "licenseFile": "vendor/licenses/lodash._bindcallback@3.0.1.txt",
-      "licenseSources": [
-        "node_modules/lodash._bindcallback/LICENSE.txt"
-      ],
-      "dependencies": [],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash._createassigner",
-      "name": "lodash._createassigner",
-      "version": "3.1.1",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash._createassigner/-/lodash._createassigner-3.1.1.tgz",
-      "integrity": "sha512-LziVL7IDnJjQeeV95Wvhw6G28Z8Q6da87LWKOPWmzBLv4u6FAT/x5v00pyGW0u38UoogNF2JnD3bGgZZDaNEBw==",
-      "licenseFile": "vendor/licenses/lodash._createassigner@3.1.1.txt",
-      "licenseSources": [
-        "node_modules/lodash._createassigner/LICENSE.txt"
-      ],
-      "dependencies": [
-        "node_modules/lodash._bindcallback",
-        "node_modules/lodash._isiterateecall",
-        "node_modules/lodash.restparam"
-      ],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash._getnative",
-      "name": "lodash._getnative",
-      "version": "3.9.1",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash._getnative/-/lodash._getnative-3.9.1.tgz",
-      "integrity": "sha512-RrL9VxMEPyDMHOd9uFbvMe8X55X16/cGM5IgOKgRElQZutpX89iS6vwl64duTV1/16w5JY7tuFNXqoekmh1EmA==",
-      "licenseFile": "vendor/licenses/lodash._getnative@3.9.1.txt",
-      "licenseSources": [
-        "node_modules/lodash._getnative/LICENSE"
-      ],
-      "dependencies": [],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash._isiterateecall",
-      "name": "lodash._isiterateecall",
-      "version": "3.0.9",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash._isiterateecall/-/lodash._isiterateecall-3.0.9.tgz",
-      "integrity": "sha512-De+ZbrMu6eThFti/CSzhRvTKMgQToLxbij58LMfM8JnYDNSOjkjTCIaa8ixglOeGh2nyPlakbt5bJWJ7gvpYlQ==",
-      "licenseFile": "vendor/licenses/lodash._isiterateecall@3.0.9.txt",
-      "licenseSources": [
-        "node_modules/lodash._isiterateecall/LICENSE.txt"
-      ],
-      "dependencies": [],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash._root",
-      "name": "lodash._root",
-      "version": "3.0.1",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash._root/-/lodash._root-3.0.1.tgz",
-      "integrity": "sha512-O0pWuFSK6x4EXhM1dhZ8gchNtG7JMqBtrHdoUFUWXD7dJnNSUze1GuyQr5sOs0aCvgGeI3o/OJW8f4ca7FDxmQ==",
-      "licenseFile": "vendor/licenses/lodash._root@3.0.1.txt",
-      "licenseSources": [
-        "node_modules/lodash._root/LICENSE"
-      ],
-      "dependencies": [],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash.escape",
-      "name": "lodash.escape",
-      "version": "3.2.0",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash.escape/-/lodash.escape-3.2.0.tgz",
-      "integrity": "sha512-n1PZMXgaaDWZDSvuNZ/8XOcYO2hOKDqZel5adtR30VKQAtoWs/5AOeFA0vPV8moiPzlqe7F4cP2tzpFewQyelQ==",
-      "licenseFile": "vendor/licenses/lodash.escape@3.2.0.txt",
-      "licenseSources": [
-        "node_modules/lodash.escape/LICENSE"
-      ],
-      "dependencies": [
-        "node_modules/lodash._root"
-      ],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash.isarguments",
-      "name": "lodash.isarguments",
-      "version": "3.1.0",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash.isarguments/-/lodash.isarguments-3.1.0.tgz",
-      "integrity": "sha512-chi4NHZlZqZD18a0imDHnZPrDeBbTtVN7GXMwuGdRH9qotxAjYs3aVLKc7zNOG9eddR5Ksd8rvFEBc9SsggPpg==",
-      "licenseFile": "vendor/licenses/lodash.isarguments@3.1.0.txt",
-      "licenseSources": [
-        "node_modules/lodash.isarguments/LICENSE"
-      ],
-      "dependencies": [],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash.isarray",
-      "name": "lodash.isarray",
-      "version": "3.0.4",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash.isarray/-/lodash.isarray-3.0.4.tgz",
-      "integrity": "sha512-JwObCrNJuT0Nnbuecmqr5DgtuBppuCvGD9lxjFpAzwnVtdGoDQ1zig+5W8k5/6Gcn0gZ3936HDAlGd28i7sOGQ==",
-      "licenseFile": "vendor/licenses/lodash.isarray@3.0.4.txt",
-      "licenseSources": [
-        "node_modules/lodash.isarray/LICENSE"
-      ],
-      "dependencies": [],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash.isplainobject",
-      "name": "lodash.isplainobject",
-      "version": "3.2.0",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash.isplainobject/-/lodash.isplainobject-3.2.0.tgz",
-      "integrity": "sha512-P4wZnho5curNqeEq/x292Pb57e1v+woR7DJ84DURelKB46lby8aDEGVobSaYtzHdQBWQrJSdxcCwjlGOvvdIyg==",
-      "licenseFile": "vendor/licenses/lodash.isplainobject@3.2.0.txt",
-      "licenseSources": [
-        "node_modules/lodash.isplainobject/LICENSE"
-      ],
-      "dependencies": [
-        "node_modules/lodash._basefor",
-        "node_modules/lodash.isarguments",
-        "node_modules/lodash.keysin"
-      ],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash.istypedarray",
-      "name": "lodash.istypedarray",
-      "version": "3.0.6",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash.istypedarray/-/lodash.istypedarray-3.0.6.tgz",
-      "integrity": "sha512-lGWJ6N8AA3KSv+ZZxlTdn4f6A7kMfpJboeyvbFdE7IU9YAgweODqmOgdUHOA+c6lVWeVLysdaxciFXi+foVsWw==",
-      "licenseFile": "vendor/licenses/lodash.istypedarray@3.0.6.txt",
-      "licenseSources": [
-        "node_modules/lodash.istypedarray/LICENSE"
-      ],
-      "dependencies": [],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash.keys",
-      "name": "lodash.keys",
-      "version": "3.1.2",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash.keys/-/lodash.keys-3.1.2.tgz",
-      "integrity": "sha512-CuBsapFjcubOGMn3VD+24HOAPxM79tH+V6ivJL3CHYjtrawauDJHUk//Yew9Hvc6e9rbCrURGk8z6PC+8WJBfQ==",
-      "licenseFile": "vendor/licenses/lodash.keys@3.1.2.txt",
-      "licenseSources": [
-        "node_modules/lodash.keys/LICENSE"
-      ],
-      "dependencies": [
-        "node_modules/lodash._getnative",
-        "node_modules/lodash.isarguments",
-        "node_modules/lodash.isarray"
-      ],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash.keysin",
-      "name": "lodash.keysin",
-      "version": "3.0.8",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash.keysin/-/lodash.keysin-3.0.8.tgz",
-      "integrity": "sha512-YDB/5xkL3fBKFMDaC+cfGV00pbiJ6XoJIfRmBhv7aR6wWtbCW6IzkiWnTfkiHTF6ALD7ff83dAtB3OEaSoyQPg==",
-      "licenseFile": "vendor/licenses/lodash.keysin@3.0.8.txt",
-      "licenseSources": [
-        "node_modules/lodash.keysin/LICENSE.txt"
-      ],
-      "dependencies": [
-        "node_modules/lodash.isarguments",
-        "node_modules/lodash.isarray"
-      ],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash.merge",
-      "name": "lodash.merge",
-      "version": "3.3.2",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash.merge/-/lodash.merge-3.3.2.tgz",
-      "integrity": "sha512-ZgGZpRhWLjivGUbjtApZR4HyLv/UAyoYqESVYkK4aLBJVHRrbFpG+GNnE9JPijliME4LkKM0SFI/WyOiBiv1+w==",
-      "licenseFile": "vendor/licenses/lodash.merge@3.3.2.txt",
-      "licenseSources": [
-        "node_modules/lodash.merge/LICENSE"
-      ],
-      "dependencies": [
-        "node_modules/lodash._arraycopy",
-        "node_modules/lodash._arrayeach",
-        "node_modules/lodash._createassigner",
-        "node_modules/lodash._getnative",
-        "node_modules/lodash.isarguments",
-        "node_modules/lodash.isarray",
-        "node_modules/lodash.isplainobject",
-        "node_modules/lodash.istypedarray",
-        "node_modules/lodash.keys",
-        "node_modules/lodash.keysin",
-        "node_modules/lodash.toplainobject"
-      ],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash.restparam",
-      "name": "lodash.restparam",
-      "version": "3.6.1",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash.restparam/-/lodash.restparam-3.6.1.tgz",
-      "integrity": "sha512-L4/arjjuq4noiUJpt3yS6KIKDtJwNe2fIYgMqyYYKoeIfV1iEqvPwhCx23o+R9dzouGihDAPN1dTIRWa7zk8tw==",
-      "licenseFile": "vendor/licenses/lodash.restparam@3.6.1.txt",
-      "licenseSources": [
-        "node_modules/lodash.restparam/LICENSE.txt"
-      ],
-      "dependencies": [],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
-      "id": "node_modules/lodash.toplainobject",
-      "name": "lodash.toplainobject",
-      "version": "3.0.0",
-      "license": "MIT",
-      "resolved": "https://registry.npmjs.org/lodash.toplainobject/-/lodash.toplainobject-3.0.0.tgz",
-      "integrity": "sha512-wMI0Ju1bvSmnBS3EcRRH/3zDnZOPpDtMtNDzbbNMKuTrEpALsf+sPyMeogmv63Y11qZQO7H1xFzohIEGRMjPYA==",
-      "licenseFile": "vendor/licenses/lodash.toplainobject@3.0.0.txt",
-      "licenseSources": [
-        "node_modules/lodash.toplainobject/LICENSE.txt"
-      ],
-      "dependencies": [
-        "node_modules/lodash._basecopy",
-        "node_modules/lodash.keysin"
-      ],
-      "usedBy": [
-        "html-docx-js"
-      ]
-    },
-    {
       "id": "node_modules/marked",
       "name": "marked",
       "version": "12.0.0",
@@ -2742,11 +2377,11 @@
     {
       "id": "node_modules/mermaid",
       "name": "mermaid",
-      "version": "11.16.0",
+      "version": "11.17.2",
       "license": "MIT",
-      "resolved": "https://registry.npmjs.org/mermaid/-/mermaid-11.16.0.tgz",
-      "integrity": "sha512-Zvm3kbstgdpvIJPPItlL7fppIZ3kibvc1oZIGxdvk9t6UFz6flv+Jw7FtRGKwfcI8OckmH04LqG6LlS6X4B1pA==",
-      "licenseFile": "vendor/licenses/mermaid@11.16.0.txt",
+      "resolved": "https://registry.npmjs.org/mermaid/-/mermaid-11.17.2.tgz",
+      "integrity": "sha512-V6K3C8EBdEsPFZXSKMJe6ppQOENxuHARr9GvHX4hh47lAbhMRD9qf4oEK7LoaRQxULMa80/qt5gHO73aCleBBg==",
+      "licenseFile": "vendor/licenses/mermaid@11.17.2.txt",
       "licenseSources": [
         "node_modules/mermaid/LICENSE"
       ],
@@ -2765,6 +2400,7 @@
         "node_modules/dayjs",
         "node_modules/dompurify",
         "node_modules/es-toolkit",
+        "node_modules/fastdom",
         "node_modules/mermaid/node_modules/katex",
         "node_modules/khroma",
         "node_modules/mermaid/node_modules/marked",
@@ -2857,22 +2493,6 @@
       "dependencies": [],
       "usedBy": [
         "mermaid"
-      ]
-    },
-    {
-      "id": "node_modules/pako",
-      "name": "pako",
-      "version": "1.0.11",
-      "license": "(MIT AND Zlib)",
-      "resolved": "https://registry.npmjs.org/pako/-/pako-1.0.11.tgz",
-      "integrity": "sha512-4hLB8Py4zZce5s4yd9XzopqwVv/yGNhV1Bl8NTmCq1763HeK2+EwVTv+leGeL13Dnh2wfbqowVPXCIO0z4taYw==",
-      "licenseFile": "vendor/licenses/pako@1.0.11.txt",
-      "licenseSources": [
-        "node_modules/pako/LICENSE"
-      ],
-      "dependencies": [],
-      "usedBy": [
-        "html-docx-js"
       ]
     },
     {
@@ -2990,6 +2610,27 @@
       "licenseSources": [
         "node_modules/safer-buffer/LICENSE"
       ],
+      "dependencies": [],
+      "usedBy": [
+        "mermaid"
+      ]
+    },
+    {
+      "id": "node_modules/strictdom",
+      "name": "strictdom",
+      "version": "1.0.1",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/strictdom/-/strictdom-1.0.1.tgz",
+      "integrity": "sha512-cEmp9QeXXRmjj/rVp9oyiqcvyocWab/HaoN4+bwFeZ7QzykJD6L3yD4v12K1x0tHpqRqVpJevN3gW7kyM39Bqg==",
+      "licenseFile": "vendor/licenses/strictdom@1.0.1.txt",
+      "licenseSources": [
+        "vendor/license-sources/strictdom-LICENSE"
+      ],
+      "supplementalSource": {
+        "file": "vendor/license-sources/strictdom-LICENSE",
+        "url": "https://github.com/wilsonpage/strictdom/blob/a3bbf19013ecc9c9d165dd4ed89e94757161443e/README.md#license",
+        "reason": "npm 包没有 LICENSE 文件；许可证全文取自该包自带的 README.md 的 License 章节（package.json 声明 MIT）。"
+      },
       "dependencies": [],
       "usedBy": [
         "mermaid"

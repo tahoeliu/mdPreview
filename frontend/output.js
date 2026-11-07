@@ -51,30 +51,6 @@ window.DocumentOutput = {
       return html;
     }
 
-    // Word (.docx) via html-docx-js 0.3.1: its API is asBlob(html, opts) which
-    // returns a Blob; we read it back as a base64 data URL for the native write.
-    async function buildDocx() {
-      try {
-        if (typeof deps.htmlDocx === 'undefined') {
-          showStatus(t('Word export is not ready yet', 'Word 导出功能尚未就绪'), true);
-          return null;
-        }
-        const html = await buildHtml();
-        const blob = deps.htmlDocx.asBlob(html, {
-          margins: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
-        });
-        return await new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => reject(reader.error || new Error('FileReader failed'));
-          reader.readAsDataURL(blob);
-        });
-      } catch (err) {
-        showStatus(t('Word export failed: ', 'Word 导出失败：') + (err && err.message ? err.message : err), true);
-        return null;
-      }
-    }
-
     // ── Export As (File menu): one native panel with a format popup ──
     async function exportAs() {
       if (!deps.Bridge.ready()) {
@@ -113,14 +89,7 @@ window.DocumentOutput = {
         if (format === 'md') content = getCurrentMarkdown();
         else if (format === 'txt') content = toPlainText(document.getElementById('content'));
         else if (format === 'html') content = await buildHtml();
-        else if (format === 'docx') {
-          if (options.legacy_docx) {
-            await ensureLib('vendor/html-docx-js.js', 'htmlDocx');
-            content = await buildDocx();
-          } else {
-            content = await buildDocxFromMarkdown(getCurrentMarkdown(), {root:document.getElementById('content'),options,title:currentDocTitle(),documentId:deps.documentSession.id});
-          }
-        }
+        else if (format === 'docx') content = await buildDocxFromMarkdown(getCurrentMarkdown(), {root:document.getElementById('content'),options,title:currentDocTitle(),documentId:deps.documentSession.id});
         if (content === null) return { success: false, error: 'conversion-failed' };
         let pageSize = null;
         if (format === 'png') {
