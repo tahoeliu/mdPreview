@@ -1,0 +1,6 @@
+===== node_modules/marked/marked.min.js =====
+/**
+ * marked v12.0.0 - a markdown parser
+ * Copyright (c) 2011-2024, Christopher Jeffrey. (MIT Licensed)
+ * https://github.com/markedjs/marked
+ */
