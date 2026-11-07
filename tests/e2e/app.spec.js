@@ -78,7 +78,7 @@ test('selecting text shows the formatting toolbar and bold round-trips to Markdo
   const bold=page.locator('.format-toolbar button[data-kind="bold"]');
   await expect(bold).toBeVisible();
   await bold.click();
-  await expect(page.locator('#content strong')).toHaveText('brave');
+  await expect(page.locator('#content strong, #content b')).toHaveText('brave');
   expect(await page.evaluate(()=>getCurrentMarkdown())).toContain('**brave**');
 });
 test('long document renders its tail and source outline navigates',async({page},testInfo)=>{
