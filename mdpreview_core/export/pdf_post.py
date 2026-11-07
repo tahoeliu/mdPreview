@@ -1,6 +1,33 @@
 """原生 PDF 后处理；所有变更完成后才原子替换目标文件。"""
+import re
 from pathlib import Path
 from mdpreview_core.storage import atomic_write, atomic_create
+from mdpreview_core.export import pdf_text
+
+
+def _utf16_length(text):
+    return len(text.encode('utf-16-le')) // 2
+
+
+def find_text(doc, needle):
+    """在“规范化”的页面文本里不区分大小写地查找，返回 [(页序号, 页, 选区)]。
+
+    PDFKit 的 findString 搜的是 PDF 里的原始文本，而 macOS 常把 文/页 等字存成部首码位，
+    搜不到就会丢书签和链接；这里先规范化页面文本，再按 UTF-16 偏移取选区。
+    """
+    if not needle:
+        return []
+    pattern = re.compile(re.escape(pdf_text.canonical(needle)), re.IGNORECASE)
+    found = []
+    for index in range(doc.pageCount()):
+        page = doc.pageAtIndex_(index)
+        text = pdf_text.canonical(str(page.string() or ''))
+        for match in pattern.finditer(text):
+            start = _utf16_length(text[:match.start()])
+            selection = page.selectionForRange_((start, _utf16_length(match.group(0))))
+            if selection is not None:
+                found.append((index, page, selection))
+    return found
 
 
 def finalize(src, dst, meta, commit_guard=None, no_clobber=False):
@@ -47,15 +74,14 @@ def finalize(src, dst, meta, commit_guard=None, no_clobber=False):
             url, text = str(link.get('url', '')), str(link.get('text', '')).strip()
             if not text or urlsplit(url).scheme not in ('http', 'https'):
                 continue
-            for selection in doc.findString_withOptions_(text, Foundation.NSCaseInsensitiveSearch):
-                for page in selection.pages():
-                    note = Quartz.PDFAnnotation.alloc().initWithBounds_forType_withProperties_(
-                        selection.boundsForPage_(page), Quartz.PDFAnnotationSubtypeLink, None)
-                    note.setURL_(Foundation.NSURL.URLWithString_(url))
-                    border = Quartz.PDFBorder.alloc().init()
-                    border.setLineWidth_(0)
-                    note.setBorder_(border)
-                    page.addAnnotation_(note)
+            for _, page, selection in find_text(doc, text):
+                note = Quartz.PDFAnnotation.alloc().initWithBounds_forType_withProperties_(
+                    selection.boundsForPage_(page), Quartz.PDFAnnotationSubtypeLink, None)
+                note.setURL_(Foundation.NSURL.URLWithString_(url))
+                border = Quartz.PDFBorder.alloc().init()
+                border.setLineWidth_(0)
+                note.setBorder_(border)
+                page.addAnnotation_(note)
     root = Quartz.PDFOutline.alloc().init()
     stack = [(0, root)]
     previous = 0
@@ -64,13 +90,11 @@ def finalize(src, dst, meta, commit_guard=None, no_clobber=False):
         level = int(heading.get('level', 1))
         if not text or level not in (1, 2, 3):
             continue
-        matches = doc.findString_withOptions_(text, Foundation.NSCaseInsensitiveSearch)
-        chosen = next((s for s in matches if s.pages() and doc.indexForPage_(s.pages()[0]) >= previous), None)
+        chosen = next(((i, pg, sel) for i, pg, sel in find_text(doc, text) if i >= previous), None)
         if chosen is None:
             continue
-        page = chosen.pages()[0]
-        previous = doc.indexForPage_(page)
-        bounds = chosen.boundsForPage_(page)
+        previous, page, selection = chosen
+        bounds = selection.boundsForPage_(page)
         item = Quartz.PDFOutline.alloc().init()
         item.setLabel_(text)
         item.setDestination_(Quartz.PDFDestination.alloc().initWithPage_atPoint_(page, (bounds.origin.x, bounds.origin.y+bounds.size.height)))
@@ -87,6 +111,24 @@ def finalize(src, dst, meta, commit_guard=None, no_clobber=False):
     data = doc.dataRepresentation()
     if data is None:
         raise OSError('pdf-serialization-failed')
+    payload = _repair_text_maps(doc, bytes(data))
     from contextlib import nullcontext
     with commit_guard() if commit_guard else nullcontext():
-        (atomic_create if no_clobber else atomic_write)(dst, bytes(data))
+        (atomic_create if no_clobber else atomic_write)(dst, payload)
+
+
+def _repair_text_maps(doc, payload):
+    """把 ToUnicode 里的部首改回真正的汉字；PDFKit 复核每页文本，任何不一致都保留原文件。"""
+    import Foundation
+    import Quartz
+    fixed = pdf_text.repair(payload)
+    if fixed == payload:
+        return payload
+    check = Quartz.PDFDocument.alloc().initWithData_(Foundation.NSData.dataWithBytes_length_(fixed, len(fixed)))
+    if check is None or check.pageCount() != doc.pageCount():
+        return payload
+    for index in range(doc.pageCount()):
+        expected = pdf_text.canonical(str(doc.pageAtIndex_(index).string() or ''))
+        if str(check.pageAtIndex_(index).string() or '') != expected:
+            return payload
+    return fixed

@@ -21,6 +21,12 @@ ln -s /Applications "$MOUNT/Applications"
 cp INSTALL.txt "$MOUNT/INSTALL.txt"
 hdiutil detach "$MOUNT"
 hdiutil convert "$TEMP/raw.dmg" -format UDZO -ov -o "$DIST_DIR/mdPreview-$VERSION.dmg"
-cp "$DIST_DIR/mdPreview-$VERSION.dmg" "$DIST_DIR/mdPreview.dmg"
-shasum -a 256 "$DIST_DIR/mdPreview.dmg" > "$DIST_DIR/mdPreview.dmg.sha256"
-echo "Release asset: $DIST_DIR/mdPreview.dmg"
+ARCH="$(lipo -archs "$DIST_DIR/mdPreview.app/Contents/MacOS/mdPreview")"
+case "$ARCH" in arm64|x86_64) ;; *) echo "expected a single-architecture executable, got: $ARCH" >&2; exit 1 ;; esac
+cp "$DIST_DIR/mdPreview-$VERSION.dmg" "$DIST_DIR/mdPreview-$VERSION-$ARCH.dmg"
+# 旧版本（≤1.5.0，均为 arm64）的更新器只认 mdPreview.dmg；仅 arm64 构建保留这个兼容名称。
+if [[ "$ARCH" == arm64 ]]; then
+  cp "$DIST_DIR/mdPreview-$VERSION.dmg" "$DIST_DIR/mdPreview.dmg"
+  shasum -a 256 "$DIST_DIR/mdPreview.dmg" > "$DIST_DIR/mdPreview.dmg.sha256"
+fi
+echo "Release asset: $DIST_DIR/mdPreview-$VERSION-$ARCH.dmg"

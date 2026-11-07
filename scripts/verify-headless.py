@@ -37,6 +37,10 @@ def check_pdf(path, minimum_pages, bookmarks):
         assert outline is not None and outline.numberOfChildren() > 0, 'PDF outline missing'
     title = document.documentAttributes().get(Quartz.PDFDocumentTitleAttribute)
     assert title, 'PDF title missing'
+    text = str(document.string() or '')
+    # macOS 常把 文/页 等字存成部首码位；出现任何部首说明搜索与复制会出错。
+    radicals = sorted({c for c in text if 0x2E80 <= ord(c) <= 0x2FD5})
+    assert not radicals, 'PDF text contains CJK radical lookalikes: ' + ''.join(radicals)
     return pages
 
 
@@ -52,6 +56,10 @@ def main():
         for fmt in ('txt', 'html', 'docx', 'pdf', 'png'):
             export(app, source, fmt, out / f'long.{fmt}')
         pages = check_pdf(out / 'long.pdf', 2, bookmarks=True)
+        import Foundation
+        import Quartz
+        long_text = str(Quartz.PDFDocument.alloc().initWithURL_(Foundation.NSURL.fileURLWithPath_(str(out / 'long.pdf'))).string())
+        assert '正文' in long_text and '阅读工具' in long_text, 'Chinese body text is not searchable in the PDF'
         document = zipfile.ZipFile(out / 'long.docx').read('word/document.xml').decode()
         assert 'altChunk' not in document, 'DOCX still uses altChunk'
         assert 'w:val="Heading1"' in document and 'w:val="Heading2"' in document, 'DOCX lacks heading styles'

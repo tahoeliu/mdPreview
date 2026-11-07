@@ -3,7 +3,7 @@ import base64
 import re
 
 # 必须由维护者经独立渠道核验后填写；不能从下载包、API或环境变量获取。
-RELEASE_PUBKEY_B64 = ''
+RELEASE_PUBKEY_B64 = 'BA8IFoChoLsGH9puAmJxy3aI7SL1YN+LfqcqnQ7w2+ULY/qwZ80HrnsZJGgqNJHlTXzf1NM6SPFMKS4wXbc+0Kw='
 
 
 def configured():
