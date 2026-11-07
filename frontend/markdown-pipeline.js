@@ -87,10 +87,41 @@
     if (masked === aligned) return false;
     return marked.Tokenizer.prototype.emStrong.call(this, src, masked, prevChar) || false;
   }
-  function createParser(definitions = []) {
+  // marked 12 的 walkTokens 在循环里反复 values = values.concat(...)，复杂度是 O(n²)：
+  // 800KB 文档仅此一项就要约 17 秒。这里提供语义相同的线性实现：同样的遍历顺序，
+  // 且回调之后才按（可能已被回调改写的）token.type 决定如何深入子节点。
+  function linearWalkTokens(tokens, callback) {
+    const values = [];
+    const childTokens = this.defaults && this.defaults.extensions && this.defaults.extensions.childTokens;
+    const record = (result) => {
+      if (Array.isArray(result)) { for (const item of result) values.push(item); }
+      else values.push(result); // 与 Array#concat 一致：非数组（含 undefined）按一个元素追加
+    };
+    const visit = (list) => {
+      for (const token of list) {
+        record(callback.call(this, token));
+        if (token.type === 'table') {
+          for (const cell of token.header) visit(cell.tokens);
+          for (const row of token.rows) for (const cell of row) visit(cell.tokens);
+        } else if (token.type === 'list') {
+          visit(token.items);
+        } else if (childTokens && childTokens[token.type]) {
+          childTokens[token.type].forEach((name) => visit(token[name].flat(Infinity)));
+        } else if (token.tokens) {
+          visit(token.tokens);
+        }
+      }
+    };
+    visit(tokens);
+    return values;
+  }
+  // marked-footnote 的块级 start 对每个段落扫描整篇剩余文本，大文档下是二次复杂度；
+  // 文档里根本没有 [^标签] 语法时就不注册它（结果完全相同，只是省掉这部分开销）。
+  const footnoteSyntax = /\[\^[^\]\n]+\]/;
+  function createParser(definitions = [], source = '') {
     // A fresh extension state per document prevents cross-document footnote leakage.
     const parser = new marked.Marked({ breaks: true, gfm: true },
-      markedFootnote({ refMarkers: true, keepLabels: true, prefixId: 'fn-' }),
+      ...(footnoteSyntax.test(source) ? [markedFootnote({ refMarkers: true, keepLabels: true, prefixId: 'fn-' })] : []),
       { renderer: { checkbox(checked) { return checked ? '[x] ' : '[ ] '; },
           listitem(text,task){return '<li'+(task?' data-task="true"':'')+'>'+text+'</li>\n';},
           image(href,title,text){return '<img src="'+escape(href)+'" alt="'+escape(text)+'"'+(title?' title="'+escape(title)+'"':'')+' data-md-image="true">';} },
@@ -99,7 +130,7 @@
         }], walkTokens(token) {
         if(token.type==='blockquote'){
           const match=/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*(?:\n|$)/.exec(token.text);
-          if(match){token.type='alert';token.kind=match[1];token.tokens=createParser().lexer(token.text.slice(match[0].length));}
+          if(match){token.type='alert';token.kind=match[1];token.tokens=createParser([],token.text).lexer(token.text.slice(match[0].length));}
         }
         if (token.type === 'footnote') definitions.push(token.raw.trimEnd());
         if (token.type === 'html') {
@@ -115,12 +146,13 @@
           token.text = holder.innerHTML;
         }
       }});
+    parser.walkTokens = linearWalkTokens;
     return parser;
   }
-  function lex(markdown) { return createParser().lexer(markdown); }
+  function lex(markdown) { return createParser([], markdown).lexer(markdown); }
   function parse(markdown) {
     const definitions = [];
-    const parser = createParser(definitions);
+    const parser = createParser(definitions, markdown);
     const html = clean(parser.parse(markdown));
     const root = document.createElement('div'); root.innerHTML = html;
     root.querySelectorAll('sup:has(a[data-fn-ref])').forEach((sup) => {
@@ -153,5 +185,5 @@
     }
     const holder = document.createElement('div'); holder.append(fragment); return holder.innerHTML;
   }
-  window.MarkdownPipeline = { parse, lex, cleanMath, cleanHTML: (html, allowFile = false) => clean(html, false, allowFile), cleanSVG: (svg) => clean(svg, true), cleanExport: (html) => clean(html, true, true, true), safeURL };
+  window.MarkdownPipeline = { parse, lex, linearWalkTokens, cleanMath, cleanHTML: (html, allowFile = false) => clean(html, false, allowFile), cleanSVG: (svg) => clean(svg, true), cleanExport: (html) => clean(html, true, true, true), safeURL };
 })();

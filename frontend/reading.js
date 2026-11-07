@@ -33,6 +33,8 @@ window.ReadingFeatures = (() => {
         }
       }
     }
+    // 没有任务列表标记就不必再对整篇文档做一次 lexer 与逐字符位置映射（大文档下代价很高）。
+    if(!/^[ \t>]*(?:[-+*]|\d+[.)])[ \t]+\[[ xX]\]/m.test(markdown))return found;
     const front=/^\s*---\r?\n[\s\S]*?\r?\n(?:---|\.\.\.)\r?\n?/.exec(markdown),offset=front?front[0].length:0;
     const body=markdown.slice(offset);
     visit(MarkdownPipeline.lex(body),body,Array.from({length:body.length},(_,i)=>i+offset));return found.sort((a,b)=>a.offset-b.offset);

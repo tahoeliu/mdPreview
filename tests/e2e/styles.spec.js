@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs');
 const path = require('node:path');
-const root = path.resolve(__dirname, '..');
+const root = path.resolve(__dirname, '../..');
 const oldCSS = fs.readFileSync(path.join(root, 'tests/fixtures/styles-t02.css'), 'utf8');
 
 for (const theme of ['light', 'dark']) {
