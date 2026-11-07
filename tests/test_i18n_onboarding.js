@@ -9,7 +9,7 @@ const assert=require('node:assert/strict'),fs=require('node:fs');const {createAp
  await a.load('','Untitled.md');let acknowledged=0,defaults=0;
  w.pywebview.api.get_onboarding=()=>({first:true,version:'1.5.0',updated:false});w.pywebview.api.acknowledge_onboarding=()=>{acknowledged++;return {success:true};};
  w.pywebview.api.set_as_default_for_md=()=>{defaults++;return {success:true};};await w.Onboarding.initialize();
- assert.equal(d.querySelectorAll('[data-onboarding] button').length,3);assert.equal(defaults,0);
+ assert.equal(d.querySelectorAll('[data-onboarding] button').length,4);assert.equal(defaults,0);
  w.pywebview.api.get_shortcuts=()=>JSON.parse(fs.readFileSync('frontend/shortcuts.json','utf8'));await w.Onboarding.shortcuts();assert.ok(d.querySelectorAll('#modalBody tr').length>20);w.closeModal();
  w.pywebview.api.get_example=()=>JSON.parse(fs.readFileSync('frontend/welcome.json','utf8')).en;
  w.katex=require('../vendor/katex/katex.min.js');const link=d.createElement('link');link.dataset.katex='true';d.head.append(link);

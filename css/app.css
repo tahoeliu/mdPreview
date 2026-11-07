@@ -177,3 +177,31 @@ body:not(.has-toc) .page { margin: 0 auto; max-width: var(--page-width, 720px); 
   .read-end { color: #98989d; }
 }
 @media (prefers-reduced-motion: reduce) { .read-progress, .read-hud { transition: none; } }
+
+/* ── Go to heading (⌘J) ── */
+.goto-overlay { position: fixed; inset: 0; z-index: 1100; display: flex; justify-content: center; align-items: flex-start; padding-top: 14vh; background: rgba(0,0,0,.18); }
+.goto-box { width: min(520px, 90vw); background: #fff; color: #1d1d1f; border-radius: 12px; box-shadow: 0 12px 40px rgba(0,0,0,.22); overflow: hidden; font-size: 14px; }
+.goto-box input { width: 100%; box-sizing: border-box; border: 0; border-bottom: 1px solid rgba(128,128,128,.25); padding: 13px 16px; font-size: 15px; outline: none; background: transparent; color: inherit; }
+.goto-box ul { list-style: none; margin: 0; padding: 6px; max-height: 50vh; overflow-y: auto; }
+.goto-box li { padding: 7px 12px; border-radius: 6px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.goto-box li.active { background: #0062cc; color: #fff; }
+.goto-box li.empty { color: #6e6e73; cursor: default; }
+@media (prefers-color-scheme: dark) { .goto-box { background: #2a2a2c; color: #f0f0f0; } .goto-box li.empty { color: #98989d; } }
+
+.toc-sidebar li { position: relative; }
+.toc-sidebar .toc-min { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 11px; color: #6e6e73; font-variant-numeric: tabular-nums; pointer-events: none; }
+.toc-sidebar li:has(.toc-min) > a { padding-right: 30px; }
+@media (prefers-color-scheme: dark) { .toc-sidebar .toc-min { color: #98989d; } }
+
+/* ── Selection toolbar for the rendered view ── */
+.format-toolbar { position: fixed; z-index: 950; display: flex; gap: 2px; padding: 4px; background: #fff; color: #1d1d1f; border: 1px solid rgba(0,0,0,.12); border-radius: 9px; box-shadow: 0 6px 22px rgba(0,0,0,.16); user-select: none; -webkit-user-select: none; }
+.format-toolbar[hidden] { display: none; }
+.format-toolbar button { min-width: 30px; height: 28px; padding: 0 7px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: 600 13px/1 var(--font-sans); cursor: pointer; }
+.format-toolbar button[data-kind="italic"] { font-style: italic; font-weight: 500; }
+.format-toolbar button[data-kind="strike"] { text-decoration: line-through; font-weight: 500; }
+.format-toolbar button[data-kind="code"] { font-family: var(--font-mono); font-size: 12px; }
+.format-toolbar button:hover { background: rgba(0,0,0,.07); }
+.format-toolbar button.on { background: #0062cc; color: #fff; }
+.format-toolbar input { width: 280px; height: 28px; border: 0; outline: none; padding: 0 8px; font-size: 13px; background: transparent; color: inherit; }
+@media (prefers-color-scheme: dark) { .format-toolbar { background: #2c2c2e; color: #f0f0f0; border-color: rgba(255,255,255,.14); } .format-toolbar button:hover { background: rgba(255,255,255,.1); } }
+@media print { .format-toolbar { display: none !important; } }

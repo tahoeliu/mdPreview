@@ -67,13 +67,14 @@ Select any `.md` file in Finder → **File → Get Info → Open with → mdPrev
 - Outline sidebar, dark mode, adjustable text size (`⌘=` / `⌘-`, reset `⌘0`) and reading width (`⌥⌘=` / `⌥⌘-`)
 - Remembers your window position, text size and reading position per document
 - Reloads automatically when another program (or an AI agent) changes the file
+- **Made for long AI answers:** reading-time left and progress (only in long documents), per-section reading time in the outline, **Go to Heading** (`⌘J`), **New from Clipboard** (`⌥⌘N`)
 - Find (`⌘F`), multiple windows, open linked `.md` files with a click, drag a `.md` file onto the window
 - Tables, task lists (click to tick), footnotes, front matter, syntax-highlighted code with a copy button
 - **Math** with KaTeX (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`), **Mermaid** diagrams, GitHub-style alerts (`> [!NOTE]`)
 - Chinese typography done properly (language-aware fonts, spacing)
 
 ### Editing
-- Edit the rendered view directly, or switch to source (`⌘E`) with `⌘B` / `⌘I` / `⌘K`, list continuation and Tab indenting
+- Edit the rendered view directly — select text and a small toolbar offers bold, headings, lists and links, so no Markdown syntax is needed. Or or switch to source (`⌘E`) with `⌘B` / `⌘I` / `⌘K`, list continuation and Tab indenting
 - **Paste as Markdown** (`⇧⌘V`): paste formatted text from web pages, docs and AI chats and get clean Markdown
 - Paste or drop images: they are saved next to the document in `assets/` and linked with relative paths
 - Drafts are autosaved; saving never overwrites changes you made while the disk write was pending
@@ -111,6 +112,7 @@ mdpreview export notes.md --to pdf -o notes.pdf     # headless export: pdf, html
 | `⌘E` | Preview ⇄ Source | `⌃⌘F` | Full screen |
 | `⇧⌘V` | Paste as Markdown | `⇧⌘C` / `⌥⌘C` | Copy as Rich Text / as Markdown |
 | `⌘,` | Settings | `⌘I` | Properties |
+| `⌘J` | Go to Heading | `⌥⌘N` | New from Clipboard |
 
 The Help menu has the full list, a sample document, **Report an Issue…** (pre-fills only version and OS) and **Export Diagnostics…**.
 

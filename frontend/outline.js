@@ -91,10 +91,11 @@ window.DocumentOutline = {
         .sort((a, b) => a - b);
       state.tocHasContent = headings.length >= 2;
       if (toggle) toggle.style.display = state.tocHasContent ? '' : 'none';
-      toc.innerHTML = '<ul>' + headings.map((h) => {
+      const minutes = window.ReadingProgress && ReadingProgress.sectionMinutes ? ReadingProgress.sectionMinutes(headings) : [];
+      toc.innerHTML = '<ul>' + headings.map((h, index) => {
         const level = parseInt(h.tagName.slice(1), 10);
         const relativeIndent = Math.max(0, visibleHeadingLevels.indexOf(level)) * 12;
-        return `<li><a class="toc-level-${level}" style="padding-left: ${relativeIndent}px;" href="#${encodeURIComponent(h.id)}" data-target="${escHtml(h.id)}">${escHtml(h.textContent)}</a></li>`;
+        return `<li><a class="toc-level-${level}" style="padding-left: ${relativeIndent}px;" href="#${encodeURIComponent(h.id)}" data-target="${escHtml(h.id)}">${escHtml(h.textContent)}</a>${level <= 2 && minutes[index] >= 1 ? `<span class="toc-min" aria-hidden="true">${minutes[index]}′</span>` : ''}</li>`;
       }).join('') + '</ul>';
       applyTocVisibility();
       setupScrollSpy(headings);

@@ -72,6 +72,15 @@ test('replace controls are hidden in preview and shown in source mode',async({pa
   await page.keyboard.press('Meta+f');
   await expect(page.locator('.replace-action').first()).toBeVisible();
 });
+test('selecting text shows the formatting toolbar and bold round-trips to Markdown',async({page})=>{
+  await page.evaluate(()=>loadContent('/tmp/doc.md','Hello brave world',720,false,false));
+  await page.evaluate(()=>{const p=document.querySelector('#content p');const r=document.createRange();r.setStart(p.firstChild,6);r.setEnd(p.firstChild,11);const s=getSelection();s.removeAllRanges();s.addRange(r);document.dispatchEvent(new Event('mouseup'));});
+  const bold=page.locator('.format-toolbar button[data-kind="bold"]');
+  await expect(bold).toBeVisible();
+  await bold.click();
+  await expect(page.locator('#content strong')).toHaveText('brave');
+  expect(await page.evaluate(()=>getCurrentMarkdown())).toContain('**brave**');
+});
 test('long document renders its tail and source outline navigates',async({page},testInfo)=>{
   const measurements=await page.evaluate(async()=>{
     const text=Array.from({length:800},(_,i)=>'# Section '+i+'\n\n'+('Reading text 中文. '.repeat(10))).join('\n\n');

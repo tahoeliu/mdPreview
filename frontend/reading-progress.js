@@ -21,6 +21,21 @@ window.ReadingProgress = (() => {
     return cjk / CJK_PER_MIN + words / WORDS_PER_MIN + codeChars / 2 / 900;
   }
 
+  // 每个标题到下一个同级或更高级标题之间的阅读分钟数（取整），用于大纲里的"这一节要读多久"。
+  function sectionMinutes(headings) {
+    const sizes = headings.map(h => {
+      let text = '', node = h.nextElementSibling;
+      const level = Number(h.tagName[1]);
+      while (node && !(/^H[1-6]$/.test(node.tagName) && Number(node.tagName[1]) <= level)) {
+        if (!/^H[1-6]$/.test(node.tagName)) text += node.textContent + ' ';
+        node = node.nextElementSibling;
+      }
+      const cjk = (text.match(CJK) || []).length;
+      return cjk / CJK_PER_MIN + (text.replace(CJK, ' ').match(WORD) || []).length / WORDS_PER_MIN;
+    });
+    return sizes.map(m => Math.round(m));
+  }
+
   function label(minutes) {
     const m = Math.max(0, Math.round(minutes));
     return m < 1 ? null : m;
@@ -84,6 +99,6 @@ window.ReadingProgress = (() => {
     return { update, measure, estimateMinutes, bar, hud, end };
   }
 
-  return { create, estimateMinutes };
+  return { create, estimateMinutes, sectionMinutes };
 })();
 document.addEventListener('DOMContentLoaded', () => { window.readingProgress = ReadingProgress.create(); });

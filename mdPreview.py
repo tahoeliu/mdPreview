@@ -116,6 +116,22 @@ def _locale_bundle():
     return {'locale': locale, 'messages': messages}
 
 
+def _apply_appearance(value):
+    """Force light/dark (or follow the system) for the whole app; the web view's
+    prefers-color-scheme follows NSApp's appearance, so no CSS duplication is needed."""
+    if not HAS_COCOA:
+        return
+    def apply():
+        try:
+            from AppKit import NSApplication, NSAppearance
+            name = {'light': 'NSAppearanceNameAqua', 'dark': 'NSAppearanceNameDarkAqua'}.get(value)
+            NSApplication.sharedApplication().setAppearance_(NSAppearance.appearanceNamed_(name) if name else None)
+        except Exception:
+            log_exception('apply appearance failed')
+    from PyObjCTools import AppHelper
+    AppHelper.callAfter(apply)
+
+
 def _t(en, zh):
     bundle = _locale_bundle()
     return bundle['messages'].get(en, zh if bundle['locale'] == 'zh-Hans' else en)
@@ -878,6 +894,8 @@ class MarkdownAPI:
         cfg = load_config()
         preferences = self.get_settings()
         page_width = preferences['page_width']
+        if preferences['appearance'] != 'system':
+            _apply_appearance(preferences['appearance'])
         from mdpreview_core.reading_state import position_key
         position = cfg.get('reading_positions', {}).get(position_key(self.file_path), {}) if self.file_path else {}
         base = {'i18n': _locale_bundle(), 'readingPosition': position, 'pageWidth': page_width, 'settings': preferences, 'fontSize': preferences['font_size'],
@@ -1645,6 +1663,8 @@ class MarkdownAPI:
             values = self.get_settings()
             values.update(patch)
             update_config({'settings': values})
+            if 'appearance' in patch:
+                _apply_appearance(values['appearance'])
             return {'success': load_config().get('settings') == values, 'settings': values}
 
     def save_font_size(self, size):
@@ -2995,6 +3015,10 @@ if HAS_COCOA:
                     open_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Open File…", "打开文件…"), "openFile:", "o")
                     open_item.setTarget_(_view_menu_handler)
                     file_menu.addItem_(open_item)
+                    clip_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("New from Clipboard", "从剪贴板新建"), "newFromClipboard:", "n")
+                    clip_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 19))  # Option+Command+N
+                    clip_item.setTarget_(_view_menu_handler)
+                    file_menu.addItem_(clip_item)
                     recent_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Open Recent", "打开最近"), None, "")
                     recent_menu = NSMenu.alloc().initWithTitle_(_t("Open Recent", "打开最近"))
                     for recent_path in load_config().get('recent_files', [])[:10]:
@@ -3106,6 +3130,10 @@ if HAS_COCOA:
                     find_prev_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 17))  # Cmd+Shift+G
                     find_prev_item.setTarget_(_view_menu_handler)
                     edit_menu.addItem_(find_prev_item)
+                    goto_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Go to Heading…", "跳转到标题…"), "openGoToHeading:", "j")
+                    goto_item.setKeyEquivalentModifierMask_(1 << 20)  # Cmd+J
+                    goto_item.setTarget_(_view_menu_handler)
+                    edit_menu.addItem_(goto_item)
                     _view_menu_handler._edit_menu_setup = True
 
             if not getattr(_view_menu_handler, '_help_menu_setup', False):
@@ -3403,6 +3431,18 @@ if HAS_COCOA:
             # Open a new blank window (main-thread safe).
             _create_window_safely(None)
 
+        def newFromClipboard_(self, sender):
+            # AI-era entry: copy an answer anywhere, open it rendered at once.
+            def run():
+                win = create_window(None)
+                if not win:
+                    return
+                deadline = time.time() + 10
+                while time.time() < deadline and id(win) not in _windows_js_ready:
+                    time.sleep(0.05)
+                _dispatch_js_to(win, 'pasteAsMarkdown()')
+            threading.Thread(target=run, daemon=True).start()
+
         def findAction_(self, sender):
             _dispatch_js('openFindBar()')
 
@@ -3417,6 +3457,9 @@ if HAS_COCOA:
 
         def findNextAction_(self, sender):
             _dispatch_js('findNext()')
+
+        def openGoToHeading_(self, sender):
+            _dispatch_js('openGoToHeading()')
 
         def findPrevAction_(self, sender):
             _dispatch_js('findPrev()')

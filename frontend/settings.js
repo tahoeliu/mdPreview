@@ -15,6 +15,7 @@ window.openSettings=async function(){
       row.append(input);body.append(row);controls.push({key,input,section,value});
     }
     group(t('General','通用'));field('language',t('Interface language','界面语言'),values.language,[['system',t('System','跟随系统')],['en','English'],['zh-Hans',t('Simplified Chinese','简体中文')],['zh-Hant','繁體中文']]);
+    field('appearance',t('Appearance','外观'),values.appearance,[['system',t('System','跟随系统')],['light',t('Light','浅色')],['dark',t('Dark','深色')]]);
     field('restore_session',t('Restore documents at startup','启动时恢复文档'),values.restore_session);field('auto_update',t('Check for updates automatically (GitHub)','自动检查更新（访问 GitHub）'),values.auto_update);
     group(t('Reading','阅读'));field('font_size',t('Default font size','默认字号'),values.font_size);field('page_width',t('Default width','默认宽度'),values.page_width);field('remote_images',t('Remote images','远程图片'),values.remote_images,[['ask',t('Ask','询问')],['always',t('Always','总是')],['never',t('Never','从不')]]);field('auto_reload',t('Reload external changes','外部修改自动刷新'),values.auto_reload);
     group(t('Export','导出'));

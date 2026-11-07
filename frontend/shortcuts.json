@@ -15,6 +15,8 @@
  {"action":"zoomOut:","en":"Smaller Text","zh":"缩小文字","key":"-","modifiers":["command"]},
  {"action":"resetFontSize:","en":"Reset Font Size","zh":"重置字号","key":"0","modifiers":["command"]},
  {"action":"openSettings:","en":"Settings…","zh":"设置…","key":",","modifiers":["command"]},
+ {"action":"newFromClipboard:","en":"New from Clipboard","zh":"从剪贴板新建","key":"n","modifiers":["command","option"]},
+ {"action":"openGoToHeading:","en":"Go to Heading…","zh":"跳转到标题…","key":"j","modifiers":["command"]},
  {"action":"pasteAsMarkdown:","en":"Paste as Markdown","zh":"粘贴为 Markdown","key":"v","modifiers":["command","shift"]},
  {"action":"copyAsRichText:","en":"Copy as Rich Text","zh":"复制为富文本","key":"c","modifiers":["command","shift"]},
  {"action":"copyAsMarkdown:","en":"Copy as Markdown","zh":"复制为 Markdown","key":"c","modifiers":["command","option"]},

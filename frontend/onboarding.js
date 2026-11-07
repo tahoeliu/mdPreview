@@ -22,7 +22,7 @@ window.Onboarding=(()=>{
  }catch(error){showStatus(t('Could not load release notes','无法加载更新说明'),true);}}
  function decorate(overlay){if(!first||overlay.querySelector('[data-onboarding]'))return;
   const actions=document.createElement('div');actions.dataset.onboarding='true';
-  for(const [label,run] of [[t('Open File…','打开文件…'),()=>Bridge.call('open_file_dialog')],[t('Open Example','打开示例文档'),example],[t('Set as default for .md','设为 .md 默认打开方式'),()=>Bridge.call('set_as_default_for_md')]]){
+  for(const [label,run] of [[t('Open File…','打开文件…'),()=>Bridge.call('open_file_dialog')],[t('Paste from Clipboard','从剪贴板粘贴'),async()=>{await pasteAsMarkdown();return {success:true};}],[t('Open Example','打开示例文档'),example],[t('Set as default for .md','设为 .md 默认打开方式'),()=>Bridge.call('set_as_default_for_md')]]){
    const button=document.createElement('button');button.textContent=label;button.addEventListener('click',async event=>{event.stopPropagation();try{const result=await run();if(result?.success===false)throw new Error('action-failed');await acknowledge();actions.remove();}catch(error){showStatus(t('Action failed','操作失败'),true);}});actions.append(button);
   }overlay.append(actions);
  }
