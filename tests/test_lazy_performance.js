@@ -1,0 +1,16 @@
+const assert=require('node:assert/strict');const {createApp}=require('./helpers');
+(async()=>{const a=await createApp();try{const w=a.w,observers=[];
+ w.IntersectionObserver=class{constructor(callback,options){this.callback=callback;this.options=options;this.nodes=new Set();observers.push(this);}observe(n){this.nodes.add(n);}unobserve(n){this.nodes.delete(n);}disconnect(){this.nodes.clear();}};
+ await a.load('# 延迟渲染\n\n$x+1$\n\n```mermaid\ngraph TD; A-->B\n```');
+ assert.equal(w.LazyRender.pending(),2);assert.equal(w.document.querySelector('.katex'),null);
+ assert.equal(observers.at(-1).options.rootMargin,'800px');
+ let rendered=0;w.mermaid={initialize(){},async render(){rendered++;return {svg:'<svg xmlns="http://www.w3.org/2000/svg"><text>图表</text></svg>'};}};
+ const katex=require('../vendor/katex/katex.min.js');w.katex=katex;
+ const link=w.document.createElement('link');link.dataset.katex='true';w.document.head.append(link);
+ assert.equal(rendered,0);await w.LazyRender.flush();assert.equal(rendered,1);assert.ok(w.document.querySelector('.katex'));assert.equal(w.LazyRender.pending(),0);
+ assert.ok(w.RenderPerformance.snapshot().some(x=>x.stage==='parse'&&x.duration>=0));
+ await a.load('$y$');assert.equal(w.LazyRender.pending(),1);await a.load('新文档');assert.equal(w.LazyRender.pending(),0);
+ for(const o of observers)o.callback([{target:[...o.nodes][0],isIntersecting:true}]);
+ assert.equal(w.document.querySelector('.katex'),null);
+ console.log('T24 IO延迟、输出强制全部、文档切换与实际分段采样通过');
+}finally{a.close();}})().catch(e=>{console.error(e);process.exitCode=1});

@@ -3,10 +3,10 @@
   "policy": [
     "marked 固定 12.0.0：cjkEmStrong 依赖 Tokenizer.prototype.emStrong 内部签名，本卡不升级应用使用的大版本。Mermaid 私有依赖中的 marked 不替换应用的 marked。",
     "Mermaid 固定 11.16.0，与旧资源声明版本一致；本卡不引入 Mermaid 12 的集成变化。",
-    "html-docx-js 仅作为 T10 legacy 回退保留一个版本；html2canvas 已移出依赖与资源清单，根文件由主代理集成 T09 后删除。",
+    "html-docx-js 仅作为 legacy Word 回退保留一个版本（下个版本删除）；html2canvas 已移出依赖与资源清单。",
     "许可证覆盖八个直接库的完整已安装运行时依赖闭包（含 peer、类型及 CLI 依赖，保守多收集），并保留浏览器包内嵌的捆绑依赖声明。安装树版本不等于上游预构建包内每个捆绑组件版本；内嵌声明单独保留，不虚构映射。",
     "npm ci --ignore-scripts 后运行 npm run vendor；npm run vendor:check 只校验不写文件。所有资源字节直接复制自 npm 包，不重新压缩或修改。",
-    "T30 仅完成依赖准备；index/app.js、spec、资源打包与关于面板由主代理接入。WorkSpace/Credits.rtf 每次生成，不提交缓存。"
+    "vendor/Credits.rtf 由同一份许可证声明自动生成，随应用打包为“关于”面板的致谢。"
   ],
   "libraries": [
     {

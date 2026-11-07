@@ -27,23 +27,17 @@ a = Analysis(
         # 整目录包含职责工厂和输出模块；加载清单由 index.html 与发布门禁交叉校验。
         ('frontend', 'frontend'),
         ('scripts/mdpreview', 'bin'),
-        ('WorkSpace/tests/native-check.js', 'tests'),
-        ('purify.min.js', '.'),
-        ('marked-footnote.umd.js', '.'),
+        ('tests/native-check.js', 'tests'),
         ('VERSION', '.'),
         ('CHANGELOG.md', '.'),
         ('THIRD_PARTY_NOTICES.md', '.'),
         ('release-policy.json', '.'),
         ('vendor', 'vendor'),
-        ('marked.min.js', '.'),
-        ('turndown.js', '.'),
-        ('mermaid.min.js', '.'),
-        ('html-docx-js.js', '.'),
         ('app_icon.icns', '.'),
         ('doc_icon.icns', '.'),
         # Shown in the standard macOS About panel (bottom "Credits" area).
         # Contains a clickable "GitHub" hyperlink + "©tahoeliu".
-        ('WorkSpace/Credits.rtf', '.'),
+        ('vendor/Credits.rtf', '.'),
     ],
     hiddenimports=[
         'webview.platforms.cocoa',

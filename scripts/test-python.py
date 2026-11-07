@@ -16,7 +16,7 @@ environment = dict(os.environ, PYTHONDONTWRITEBYTECODE='1', PYTHONPATH=str(root)
                    PYTEST_ADDOPTS=f'-o cache_dir={cache / "pytest"}',
                    RUFF_CACHE_DIR=str(cache / 'ruff'))
 failed = False
-for test in sorted((workspace / 'tests').glob('test_*.py')):
+for test in sorted((root / 'tests').glob('test_*.py')):
     with tempfile.TemporaryDirectory(prefix='app-data-', dir=run) as directory:
         result = subprocess.run(
             [sys.executable, '-B', '-m', 'coverage', 'run', '--parallel-mode',
@@ -26,7 +26,7 @@ for test in sorted((workspace / 'tests').glob('test_*.py')):
 for args in (
     ['combine', str(run)],
     ['json', '-o', str(workspace / 'python-coverage.json')],
-    ['report', '--include=mdpreview_core/*', '--fail-under=90'],
+    ['report', '-m', '--include=mdpreview_core/*', '--fail-under=90'],
 ):
     subprocess.run([sys.executable, '-B', '-m', 'coverage', *args],
                    cwd=root, env=environment, check=True)

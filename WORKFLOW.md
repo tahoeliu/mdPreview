@@ -1,14 +1,14 @@
 # mdPreview development workflow
 
-源码、运行资源和开发文档保留在仓库；测试、CI 配置、Credits.rtf 与缓存产物仅放在 WorkSpace/。
-WorkSpace/ 与历史 outputs/ 保持 Git 忽略；不得删除用户备份或清理无关历史产物。
-同名测试冲突先归档 WorkSpace/backups/，再合并；测试入口为 WorkSpace/tests/。
-由于 WorkSpace/ 不提交，干净克隆需另行提供本地测试与 Credits 资源；WorkSpace/.github/ 不会被 GitHub Actions 自动执行。
-Use Python 3.13 and Node 22+; install requirements-dev.txt and npm ci.
-Run npm test and .venv/bin/python scripts/test-python.py. Tests isolate app data.
-Build with ./build.sh or ./build_dmg.sh; outputs default to WorkSpace/build and WorkSpace/dist.
-Build roots get Spotlight exclusion markers before producing application bundles.
-Do not replace /Applications during development tests.
-Ad-hoc signing and GitHub sharing are the chosen distribution policy.
-Apple Developer ID/notarization remain optional. Never claim untested architecture/OS support.
-Updates require the exact GitHub release asset digest and rollback on failure.
+Source, resources, tests (`tests/`), CI (`.github/`) and developer docs are committed.
+`WorkSpace/` and `outputs/` are git-ignored scratch space: build products, caches, logs, probe PDFs and local evidence only.
+
+- Use Python 3.13 and Node 22+; install `requirements-lock.txt`, `requirements-dev.txt` and run `npm ci --ignore-scripts`.
+- Run `npm test`, `.venv/bin/python scripts/test-python.py`, `npm run test:e2e`. Tests isolate app data via `MDPREVIEW_DATA_DIR`.
+- Build with `./build.sh` or `./build_dmg.sh`; outputs default to `WorkSpace/build` and `WorkSpace/dist`.
+- Verify a built app with `scripts/verify-headless.py --app …` (real hidden-window export of every format) and `scripts/verify-native.py`.
+- Build roots get Spotlight exclusion markers before producing application bundles.
+- Do not replace `/Applications` during development tests.
+- Distribution policy: ad-hoc code signature, GitHub Releases, plus our own ECDSA release signature (the public key is pinned in `mdpreview_core/release_sig.py`). Apple Developer ID / notarization are not used.
+- Never claim an architecture or OS version works unless it was actually tested.
+- Updates require a signed `SHA256SUMS`, the matching archive digest and the GitHub asset digest, and roll back on failure.

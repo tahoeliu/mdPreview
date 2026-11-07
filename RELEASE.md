@@ -13,11 +13,11 @@ No production signing key is configured. T27 signed ZIP installation fails close
 - [ ] Independently verify and configure the P-256 production public key; never commit its private key.
 - [ ] Pass signature-valid/tampered/wrong-key tests through the production verifier and hostile ZIP extraction tests.
 - [ ] Pass output quality and actual WebKit performance budgets; record native cold start.
-- [ ] Verify hidden CLI export without network or dialogs, including multi-page PDF and diagnostic exit codes.
+- [ ] Run `scripts/verify-headless.py --app …` against the built app (hidden-window export of every format, multi-page PDF with bookmarks and page numbers, existing output refused).
 - [ ] Check every bundled Mach-O executable/library/extension before claiming architecture support.
 - [ ] Verify rollback, fresh-account installation and all compatibility cells below.
 - [ ] Provide actual version-specific CHANGELOG notes, complete licences and Credits.
-- [ ] Review workflow templates manually; WorkSpace is ignored and does not trigger GitHub Actions.
+- [ ] Confirm the GitHub Actions workflows (`ci.yml`, `release.yml`) are green on the release commit.
 - [ ] Configure reporting contacts and any Homebrew tap only with explicit maintainer approval.
 
 ### Manual compatibility matrix
@@ -54,7 +54,7 @@ fails, and does not install over /Applications. Tests isolate configuration,
 drafts and logs. A unit-test pass does not imply a native/UI gate passed.
 
 1. Install Python 3.13, create .venv, install requirements-lock.txt, and run npm ci.
-2. Set PLAYWRIGHT_BROWSERS_PATH to WorkSpace/browsers and run npx playwright install chromium webkit.
+2. Run npx playwright install chromium webkit (set PLAYWRIGHT_BROWSERS_PATH to WorkSpace/browsers to keep it out of your home directory).
 3. Run all regression, failure injection and Chromium/WebKit tests.
 4. Build the application and DMG, verify vendored checksums, packaged resources,
    code signature, app version and ATS configuration.

@@ -1,0 +1,50 @@
+name: Quality and distribution gates
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  verify:
+    runs-on: macos-latest
+    timeout-minutes: 30
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/WorkSpace/browsers
+      MDPREVIEW_DISABLE_UPDATES: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned tools
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements-lock.txt
+          npm ci
+          npx playwright install chromium webkit
+      - name: Regression and failure injection
+        run: |
+          npm test
+          .venv/bin/python scripts/test-python.py
+          .venv/bin/ruff check mdpreview_core scripts mdPreview.py --select F821,E9
+      - name: Real browser verification
+        run: npm run test:e2e
+      - name: Build and native app verification
+        run: |
+          ./build_dmg.sh
+          .venv/bin/python scripts/verify-native.py
+      - name: Preserve evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-evidence
+          path: |
+            WorkSpace/*test*.log
+            WorkSpace/browser-results.json
+            WorkSpace/python-coverage.json
+            WorkSpace/native-verification/
+            test-results/
+      - name: Preserve checked release candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: mdPreview-release-candidate
+          path: WorkSpace/dist/release-*/mdPreview*.dmg*

@@ -2,12 +2,27 @@
 import hashlib
 import json
 import platform
+import http.client
 import tempfile
+import urllib.error
 import urllib.request
 from pathlib import Path
 from .release import verify_asset, verify_bundle, version_tuple
 from .release_sig import configured, signed_digest
 from .release_zip import extract_verified
+
+
+def classify(error):
+    """把下载管线异常归类为界面使用的错误码：network | incomplete | verify | unknown。"""
+    if isinstance(error, (urllib.error.URLError, TimeoutError)):
+        return 'network'
+    if isinstance(error, http.client.IncompleteRead):
+        return 'incomplete'
+    if isinstance(error, ValueError):
+        if str(error) in ('download-size-limit', 'archive-too-large'):
+            return 'incomplete'
+        return 'verify'
+    return 'unknown'
 
 
 def download(version, installed_version, staging, team_id=None, progress=None):

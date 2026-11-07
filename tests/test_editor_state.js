@@ -1,0 +1,20 @@
+const assert=require('node:assert/strict');const {createApp}=require('./helpers');
+(async()=>{const a=await createApp();try{
+const w=a.w,ta=w.document.getElementById('textarea');
+w.document.execCommand=(command,ui,text)=>{assert.equal(command,'insertText');ta.setRangeText(text,ta.selectionStart,ta.selectionEnd,'end');ta.dispatchEvent(new w.Event('input'));return true;};
+await a.load('文本','Untitled.md');ta.focus();ta.setSelectionRange(0,2);
+ta.dispatchEvent(new w.KeyboardEvent('keydown',{key:'b',metaKey:true,bubbles:true,cancelable:true}));assert.equal(ta.value,'**文本**');
+ta.dispatchEvent(new w.KeyboardEvent('keydown',{key:'b',metaKey:true,bubbles:true,cancelable:true}));assert.equal(ta.value,'文本');
+a.input('1. 项目');ta.setSelectionRange(5,5);ta.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Enter',bubbles:true,cancelable:true}));assert.equal(ta.value,'1. 项目\n2. ');
+await a.load('保持正文');let reloaded=0;w.pywebview.api.reload_from_disk=()=>{reloaded++;return {success:true,content:'外部正文',candidateId:'candidate'}};w.pywebview.api.ack_reload_from_disk=(candidate)=>{assert.equal(candidate,'candidate');return {success:true};};w.pywebview.api.native_conflict_prompt=()=>({action:'cancel'});
+await w.reloadFromDisk();assert.equal(reloaded,1);assert.equal(w.getCurrentMarkdown(),'外部正文');
+w.document.getElementById('content').append(' 修改');w.document.getElementById('content').dispatchEvent(new w.Event('input'));
+await w.reloadFromDisk();assert.equal(reloaded,1);assert.match(w.getCurrentMarkdown(),/修改/);
+let settingsPatch;
+w.pywebview.api.get_settings=()=>({remote_images:'ask',auto_update:false,auto_reload:true,font_size:16,page_width:720,restore_session:false,language:'system'});
+w.pywebview.api.get_output_settings=()=>({paper:'auto',margins:'normal',font:'normal',pdf_layout:'paged',png_width:'original',page_numbers:true,show_urls:false,hide_frontmatter:true,h1_new_page:false});
+w.pywebview.api.set_settings=patch=>{settingsPatch=patch;return {success:true,settings:patch}};w.pywebview.api.set_output_settings=()=>({success:true});
+await w.openSettings();assert.equal(w.document.querySelector('#modalBody input[type=checkbox]').checked,false);
+w.document.querySelector('#modalActions button').click();await new Promise(r=>setTimeout(r,30));assert.equal(settingsPatch.auto_update,false);assert.equal(settingsPatch.remote_images,'ask');
+console.log('T17/T18/T20 设置编辑与dirty保护断言通过');
+}finally{a.close()}})().catch(e=>{console.error(e);process.exitCode=1});

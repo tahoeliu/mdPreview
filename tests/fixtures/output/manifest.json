@@ -1,0 +1,17 @@
+{
+  "provenance": "全部为合成回归样本；AI 样本并非真实导出",
+  "real_ai_exports_available": false,
+  "fixtures": [
+    "zh-longform.md",
+    "wide-table.md",
+    "long-code.md",
+    "mermaid.md",
+    "math.md",
+    "footnotes.md",
+    "images.md",
+    "frontmatter.md",
+    "alerts.md",
+    "ai-export-chatgpt.md",
+    "ai-export-claude.md"
+  ]
+}

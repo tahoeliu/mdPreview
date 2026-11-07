@@ -1,0 +1,16 @@
+const assert=require('node:assert/strict');const {createApp}=require('./helpers');
+(async()=>{const a=await createApp();try{const w=a.w;let value;w.pywebview.api.set_clipboard_rich=(html,plain)=>{value={html,plain};return {success:true}};
+await a.load('# 标题\n\n**选区** 其他');const strong=w.document.querySelector('#content strong');const range=w.document.createRange();range.selectNodeContents(strong);w.getSelection().removeAllRanges();w.getSelection().addRange(range);
+await w.copyAsRichText();assert.equal(value.plain.trim(),'选区');assert.match(value.html,/font-weight/);assert.doesNotMatch(value.html,/class=|data-|contenteditable|id=/);
+w.pywebview.api.set_clipboard_rich=()=>{throw new Error('测试失败')};await w.copyAsRichText();assert.equal(w.document.documentElement.hasAttribute('data-output'),false);
+assert.equal(w.getSelection().toString(),'选区');
+w.getSelection().removeAllRanges();
+const savedRaster=w.OutputRaster.node;w.OutputRaster.node=async()=>{throw new Error('测试栅格化失败')};
+await a.load('公式 $x$');const failure=await w.copyAsRichText();assert.equal(failure.success,false);
+assert.equal(w.document.documentElement.hasAttribute('data-output'),false);
+assert.equal(w.document.querySelector('#content > .markdown'),null);
+w.OutputRaster.node=savedRaster;
+await a.load('恢复后的正文');w.pywebview.api.set_clipboard_rich=(html,plain)=>({success:plain.includes('恢复后的正文')});
+assert.equal((await w.copyAsRichText()).success,true);
+console.log('富文本选区和恢复断言通过');
+}finally{a.close()}})().catch(e=>{console.error(e);process.exitCode=1});

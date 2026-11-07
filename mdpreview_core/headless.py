@@ -12,7 +12,9 @@ def run(arguments, api_type, resource_path):
         return 1
     source, target, fmt = arguments
     source = Path(source).resolve()
+    # 目录按真实路径解析（/tmp、/var 都是符号链接）；最终文件名保持不跟随，写入端仍拒绝符号链接。
     target = Path(os.path.abspath(target))
+    target = Path(os.path.realpath(target.parent)) / target.name
     if fmt not in ('pdf', 'html', 'docx', 'txt', 'png') or not source.is_file() or not target.parent.is_dir() or target.exists():
         print('headless: invalid format/path or output already exists', file=sys.stderr)
         return 1
@@ -33,6 +35,11 @@ def run(arguments, api_type, resource_path):
     api._headless_lifecycle = lifecycle
     api.get_output_settings = defaults
     state_lock = threading.RLock()
+    trace_enabled = bool(os.environ.get('MDPREVIEW_HEADLESS_TRACE'))
+
+    def trace(stage):
+        if trace_enabled:
+            print('headless-trace: ' + str(stage)[:80], file=sys.stderr, flush=True)
     output = {'started': False, 'success': False}
 
     def finish(success=False):
@@ -49,7 +56,10 @@ def run(arguments, api_type, resource_path):
             print('headless: render or export failed', file=sys.stderr)
         api.window.destroy()
     class ExportAPI:
+        def headless_trace(self, stage):
+            trace(stage)
         def get_initial_content(self):
+            trace('get_initial_content')
             return {'path': str(source), 'content': text, 'headless': True, 'outputPath': str(target), 'outputFormat': fmt,
                     'documentId': api.document_id, 'revision': 0, 'isZh': False,
                     'settings': {'language': 'en', 'remote_images': 'never', 'auto_update': False, 'auto_reload': False}}
@@ -84,12 +94,22 @@ def run(arguments, api_type, resource_path):
         def headless_finish(self, success):
             finish(success)
     # 使用本地页面的查询标志，在应用启动前设置禁联网策略。
-    url = Path(resource_path('index.html')).as_uri() + '?headless=1'
+    # 打包后 index.html 经符号链接指向 Resources；WebKit 只对真实路径授予读取权限。
+    url = Path(resource_path('index.html')).resolve().as_uri() + '?headless=1'
     window = webview.create_window('mdPreview export', url=url, js_api=ExportAPI(), hidden=True,
                                   width=900, height=680, confirm_close=False)
     api.window = window
+    if trace_enabled:
+        trace('window-created:' + url.split('/Contents/')[-1][:60])
+        for name in ('loaded', 'shown', 'closed'):
+            getattr(window.events, name).__iadd__(lambda *args, label=name: trace('event:' + label))
+    try:
+        timeout_seconds = min(900, max(5, int(os.environ.get('MDPREVIEW_HEADLESS_TIMEOUT', '90'))))
+    except ValueError:
+        timeout_seconds = 90
+
     def watchdog():
-        if not done.wait(180):
+        if not done.wait(timeout_seconds):
             print('headless: timeout', file=sys.stderr)
             finish(False)
     threading.Thread(target=watchdog, daemon=True).start()

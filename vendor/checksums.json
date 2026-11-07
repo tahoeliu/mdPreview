@@ -1,5 +1,6 @@
 {
-  "THIRD_PARTY_NOTICES.md": "426da6918da519eb47db2845b897c30652c699cd6154587670c5bcc4cd4954da",
+  "THIRD_PARTY_NOTICES.md": "e5f2aace07e2e32492c1271efa23af3ed196bbfdf32bfd100fa72bd6f815973a",
+  "vendor/Credits.rtf": "a581e08c040d5ec19a2935262096718547af7365684be8cb85e8e6211b813a52",
   "vendor/bundled-notices/docx.txt": "c2698f826782a84e5a41d092a50e74dbdc73594e9f4d529ce4e72cd4197a855c",
   "vendor/bundled-notices/dompurify.txt": "3bc47ef513d25cd123fdaa1e579d8d3404c306f8c9cfad2d6bfd9c32dc0e3e28",
   "vendor/bundled-notices/html-docx-js.txt": "0c37b5bde81feabbf437def6c030d9c5cdb9c23e7376fec850dcfe1e891cea19",
@@ -216,7 +217,7 @@
   "vendor/licenses/undici-types@8.9.0.txt": "acbf1c6122d43fa98ee0025b22e18b16e9629a9278841696eab086cdfcc28cb9",
   "vendor/licenses/upsetjs__venn.js@2.0.0.txt": "137f72e8e7c0cf0c728c7a9cf3d846e0205dda49b11bbe615b41d0c0eb8c7653",
   "vendor/licenses/uuid@14.0.3.txt": "9b4112d80294d08b61c82a62e72a60f046a79c63d184e600f7c492d1b0305118",
-  "vendor/manifest.json": "f7273923985339a06e75ed48a337dcd6013cb466615a59eadc6a1fc779ec8212",
+  "vendor/manifest.json": "e95234e365ff69e25a42ae9c5c243e0183d20b2cfb80c4c7cc18e71a086d9106",
   "vendor/marked-footnote.umd.js": "3ff8fd955edbe6a76eaae32ec8628caf29dbb103cfe6743654090153b833dcec",
   "vendor/marked.min.js": "eb1f6b19880bc80a5fe34c6a61885173b60edda455ba7a33c98714db17d39f99",
   "vendor/mermaid.min.js": "74d7c46dabca328c2294733910a8aa1ed0c37451776e8d5295da38a2b758fb9b",

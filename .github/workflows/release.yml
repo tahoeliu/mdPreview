@@ -1,0 +1,28 @@
+# 本地审查模板：WorkSpace被忽略，不会触发GitHub Actions。
+# 不包含发布权限、Secrets读写、tap更新或自动上传。
+name: Release candidate verification
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Require separately provisioned local tests
+        run: test -d WorkSpace/tests
+      - run: npm ci --ignore-scripts
+      - run: npm audit --audit-level=high
+      - run: python -m pip install -r requirements-dev.txt
+      - run: python -m pip_audit -r requirements-lock.txt
+      - name: Verify all mandatory evidence
+        run: bash verify-all.sh
+      # 必须由维护者提供实测APP/架构/冷启动/人工矩阵；缺失就失败。
+      # 后续签名、Release与tap更新需要单独批准，不能将此模板视为发布完成。

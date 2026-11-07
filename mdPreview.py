@@ -16,6 +16,7 @@ if getattr(sys, 'frozen', False):
     except (OSError, ValueError):
         pass
 import json
+import re
 import time
 _PROCESS_START = time.monotonic()
 import threading
@@ -834,17 +835,14 @@ class MarkdownAPI:
                 payload = {}
             types = ('Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'URIError', 'EvalError', 'AggregateError')
             error_type = payload.get('type') if payload.get('type') in types else 'Error'
-            scripts = {'app.js', 'frontend/bridge.js', 'frontend/document-session.js',
-                       'frontend/markdown-pipeline.js', 'frontend/image-viewer.js',
-                       'marked.min.js', 'purify.min.js', 'marked-footnote.umd.js',
-                       'turndown.js', 'mermaid.min.js', 'html-docx-js.js', 'html2canvas.min.js'}
+            script_pattern = re.compile(r'(?:app\.js|(?:frontend|vendor)/[A-Za-z0-9_./-]+\.js)')
             frames = []
             raw_frames = payload.get('frames', [])
             for frame in raw_frames[:16] if isinstance(raw_frames, list) else []:
                 if not isinstance(frame, dict):
                     continue
                 file, line, column = frame.get('file'), frame.get('line'), frame.get('column')
-                if (isinstance(file, str) and file in scripts and type(line) is int and type(column) is int
+                if (isinstance(file, str) and script_pattern.fullmatch(file) is not None and type(line) is int and type(column) is int
                         and 0 <= line <= 9999999 and 0 <= column <= 9999999):
                     frames.append({'file': file, 'line': line, 'column': column})
             message = '[js] ' + json.dumps({'scope': safe_scope, 'what': safe_what,
@@ -3977,142 +3975,25 @@ def _staged_version_acceptable(staged_version, local_version):
 
 
 def _download_and_extract_unlocked(version, progress_callback=None, keep_dmg=False):
-    from mdpreview_core.update_download import download
+    from mdpreview_core.update_download import download, classify
+    from mdpreview_core.release_sig import configured
     try:
         return download(version, _get_current_version(), UPDATE_STAGING_DIR, _publisher_team_id(), progress_callback)
-    except Exception:
-        return {'error': 'verify', 'detail': _t('Signed update unavailable. Configure the release public key and verify the package.', '签名更新不可用。请配置发布公钥并校验安装包。')}
-
-
-def _disabled_legacy_dmg_download(version, progress_callback=None, keep_dmg=False):
-    raise RuntimeError('legacy-unsigned-dmg-update-disabled')
-    """Download DMG to staging dir, extract .app.
-
-    Returns {'staging_app': ..., 'dmg_path': ...} on success, or
-    {'error': <code>, 'detail': <localized message>} on failure, where code is
-    one of: 'network' | 'incomplete' | 'mount' | 'verify' | 'unknown'.
-    The 'version' argument is informational only; acceptance is decided by
-    _staged_version_acceptable against the locally installed version.
-    """
-    import urllib.request
-    import urllib.error
-    import subprocess
-    mount_dir = None
-    dmg_path = None
-
-    def _fail(code, en, zh):
-        return {'error': code, 'detail': _t(en, zh)}
-
-    try:
-        os.makedirs(UPDATE_STAGING_DIR, exist_ok=True)
-        job_dir = tempfile.mkdtemp(prefix='download-', dir=UPDATE_STAGING_DIR)
-        dmg_path = os.path.join(job_dir, 'mdPreview.dmg')
-        if version:
-            version_tuple(version)
-        tag = ('v' + version) if version else 'latest'
-        url = f'https://github.com/tahoeliu/mdPreview/releases/download/{tag}/mdPreview.dmg' if version else 'https://github.com/tahoeliu/mdPreview/releases/latest/download/mdPreview.dmg'
-        req = urllib.request.Request(url, headers={'User-Agent': 'mdPreview'})
-        if progress_callback:
-            progress_callback(0)
-        try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                total = int(resp.headers.get('Content-Length') or 0)
-                done = 0
-                last_percent = -1
-                digest = hashlib.sha256()
-                with open(dmg_path, 'wb') as f:
-                    while True:
-                        chunk = resp.read(65536)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        digest.update(chunk)
-                        done += len(chunk)
-                        if done > 300 * 1024 * 1024:
-                            raise ValueError('Update exceeds the package size limit')
-                        if progress_callback and total > 0:
-                            percent = min(100, int(done * 100 / total))
-                            if percent != last_percent:
-                                last_percent = percent
-                                progress_callback(percent)
-        except urllib.error.HTTPError as e:
-            return _fail('network', 'Network error (HTTP %d).' % e.code,
-                         '网络错误（HTTP %d）。' % e.code)
-        except urllib.error.URLError as e:
-            return _fail('network', 'Cannot reach GitHub (%s).' % e.reason,
-                         '无法连接 GitHub（%s）。' % e.reason)
-        except OSError as e:
-            # socket.timeout / connection reset / disk write errors
-            return _fail('network', 'Connection failed (%s).' % e,
-                         '网络连接失败（%s）。' % e)
-        if progress_callback:
-            progress_callback(100)
-        if (total and done != total) or os.path.getsize(dmg_path) < 1000000:
-            os.remove(dmg_path)
-            dmg_path = None
-            return _fail('incomplete', 'The downloaded file is incomplete.',
-                         '下载的文件不完整。')
-        try:
-            metadata_url = f'https://api.github.com/repos/tahoeliu/mdPreview/releases/tags/v{version}'
-            metadata_req = urllib.request.Request(metadata_url, headers={'User-Agent': 'mdPreview', 'Accept': 'application/vnd.github+json'})
-            with urllib.request.urlopen(metadata_req, timeout=15) as metadata_response:
-                release = json.loads(metadata_response.read(2_000_000))
-            if release.get('tag_name') != 'v' + version or release.get('draft') or release.get('prerelease'):
-                raise ValueError('Unexpected release metadata')
-            asset = next(asset for asset in release.get('assets', []) if asset.get('name') == 'mdPreview.dmg')
-            verify_asset(digest.hexdigest(), done, asset)
-        except Exception as exc:
-            return _fail('verify', str(exc), 'GitHub 发布摘要校验失败：' + str(exc))
-        # Mount and copy .app to staging
-        mount_dir = tempfile.mkdtemp()
-        try:
-            subprocess.run(
-                ['hdiutil', 'attach', '-nobrowse', '-mountpoint', mount_dir, dmg_path],
-                capture_output=True, check=True, timeout=30
-            )
-        except subprocess.CalledProcessError as e:
-            return _fail('mount', 'Failed to mount the update image (%s).'
-                         % (e.stderr.decode('utf-8', 'replace').strip()[:120] if e.stderr else 'hdiutil error'),
-                         '安装包挂载失败。')
-        src_app = os.path.join(mount_dir, 'mdPreview.app')
-        staging_app = os.path.join(job_dir, 'mdPreview.app')
-        if os.path.exists(staging_app):
-            shutil.rmtree(staging_app)
-        shutil.copytree(src_app, staging_app, symlinks=True)
-        # Integrity check: the staged app must carry a version that is not
-        # OLDER than the installed one (equal is fine: re-download/reinstall).
-        plist = os.path.join(staging_app, 'Contents', 'Info.plist')
-        staged_version = None
-        try:
-            import plistlib
-            with open(plist, 'rb') as pf:
-                staged_version = plistlib.load(pf).get('CFBundleShortVersionString')
-        except Exception:
-            pass
-        if not _staged_version_acceptable(staged_version, _get_current_version()):
-            log_exception('staged update failed version check: got %r, installed %r'
-                          % (staged_version, _get_current_version()))
-            shutil.rmtree(staging_app, ignore_errors=True)
-            return _fail('verify', 'The downloaded update failed the version check.',
-                         '下载的更新未通过版本校验。')
-        try:
-            verify_bundle(staging_app, _publisher_team_id(), version or staged_version)
-        except Exception as exc:
-            shutil.rmtree(staging_app, ignore_errors=True)
-            return _fail('verify', str(exc), '更新未通过发布者身份及公证校验：' + str(exc))
-        return {'staging_app': staging_app, 'version': staged_version, 'dmg_path': dmg_path if keep_dmg else ''}
-    except Exception as e:
-        log_exception('download and extract failed')
-        return _fail('unknown', 'Unexpected error: %s' % e, '未知错误：%s' % e)
-    finally:
-        if mount_dir and os.path.exists(mount_dir):
-            subprocess.run(['hdiutil', 'detach', mount_dir], capture_output=True, timeout=30)
-            shutil.rmtree(mount_dir, ignore_errors=True)
-        try:
-            if dmg_path and os.path.exists(dmg_path) and not keep_dmg:
-                os.remove(dmg_path)
-        except Exception:
-            pass
+    except Exception as error:
+        code = classify(error)
+        if code == 'unknown':
+            log_exception('update download failed')
+        if not configured():
+            detail = _t('Updates are unavailable: this build has no release signing key.', '更新不可用：此版本未内置发布签名公钥。')
+        elif code == 'network':
+            detail = _t('Network error while downloading the update.', '下载更新时网络出错。')
+        elif code == 'incomplete':
+            detail = _t('The update download was incomplete or too large.', '更新包下载不完整或体积异常。')
+        elif code == 'verify':
+            detail = _t('The update could not be verified and was discarded.', '更新包校验失败，已丢弃。')
+        else:
+            detail = _t('Unexpected error while downloading the update.', '下载更新时发生未知错误。')
+        return {'error': code, 'detail': detail}
 
 
 def _manual_download_update_with_progress(version):

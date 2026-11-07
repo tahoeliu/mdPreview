@@ -12,8 +12,11 @@ if (window.HEADLESS_EXPORT) {
 window.runHeadlessExport=async function(data){
  if(!window.HEADLESS_EXPORT||!data.headless)return;
  try{
+  Bridge.callSafe('headless_trace','js-start');
   await loadContent(data.path,data.content,720,false,false,data);
+  Bridge.callSafe('headless_trace','content-loaded');
   const result=await exportAsWrite(data.outputPath,data.outputFormat);
+  Bridge.callSafe('headless_trace','export-done:'+(result&&result.success)+':'+(result&&result.error));
   await Bridge.call('headless_finish',result?.success===true);
  }catch(error){await Bridge.callSafe('headless_finish',false);}
 };

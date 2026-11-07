@@ -1,0 +1,35 @@
+# ISSUE_TEMPLATE目录创建受限，先保存在现有目录供人工审查；不会自动生效。
+name: Bug report
+description: Report a reproducible problem without private document contents
+title: '[Bug] '
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Application version
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: macOS version
+    validations:
+      required: true
+  - type: dropdown
+    id: arch
+    attributes:
+      label: Architecture
+      options: [Apple Silicon, Intel, Rosetta, Unknown]
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps and expected/actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Optional inspected diagnostics ZIP
+      description: Do not attach private documents, credentials or raw logs.

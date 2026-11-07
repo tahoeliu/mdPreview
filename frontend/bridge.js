@@ -2,7 +2,7 @@
   'use strict';
 
   const errorTypes = new Set(['Error', 'TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'URIError', 'EvalError', 'AggregateError']);
-  const scripts = new Set(['app.js', 'frontend/bridge.js', 'frontend/document-session.js', 'frontend/markdown-pipeline.js', 'frontend/image-viewer.js', 'marked.min.js', 'purify.min.js', 'marked-footnote.umd.js', 'turndown.js', 'mermaid.min.js', 'html-docx-js.js', 'html2canvas.min.js']);
+  const scriptPattern = /^(?:app\.js|(?:frontend|vendor)\/[A-Za-z0-9_.\/-]+\.js)$/;
 
   function ready() {
     return !!(window.pywebview && window.pywebview.api);
@@ -40,8 +40,8 @@
       // stack 的首行、函数名、URL 路径和源码片段均可能含文档文本，不得转发。
       const stack = error && typeof error.stack === 'string' ? error.stack.slice(0, 16384) : '';
       for (const line of stack.split('\n').slice(0, 64)) {
-        const match = line.match(/(?:\/|^)((?:frontend\/)?[A-Za-z0-9.-]+\.js):([0-9]{1,7}):([0-9]{1,7})\)?$/);
-        if (match && scripts.has(match[1])) frames.push({ file: match[1], line: Number(match[2]), column: Number(match[3]) });
+        const match = line.match(/(?:\/|^)((?:(?:frontend|vendor)\/(?:[A-Za-z0-9_.-]+\/)*)?[A-Za-z0-9_.-]+\.js):([0-9]{1,7}):([0-9]{1,7})\)?$/);
+        if (match && scriptPattern.test(match[1])) frames.push({ file: match[1], line: Number(match[2]), column: Number(match[3]) });
         if (frames.length === 16) break;
       }
       // 日志端点的同步异常和异步拒绝都在这里消化，避免递归上报。

@@ -1,0 +1,12 @@
+const assert=require('node:assert/strict');const {createApp}=require('./helpers');const {unzipSync}=require('fflate');
+(async()=>{const a=await createApp();try{let output;a.w.pywebview.api.export_as_write=(p,f,c)=>{output=c;return {success:true}};
+await a.load('# 标题\n\n**粗体** *斜体* ~~删除~~ `code` [链接](https://example.com)\n\n- 项目\n\n| A | B |\n|---|---|\n| 一 | 二 |\n\n正文[^a]\n\n[^a]: 脚注');
+await a.w.exportAsWrite('/tmp/test.docx','docx');const zip=unzipSync(Buffer.from(output,'base64'));const xml=Buffer.from(zip['word/document.xml']).toString();assert.doesNotMatch(xml,/altChunk/);assert.match(xml,/Heading1/);assert.match(xml,/<w:tbl>/);assert.match(xml,/footnoteReference/);assert.ok(zip['word/footnotes.xml']);assert.match(xml,/粗体/);
+const detailed='# 列表\n\n3. 首项\n   - 子项\n\n     子项续段\n4. 末项\n\n- [x] 已完成\n- [ ] 未完成\n\n```js\nconst answer = 42;\n```';
+await a.load(detailed);await a.w.exportAsWrite('/tmp/test.docx','docx');
+const parts=unzipSync(Buffer.from(output,'base64'));const body=Buffer.from(parts['word/document.xml']).toString();
+for(const word of ['首项','子项续段','末项','已完成','未完成'])assert.equal(body.split(word).length-1,1);
+assert.match(body,/\u2611/);assert.match(body,/\u2610/);assert.match(body,/w:color/);
+assert.match(Buffer.from(parts['word/numbering.xml']).toString(),/<w:start w:val="3"/);
+console.log('OOXML结构断言通过');
+}finally{a.close()}})().catch(e=>{console.error(e);process.exitCode=1});

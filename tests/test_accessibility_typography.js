@@ -1,0 +1,20 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const {createApp}=require('./helpers');
+(async()=>{const a=await createApp();try{
+ const d=a.w.document;
+ await a.load('# 中文标题\n\n中文内容用于判断语言。\n\n## 第二节\n正文。');
+ assert.match(d.documentElement.lang,/^zh/);
+ assert.ok(d.querySelector('#tocSidebar > ul > li > a'));
+ a.w.setTocActive(d.querySelector('#content h2').id);
+ assert.equal(d.querySelectorAll('#tocSidebar [aria-current="true"]').length,1);
+ assert.ok(d.querySelector('#findInput').getAttribute('aria-label'));
+ assert.equal(d.querySelector('#findCount').getAttribute('role'),'status');
+ await a.load('---\nlang: en\n---\n# 中文标题\n\n中文正文');
+ assert.equal(d.documentElement.lang,'en');
+ const origin=d.querySelector('#textarea');origin.focus();
+ a.w.setModal('测试','<select><option>选项</option></select>','');
+ assert.equal(d.activeElement.tagName,'SELECT');a.w.closeModal();assert.equal(d.activeElement,origin);
+ const css=fs.readFileSync('css/content.css','utf8');assert.match(css,/:lang\(zh\)/);assert.match(css,/text-autospace:\s*normal/);
+ console.log('T21/T22 语言、目录语义与弹窗焦点通过');
+}finally{a.close();}})().catch(e=>{console.error(e);process.exitCode=1;});
