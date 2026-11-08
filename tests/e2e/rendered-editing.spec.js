@@ -176,3 +176,166 @@ test('existing task checkboxes keep their state when the page is edited',async({
 });
 
 
+test('new table: typing lands in the first body cell; Enter and Tab move between cells and keep the table intact',async({page})=>{
+  await load(page,'Intro\n\nOutro');
+  await page.click('#content p >> nth=0');
+  await bar(page,'insert').click();
+  await page.click('.edit-menu button[data-kind="table"]');
+  await page.keyboard.type('等等');
+  await page.keyboard.press('Enter');
+  await page.keyboard.type('下一行');
+  await page.keyboard.press('Tab');
+  await page.keyboard.type('右');
+  const shape=await page.evaluate(()=>{const t=document.querySelector('#content table');return {rows:t.rows.length,cells:[...t.rows].map(r=>r.cells.length),text:[...t.tBodies[0].rows].map(r=>[...r.cells].map(c=>c.textContent))};});
+  expect(shape.cells).toEqual([3,3,3]);
+  expect(shape.text[0][0]).toBe('等等');
+  expect(shape.text[1][0]).toBe('下一行');
+  expect(shape.text[1][1]).toBe('右');
+  expect(await page.evaluate(md)).toMatch(/\| 等等 \|/);
+  await page.keyboard.press('Enter');                       // last row: a new row is added
+  expect(await page.evaluate(()=>document.querySelector('#content table').rows.length)).toBe(4);
+});
+test('link editor has a back button, apply and remove',async({page})=>{
+  await load(page,'Visit site today');
+  await page.click('#content p');
+  await selectText(page,'#content p',6,10);
+  await bar(page,'link').click();
+  await expect(page.locator('.edit-link-back')).toBeVisible();
+  await page.locator('.edit-link-back').click();
+  await expect(bar(page,'bold')).toBeVisible();
+  await selectText(page,'#content p',6,10);
+  await bar(page,'link').click();
+  await page.keyboard.type('example.com');
+  await page.locator('.edit-bar .edit-done').click();
+  expect(await page.evaluate(md)).toContain('[site](https://example.com');
+  await page.evaluate(()=>{const a=document.querySelector('#content a');const r=document.createRange();r.selectNodeContents(a);const g=getSelection();g.removeAllRanges();g.addRange(r);});
+  await bar(page,'link').click();
+  await page.locator('.edit-link-remove').click();
+  expect(await page.evaluate(md)).not.toContain('](');
+});
+test('indent works on paragraphs and list items; outdent only where it means something',async({page})=>{
+  await load(page,'Plain\n\n> quoted\n\n- a\n- b');
+  await page.locator('#content p',{hasText:'Plain'}).click();
+  await expect(bar(page,'indent')).toBeEnabled();
+  await expect(bar(page,'outdent')).toBeDisabled();
+  await bar(page,'indent').click();
+  expect(await page.evaluate(md)).toMatch(/- Plain/);
+  await page.locator('#content blockquote').click();
+  await expect(bar(page,'outdent')).toBeEnabled();
+  await page.locator('#content li',{hasText:'b'}).last().click();
+  await bar(page,'indent').click();
+  expect(await page.evaluate(md)).toMatch(/- a\n\s+- b/);
+});
+test('task button toggles on and off, shows as selected and hides the bullet',async({page})=>{
+  await load(page,'Buy milk');
+  await page.click('#content p');
+  await bar(page,'task').click();
+  await expect(bar(page,'task')).toHaveClass(/on/);
+  expect(await page.evaluate(()=>getComputedStyle(document.querySelector('#content li')).listStyleType)).toBe('none');
+  await bar(page,'task').click();
+  expect(await page.evaluate(md)).not.toContain('[ ]');
+});
+test('text style menu offers Body and Heading 1–6',async({page})=>{
+  await load(page,'Alpha');
+  await page.click('#content p');
+  await bar(page,'style').click();
+  await expect(page.locator('.edit-menu button')).toHaveCount(7);
+  await page.locator('.edit-menu button[data-kind="h5"]').click();
+  expect(await page.evaluate(md)).toContain('##### Alpha');
+});
+test('Insert menu: code block, divider, note, diagram and formula',async({page})=>{
+  await load(page,'First\n\nLast');
+  for(const [kind,check] of [['codeblock',()=>page.locator('#content pre')],['rule',()=>page.locator('#content hr')],['note',()=>page.locator('#content .markdown-alert')],['formula',()=>page.locator('#content .math-block')],['diagram',()=>page.locator('#content .mermaid-diagram')]]){
+    await page.click('#content p >> nth=0');
+    await bar(page,'insert').click();
+    await page.click(`.edit-menu button[data-kind="${kind}"]`);
+    await expect(check()).toHaveCount(1,{timeout:15000});
+  }
+  const out=await page.evaluate(md);
+  expect(out).toContain('> [!NOTE]');
+  expect(out).toContain('```mermaid');
+  expect(out).toMatch(/\$\$/);
+  expect(out).toMatch(/---/);
+  await page.keyboard.press('Meta+z');
+});
+test('the bar covers the top of the page instead of pushing it down, and fades in and out',async({page})=>{
+  await load(page,'# Title\n\nHello');
+  const top=await page.evaluate(()=>document.querySelector('#content h1').getBoundingClientRect().top);
+  await page.click('#content p');
+  await expect(page.locator('.edit-bar')).toBeVisible();
+  const after=await page.evaluate(()=>document.querySelector('#content h1').getBoundingClientRect().top);
+  expect(after).toBe(top);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.edit-bar')).toBeHidden();
+});
+test('an existing Mermaid diagram (with arrows) survives editing the text next to it',async({page})=>{
+  await load(page,'```mermaid\ngraph TD\n  A --> B\n```\n\nText');
+  await expect(page.locator('#content .mermaid-diagram')).toHaveCount(1,{timeout:15000});
+  await page.locator('#content p',{hasText:'Text'}).click();
+  await caretAt(page,'#content p',4);
+  await page.keyboard.type('!');
+  const out=await page.evaluate(md);
+  expect(out).toContain('```mermaid\ngraph TD\n  A --> B\n```');
+  expect(out).toContain('Text!');
+});
+test('Insert ▸ Table offers a size grid on hover and inserts exactly that size',async({page})=>{
+  await load(page,'Intro\n\nOutro');
+  await page.click('#content p >> nth=0');
+  await bar(page,'insert').click();
+  await page.locator('.edit-menu button[data-kind="table"]').hover();
+  await expect(page.locator('.edit-picker')).toBeVisible();
+  await page.locator('.edit-picker-cell[data-r="4"][data-c="5"]').hover();
+  await expect(page.locator('.edit-picker-size')).toHaveText('4 × 5');
+  await page.locator('.edit-picker-cell[data-r="4"][data-c="5"]').click();
+  const shape=await page.evaluate(()=>{const t=document.querySelector('#content table');return [t.rows.length,t.rows[0].cells.length];});
+  expect(shape).toEqual([4,5]);
+  await page.keyboard.press('Meta+z');
+  await expect(page.locator('#content table')).toHaveCount(0);
+});
+test('toolbar icons share one visual size',async({page})=>{
+  await load(page,'Hello');
+  await page.click('#content p');
+  await expect(page.locator('.edit-bar button svg.edit-icon').first()).toBeVisible();
+  const sizes=await page.evaluate(()=>[...document.querySelectorAll('.edit-bar > button svg.edit-icon')].map(svg=>{const g=svg.firstElementChild.getBoundingClientRect();return Math.round(Math.max(g.width,g.height));}));
+  expect(sizes.length).toBeGreaterThan(10);
+  expect(Math.max(...sizes)-Math.min(...sizes)).toBeLessThanOrEqual(4);
+});
+test('section arrows appear only while a heading is hovered; the outline toggle clears the top bar',async({page})=>{
+  await page.setViewportSize({width:1200,height:760});
+  await load(page,'# One\n\ntext\n\n## Two\n\nmore\n\n## Three\n\nlast');
+  await expect(page.locator('.fold-toggle').first()).toBeAttached();
+  const shown=()=>page.evaluate(()=>[...document.querySelectorAll('.fold-toggle')].map(b=>+getComputedStyle(b).opacity));
+  expect((await shown()).every(o=>o===0)).toBe(true);
+  await page.locator('#content h2').first().hover();
+  await expect.poll(async()=>(await shown()).filter(o=>o>0.2).length).toBe(1);
+  await page.mouse.move(600,700);
+  await expect.poll(async()=>(await shown()).every(o=>o===0),{timeout:3000}).toBe(true);
+  await page.click('#content p >> nth=0');
+  await expect(page.locator('.edit-bar')).toBeVisible();
+  await page.waitForTimeout(400);
+  const gap=await page.evaluate(()=>{const b=document.querySelector('.edit-bar').getBoundingClientRect(),t=document.getElementById('tocToggle').getBoundingClientRect();return t.top-b.bottom;});
+  expect(gap).toBeGreaterThanOrEqual(0);
+});
+test('source mode shows the top bar by default and its buttons edit the Markdown text',async({page})=>{
+  await load(page,'Alpha\n\nBeta');
+  await page.keyboard.press('Meta+e');
+  const sbar=page.locator('.source-bar');
+  await expect(sbar).toBeVisible();
+  const ta=page.locator('#textarea');
+  await ta.evaluate(el=>{el.focus();el.setSelectionRange(0,5);});
+  await sbar.locator('button[data-kind="bold"]').click();
+  await expect(ta).toHaveValue(/^\*\*Alpha\*\*/);
+  await sbar.locator('button[data-kind="style"]').click();
+  await page.locator('.edit-menu button[data-kind="h2"]').click();
+  await expect(ta).toHaveValue(/^## \*\*Alpha\*\*/);
+  await ta.evaluate(el=>{el.focus();el.setSelectionRange(el.value.length-4,el.value.length);});
+  await sbar.locator('button[data-kind="ul"]').click();
+  await expect(ta).toHaveValue(/- Beta$/);
+  await sbar.locator('button[data-kind="insert"]').click();
+  await page.locator('.edit-menu button[data-kind="table"]').click();
+  await expect(ta).toHaveValue(/\| --- \| --- \| --- \|/);
+  await sbar.locator('button[data-kind="undo"]').click();
+  await expect(ta).not.toHaveValue(/\| --- \|/);
+  await page.keyboard.press('Meta+e');
+  await expect(sbar).toBeHidden();
+});

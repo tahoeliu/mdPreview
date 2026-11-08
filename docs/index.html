@@ -5,79 +5,152 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>mdPreview — A featherweight Markdown reader for Mac</title>
 <meta name="description" content="mdPreview opens Markdown instantly and makes long AI answers easy to read and finish. Click to edit like a document, export PDF, Word or a shareable page. Free, open source, offline.">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#131418" media="(prefers-color-scheme: dark)">
 <link rel="canonical" href="https://tahoeliu.github.io/mdPreview/">
+<link rel="alternate" hreflang="en" href="https://tahoeliu.github.io/mdPreview/">
 <link rel="alternate" hreflang="zh-Hans" href="https://tahoeliu.github.io/mdPreview/zh.html">
+<link rel="alternate" hreflang="x-default" href="https://tahoeliu.github.io/mdPreview/">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a64d8'/%3E%3Cpath d='M14 44V20h6l6 9 6-9h6v24h-6V30l-6 9-6-9v14zM46 20h5v14h5l-7.500 10L41 34h5z' fill='%23fff'/%3E%3C/svg%3E">
 <meta property="og:type" content="website">
+<meta property="og:site_name" content="mdPreview">
 <meta property="og:title" content="mdPreview — Read long AI answers, finish them">
 <meta property="og:description" content="A featherweight Markdown reader for Mac. Instant, clean, and as easy to edit as a Word document.">
 <meta property="og:url" content="https://tahoeliu.github.io/mdPreview/">
-<meta property="og:image" content="https://tahoeliu.github.io/mdPreview/images/hero-reading.png">
+<meta property="og:image" content="https://tahoeliu.github.io/mdPreview/images/og.png">
+<meta property="og:image:width" content="2400">
+<meta property="og:image:height" content="1260">
+<meta property="og:image:alt" content="mdPreview showing a long document with an outline and reading progress">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://tahoeliu.github.io/mdPreview/images/og.png">
+<link rel="preload" as="image" href="images/hero-reading.webp" type="image/webp" media="(prefers-color-scheme: light)">
 <link rel="stylesheet" href="site.css">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"mdPreview","applicationCategory":"UtilitiesApplication","operatingSystem":"macOS","url":"https://tahoeliu.github.io/mdPreview/","downloadUrl":"https://github.com/tahoeliu/mdPreview/releases/latest","license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"mdPreview","applicationCategory":"UtilitiesApplication","operatingSystem":"macOS 13 or later","url":"https://tahoeliu.github.io/mdPreview/","downloadUrl":"https://github.com/tahoeliu/mdPreview/releases/latest","license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
 </head>
 <body>
-<nav class="top"><div class="wrap"><a class="brand" href="#">mdPreview</a><div class="links"><a class="hide" href="#reading">Reading</a><a class="hide" href="#editing">Editing</a><a class="hide" href="#sharing">Sharing</a><a href="#install">Install</a><a href="zh.html">中文</a><a href="https://github.com/tahoeliu/mdPreview">GitHub</a></div></div></nav>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+<symbol id="i-pencil" viewBox="0 0 24 24"><path d="m4 20 1-4L16 5l3 3L8 19z"/><path d="m14 7 3 3"/></symbol>
+<symbol id="i-pdf" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h4"/></symbol>
+<symbol id="i-word" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12l1.500 6L12 13l1.500 5L15 12"/></symbol>
+<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3.500 3.500 3.500 14.500 0 18M12 3c-3.500 3.500-3.500 14.500 0 18"/></symbol>
+<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h3"/></symbol>
+<symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.500"/><path d="m3 17 5-5 4 4 3-3 6 6"/></symbol>
+<symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 10 3 2-3 2M12 15h5"/></symbol>
+<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+</defs></svg>
+<a class="skip" href="#main">Skip to content</a>
+<nav class="top"><div class="wrap"><a class="brand" href="#">mdPreview</a><div class="links"><a class="hide" href="#why">Why</a><a class="hide" href="#reading">Reading</a><a class="hide" href="#editing">Editing</a><a class="hide" href="#sharing">Sharing</a><a class="optional" href="zh.html" hreflang="zh-Hans" lang="zh-Hans">中文</a><a class="optional" href="https://github.com/tahoeliu/mdPreview">GitHub</a><a class="get" href="#install">Download</a></div></div></nav>
 
+<main id="main">
 <header class="hero"><div class="wrap">
+  <p class="eyebrow">Free Markdown reader for Mac</p>
   <h1>Read long AI answers.<br>Actually finish them.</h1>
-  <p class="lead">A featherweight Markdown reader for Mac. It opens instantly, renders cleanly, and edits as easily as a Word document — no syntax to learn.</p>
-  <div class="cta"><a class="btn primary" href="https://github.com/tahoeliu/mdPreview/releases/latest">Download for Mac</a><a class="btn ghost" href="#install">One-line install</a></div>
-  <p class="fine">Free · open source (MIT) · no account, no telemetry · works offline</p>
-  <div class="shot"><img src="images/hero-reading.png" alt="mdPreview showing a long document with outline and reading progress" width="1200" height="750"></div>
+  <p class="lead">ChatGPT and Claude reply in Markdown. mdPreview turns it into a calm page you can read, fix up like a Word document, and send to anyone. It opens in half a second.</p>
+  <div class="cta"><a class="btn primary" href="https://github.com/tahoeliu/mdPreview/releases/latest">Download for Mac</a><a class="btn ghost" href="#install">Install with Terminal</a></div>
+  <p class="fine">Requires macOS 13 or later · Free and open source (MIT)</p>
+  <figure class="win"><div class="win-bar"><i></i><i></i><i></i><span>rag-evaluation.md</span></div>
+    <picture><source media="(prefers-color-scheme: dark)" srcset="images/hero-reading-dark.webp" type="image/webp"><img src="images/hero-reading.webp" alt="mdPreview showing a long document with an outline on the left, a progress bar on top and “3 min left” in the corner" width="2400" height="1500" fetchpriority="high"></picture>
+  </figure>
 </div></header>
 
-<section><div class="wrap">
-  <h2>Markdown is how AI writes now.</h2>
-  <p class="sub">ChatGPT, Claude and Gemini all answer in Markdown — long, structured, and awkward to read in a text editor. mdPreview is the quiet window where you read it.</p>
+<div class="trust"><ul><li>Free, MIT licensed</li><li>Works fully offline</li><li>No account</li><li>No tracking or telemetry</li><li>Your documents never leave your Mac</li></ul></div>
+
+<section id="why"><div class="wrap">
+  <h2>AI writes in Markdown. You shouldn’t have to read it that way.</h2>
+  <p class="sub">The same answer, before and after. On the left is the file you receive; on the right, what mdPreview shows when you double-click it.</p>
+  <div class="compare">
+    <div class="pane"><p class="tag">The .md file, as received</p>
+<pre class="src" aria-label="Raw Markdown source"><span class="h"># </span><span class="b">Evaluating a RAG system</span>
+
+A practical checklist, <span class="m">**</span>from first prototype to production<span class="m">**</span>. Most teams skip the first two steps.
+
+<span class="h">## </span><span class="b">1. Define what “good” means</span>
+
+<span class="m">&gt; [!TIP]
+&gt; </span>Keep the set small enough to read in an afternoon.
+
+<span class="m">| </span>Metric <span class="m">| </span>Healthy range <span class="m">|
+|---|---|
+| </span>Recall@5 <span class="m">| </span>above 0.85 <span class="m">|
+| </span>MRR <span class="m">| </span>above 0.6 <span class="m">|</span>
+
+<span class="m">- </span>Collect fifty real questions
+<span class="m">- </span>Write the answer an expert would accept</pre></div>
+    <div class="arrow" aria-hidden="true"><svg class="i"><use href="#i-arrow"/></svg></div>
+    <div class="pane"><p class="tag">In mdPreview</p>
+      <figure class="win"><div class="win-bar"><i></i><i></i><i></i><span>rag-evaluation.md</span></div>
+        <picture><source media="(prefers-color-scheme: dark)" srcset="images/after-dark.webp" type="image/webp"><img src="images/after.webp" alt="The same text rendered as a clean page with a heading, a tip box, a table and a list" width="1360" height="1440" loading="lazy"></picture>
+      </figure></div>
+  </div>
   <div class="pillars">
-    <div class="pillar"><h3>Instant and light</h3><p>Starts in about half a second. Double-click a file and it is already typeset. Nothing runs in the background.</p></div>
-    <div class="pillar"><h3>Built to be finished</h3><p>A hairline progress bar, “12 min left”, section folding and Go to Heading keep a 5,000-word answer from feeling endless.</p></div>
-    <div class="pillar"><h3>Edit like a document</h3><p>Click anywhere and a formatting bar appears. Bold, headings, lists, links and tables — never a <code>**</code> in sight.</p></div>
+    <div class="pillar"><svg class="i" aria-hidden="true"><use href="#i-bolt"/></svg><h3>Instant and light</h3><p>Starts in about half a second. Double-click a file and it is already typeset. Nothing runs in the background.</p></div>
+    <div class="pillar"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg><h3>Built to be finished</h3><p>A hairline progress bar, “N min left”, section folding and Go to Heading keep a 5,000-word answer from feeling endless.</p></div>
+    <div class="pillar"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg><h3>Edit like a document</h3><p>Click anywhere and a formatting bar appears. Bold, headings, lists, links and tables, never a <code>**</code> in sight.</p></div>
   </div>
 </div></section>
 
 <section class="alt" id="reading"><div class="wrap split">
-  <div class="text"><h2>Made for long answers</h2><p class="sub" style="margin-bottom:0">Restrained typography, and a few aids that appear only when a document is long enough to need them.</p>
-    <ul><li>Progress bar and “N min left” — only in long documents</li><li>Collapse any section from the arrow in the margin</li><li><code>⌘J</code> jumps to any heading by typing a few letters</li><li>Long code blocks and tables show a head; one click shows all</li><li>Tables, math, Mermaid diagrams, footnotes and alerts render correctly</li><li>Reload automatically when an AI agent changes the file</li></ul></div>
-  <div class="shot"><img src="images/hero-goto.png" alt="Go to Heading palette over a long document" width="1200" height="750" loading="lazy"></div>
+  <div class="text"><h2>Made for long answers</h2><p class="sub">Restrained typography, and a few aids that appear only when a document is long enough to need them.</p>
+    <ul><li>Progress bar and “N min left”, only in long documents</li><li>Collapse any section from the arrow in the margin</li><li><code>⌘J</code> jumps to any heading as you type a few letters</li><li>Long code blocks and tables show a head; one click shows all</li><li>Tables, math, Mermaid diagrams, footnotes and alerts render correctly</li><li>Reloads automatically when an AI agent changes the file</li></ul></div>
+  <figure class="win"><div class="win-bar"><i></i><i></i><i></i><span>rag-evaluation.md</span></div>
+    <picture><source media="(prefers-color-scheme: dark)" srcset="images/hero-goto-dark.webp" type="image/webp"><img src="images/hero-goto.webp" alt="The Go to Heading palette open over a long document" width="2400" height="1500" loading="lazy"></picture>
+  </figure>
 </div></section>
 
 <section id="editing"><div class="wrap split flip">
-  <div class="text"><h2>Click, then type</h2><p class="sub" style="margin-bottom:0">Documents open for reading. Put the cursor anywhere and a slim toolbar slides in; press <code>Esc</code> and it is gone.</p>
-    <ul><li>Bold, italic, headings, lists, quotes and links from the bar</li><li>Insert a table, add or remove rows and columns</li><li>Paste from the web or a chat and get clean Markdown (<code>⇧⌘V</code>)</li><li>Drop in images — they are saved next to the document</li><li>Prefer plain text? <code>⌘E</code> switches to the source</li></ul></div>
-  <div class="shot"><img src="images/edit-bar.png" alt="Formatting bar above a document being edited" width="1200" height="750" loading="lazy"></div>
+  <div class="text"><h2>Click, then type</h2><p class="sub">Documents open for reading. Put the cursor anywhere and a slim toolbar slides in; press <code>Esc</code> and it is gone.</p>
+    <ul><li>Bold, italic, headings, lists, quotes and links from the bar</li><li>Insert a table, add or remove rows and columns</li><li>Paste from the web or a chat and get clean text (<code>⇧⌘V</code>)</li><li>Drop in images; they are saved next to the document</li><li>Prefer plain text? <code>⌘E</code> switches to the source</li></ul></div>
+  <figure class="win"><div class="win-bar"><i></i><i></i><i></i><span>rag-evaluation.md</span></div>
+    <picture><source media="(prefers-color-scheme: dark)" srcset="images/edit-bar-dark.webp" type="image/webp"><img src="images/edit-bar.webp" alt="A formatting bar above a document with a sentence selected" width="2400" height="1500" loading="lazy"></picture>
+  </figure>
 </div></section>
 
 <section class="alt" id="sharing"><div class="wrap">
   <h2>Hand it to anyone</h2>
   <p class="sub">Send people something they can open, not a <code>.md</code> file.</p>
   <div class="grid3">
-    <div class="cell"><h3>PDF</h3><p>Real pagination, page numbers, bookmarks, searchable Chinese text.</p></div>
-    <div class="cell"><h3>Word (.docx)</h3><p>Native heading styles, tables, images and footnotes.</p></div>
-    <div class="cell"><h3>Share page</h3><p>One self-contained HTML file with outline and dark mode. Works anywhere.</p></div>
-    <div class="cell"><h3>Rich text</h3><p><code>⇧⌘C</code> copies formatted text for Mail, Notes, Word or chat.</p></div>
-    <div class="cell"><h3>PNG & text</h3><p>A long image, or true plain text without <code>##</code>.</p></div>
-    <div class="cell"><h3>Command line</h3><p><code>mdpreview export notes.md --to pdf</code></p></div>
+    <div class="cell"><svg class="i" aria-hidden="true"><use href="#i-pdf"/></svg><h3>PDF</h3><p>Real pagination, page numbers, bookmarks, searchable Chinese text.</p></div>
+    <div class="cell"><svg class="i" aria-hidden="true"><use href="#i-word"/></svg><h3>Word (.docx)</h3><p>Native heading styles, tables, images and footnotes.</p></div>
+    <div class="cell"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg><h3>Share page</h3><p>One self-contained web page with an outline and dark mode. Opens anywhere.</p></div>
+    <div class="cell"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><h3>Rich text</h3><p><code>⇧⌘C</code> copies formatted text for Mail, Notes, Word or chat.</p></div>
+    <div class="cell"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg><h3>Image &amp; plain text</h3><p>A long picture, or true plain text without <code>##</code>.</p></div>
+    <div class="cell"><svg class="i" aria-hidden="true"><use href="#i-term"/></svg><h3>Command line</h3><p><code>mdpreview export notes.md --to pdf</code></p></div>
   </div>
 </div></section>
 
-<section id="install"><div class="wrap narrow">
-  <h2>Install</h2>
-  <p class="sub">One line in Terminal. It checks a signature and checksum first, and macOS shows no security prompt.</p>
-  <pre class="cmd">curl -fsSL https://raw.githubusercontent.com/tahoeliu/mdPreview/main/scripts/get.sh | bash</pre>
-  <p class="note">Or <code>brew install --cask --no-quarantine tahoeliu/tap/mdpreview</code>, or download the <a href="https://github.com/tahoeliu/mdPreview/releases/latest">disk image</a>. Browser-downloaded copies need <em>System Settings → Privacy &amp; Security → Open Anyway</em> once, because mdPreview is free software without a paid Apple certificate. Requires macOS 13 or later.</p>
+<section class="install" id="install"><div class="wrap">
+  <h2 class="center">Get mdPreview</h2>
+  <p class="sub center">Free for Mac. Pick whichever is easier.</p>
+  <div class="cols">
+    <div class="card"><h3>Download the app</h3><p>Open the disk image and drag mdPreview into Applications.</p>
+      <a class="btn primary" href="https://github.com/tahoeliu/mdPreview/releases/latest">Download for Mac</a>
+      <ol class="steps"><li>Open the downloaded file and drag the app into Applications.</li><li>The first time, macOS may say it can’t check the app. Open <em>System Settings → Privacy &amp; Security</em> and click <em>Open Anyway</em> once.</li></ol></div>
+    <div class="card"><h3>Or one line in Terminal</h3><p>Checks a signature and checksum first, and macOS shows no warning at all.</p>
+      <div class="cmdrow"><pre class="cmd" id="cmd">curl -fsSL https://raw.githubusercontent.com/tahoeliu/mdPreview/main/scripts/get.sh | bash</pre><button class="copy" type="button" data-copy="cmd" data-done="Copied">Copy</button></div>
+      <p style="margin:18px 0 0;font-size:14px">Prefer Homebrew? <code style="background:none;border:0;padding:0;color:#eef1f7">brew install --cask --no-quarantine tahoeliu/tap/mdpreview</code></p></div>
+  </div>
+  <p class="fine">Why the extra step? mdPreview is free software and doesn’t carry a paid Apple certificate. Requires macOS 13 or later.</p>
 </div></section>
 
-<section class="alt"><div class="wrap narrow">
+<section><div class="wrap narrow">
   <h2>Questions</h2>
   <details><summary>Do I need to know Markdown?</summary><p>No. Read it, click to edit with the toolbar, export. Source mode is there if you want it.</p></details>
-  <details><summary>Is it really free?</summary><p>Yes — MIT licensed, no account, no ads, no telemetry. A GitHub star helps others find it.</p></details>
+  <details><summary>Is it really free?</summary><p>Yes. MIT licensed, no account, no ads, no telemetry. A GitHub star helps others find it.</p></details>
   <details><summary>Does it send my documents anywhere?</summary><p>Never. The only network request is an optional update check you can switch off. Remote images are not loaded until you allow them.</p></details>
-  <details><summary>Is it a Typora or VS Code replacement?</summary><p>No. It is a focused reader with convenient editing and good sharing — not a writing studio or an IDE.</p></details>
+  <details><summary>Why does macOS warn me the first time?</summary><p>mdPreview is free and not signed with a paid Apple certificate, so a copy downloaded in a browser needs one confirmation: System Settings → Privacy &amp; Security → Open Anyway. The Terminal install above avoids the prompt altogether.</p></details>
+  <details><summary>Is it a Typora or VS Code replacement?</summary><p>No. It is a focused reader with convenient editing and good sharing, not a writing studio or an IDE.</p></details>
   <details><summary>Spacebar preview in Finder?</summary><p>Bundled with the app. If it does not appear, enable <em>mdPreview Quick Look</em> in System Settings → General → Login Items &amp; Extensions → Quick Look.</p></details>
 </div></section>
+</main>
 
 <footer><div class="wrap"><a href="https://github.com/tahoeliu/mdPreview">GitHub</a> · <a href="https://github.com/tahoeliu/mdPreview/releases">Releases</a> · <a href="https://github.com/tahoeliu/mdPreview/blob/main/CHANGELOG.md">Changelog</a> · <a href="https://github.com/tahoeliu/mdPreview/blob/main/SECURITY.md">Security</a> · MIT © Tahoe Liu</div></footer>
+<script>
+document.querySelectorAll('button.copy').forEach(function(b){b.addEventListener('click',function(){
+  var el=document.getElementById(b.dataset.copy),old=b.textContent;
+  try{navigator.clipboard.writeText(el.textContent.trim()).then(function(){b.textContent=b.dataset.done;setTimeout(function(){b.textContent=old},1600)})}catch(e){}
+})});
+</script>
 </body>
 </html>

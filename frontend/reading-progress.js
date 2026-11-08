@@ -53,11 +53,11 @@ window.ReadingProgress = (() => {
     const hud = document.createElement('div'); hud.className = 'read-hud'; hud.setAttribute('aria-hidden', 'true');
     const end = document.createElement('div'); end.className = 'read-end'; end.hidden = true;
     const svg = d => '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
-    end.innerHTML = '<div class="read-end-mark">' + svg('<rect x="2" y="4" width="20" height="16" rx="4"/><path d="M6 15V9l3 3 3-3v6M17 9v6m-2.5-2.5L17 15l2.5-2.5"/>').replace('width="18" height="18"', 'width="26" height="26"') + '<span>mdPreview</span></div><div class="read-end-actions"></div>';
+    end.innerHTML = '<div class="read-end-mark"><span>mdPreview</span></div><div class="read-end-actions"></div>';
     const actions = end.querySelector('.read-end-actions');
     for (const [icon, title, run] of [
-      ['<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/>', t('Copy as rich text', '复制为富文本'), () => window.copyAsRichText && copyAsRichText()],
-      ['<path d="m16 18 6-6-6-6M8 6l-6 6 6 6"/>', t('Copy as Markdown', '复制为 Markdown'), () => window.copyAsMarkdown && copyAsMarkdown()],
+      ['<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/>', t('Copy as Markdown', '复制 Markdown 全文'), () => window.copyAsMarkdown && copyAsMarkdown()],
+      ['<path d="M7 3h7l5 5v13H7zM14 3v5h5M12 12v5m-2.5-2.5L12 17l2.5-2.5"/>', t('Export…', '导出…'), () => window.exportAs && exportAs()],
       ['<path d="M12 15V3M8 7l4-4 4 4M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>', t('Share…', '共享…'), e => { const r = e.currentTarget.getBoundingClientRect(); try { Bridge.callSafe('share_document', Math.round(r.left + r.width / 2), Math.round(r.top)); } catch (x) {} }],
     ]) {
       const b = document.createElement('button'); b.type = 'button'; b.title = title; b.setAttribute('aria-label', title); b.innerHTML = svg(icon);
@@ -65,6 +65,15 @@ window.ReadingProgress = (() => {
     }
     document.body.append(bar, hud); page.append(end);
 
+    // Make the name exactly as wide as the row of buttons under it.
+    function fitName() {
+      const name = end.querySelector('.read-end-mark span'), row = end.querySelector('.read-end-actions');
+      if (!name || !row || end.hidden) return;
+      const target = row.getBoundingClientRect().width; if (!target) return;
+      name.style.fontSize = '20px';
+      const width = name.getBoundingClientRect().width; if (!width) return;
+      name.style.fontSize = (20 * target / width).toFixed(2) + 'px';
+    }
     let total = 0, measured = -1, hideTimer = 0, frame = 0;
 
     function isLong() {
@@ -86,6 +95,7 @@ window.ReadingProgress = (() => {
       frame = 0;
       const showEnd = !content.classList.contains('hidden') && content.isConnected && !document.documentElement.hasAttribute('data-output') && content.textContent.trim().length > 0;
       end.hidden = !showEnd;
+      if (showEnd) fitName();
       if (!isLong()) { bar.classList.remove('on'); hud.classList.remove('on'); return; }
       measure();
       const range = scroller.scrollHeight - scroller.clientHeight;

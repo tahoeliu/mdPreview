@@ -7,6 +7,7 @@ const DOCUMENT='# 标题\n\n## 第二节\n\n正文里的**加粗**文字\n\n- [ 
 
 async function violations(page){
  const AxeBuilder=require('@axe-core/playwright').default;
+ await page.waitForTimeout(450);   // let the top bar finish fading in; a half-transparent bar is not what users read
  const result=await new AxeBuilder({page}).analyze();
  return result.violations.filter(x=>['serious','critical'].includes(x.impact)).map(x=>({id:x.id,impact:x.impact,nodes:x.nodes.slice(0,3).map(n=>n.html.slice(0,120))}));
 }

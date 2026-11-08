@@ -158,3 +158,9 @@ html:not([data-output]) .markdown ul > li::marker, html:not([data-output]) .mark
 html:not([data-output])[data-reading-font="serif"] .markdown { font-family: ui-serif, "New York", "Iowan Old Style", Georgia, "Songti SC", "Source Han Serif SC", "Noto Serif CJK SC", serif; }
 html:not([data-output])[data-reading-font="serif"] .markdown :is(pre, code, table, .frontmatter, .math-block, .mermaid-diagram) { font-family: var(--font-sans); }
 html:not([data-output])[data-reading-font="serif"] .markdown :is(pre, code) { font-family: var(--font-mono); }
+
+/* 屏幕阅读：标题、加粗、表头统一用同一级中等字重（不用 Bold），靠字号和颜色区分层次；导出文件不受影响 */
+html:not([data-output]) .markdown h1, html:not([data-output]) .markdown h2, html:not([data-output]) .markdown h3,
+html:not([data-output]) .markdown h4, html:not([data-output]) .markdown h5, html:not([data-output]) .markdown h6,
+html:not([data-output]) .markdown th, html:not([data-output]) .markdown strong, html:not([data-output]) .markdown b,
+html:not([data-output]) .markdown .markdown-alert-title { font-weight: 500; }

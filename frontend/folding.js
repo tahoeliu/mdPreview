@@ -4,7 +4,7 @@ window.Folding = (() => {
   const CODE_LINES = 28, TABLE_ROWS = 14, CODE_SHOW = 18, ROWS_SHOW = 10;
   const t = (en, zh) => (window.I18n && I18n.t ? I18n.t(en, zh) : en);
   const HEADING = /^H[1-6]$/;
-  let content = null, layer = null, folded = new Set(), observer = null, frame = 0;
+  let hoveredHeading = null, content = null, layer = null, folded = new Set(), observer = null, frame = 0;
 
   function level(h) { return +h.tagName[1]; }
   function hasBody(h) { const n = h.nextElementSibling; return !!n && !(HEADING.test(n.tagName) && level(n) <= level(h)); }
@@ -47,6 +47,8 @@ window.Folding = (() => {
         button.style.top = (rect.top - pr.top + (Math.min(line, rect.height) - 16) / 2) + 'px';
         button.style.left = (cr.left - pr.left - 20) + 'px';
         button.addEventListener('click', () => toggle(h));
+        button._heading = h;
+        if (h === hoveredHeading) button.classList.add('show');
         host.append(button);
       }
     });
@@ -100,11 +102,26 @@ window.Folding = (() => {
   }
   function decorate(root) {
     if (!root || root.id !== 'content') return;
-    content = root; folded = new Set();
+    content = root; folded = new Set(); wireHover();
     root.querySelectorAll('.fold-more').forEach(b => b.remove());
     foldLong(root);
     apply();
     if (!observer && window.ResizeObserver) { observer = new ResizeObserver(place); observer.observe(root); window.addEventListener('resize', place); }
+  }
+
+  // The small arrow shows only while the pointer is on its heading (or on the arrow itself); collapsed sections keep a faint one so they stay recognisable.
+  let hideTimer = 0;
+  function showArrowFor(heading) {
+    clearTimeout(hideTimer); hoveredHeading = heading;
+    for (const b of document.querySelectorAll('.fold-toggle')) b.classList.toggle('show', b._heading === heading);
+  }
+  function scheduleArrowHide() { clearTimeout(hideTimer); hideTimer = setTimeout(() => { hoveredHeading = null; for (const b of document.querySelectorAll('.fold-toggle.show')) b.classList.remove('show'); }, 250); }
+  let hoverWired = false;
+  function wireHover() {
+    if (hoverWired || !content) return; hoverWired = true;
+    content.addEventListener('mouseover', e => { const h = e.target.closest && e.target.closest('h1, h2, h3, h4'); if (h && content.contains(h)) showArrowFor(h); else scheduleArrowHide(); });
+    content.addEventListener('mouseleave', scheduleArrowHide);
+    document.addEventListener('mouseover', e => { const b = e.target.closest && e.target.closest('.fold-toggle'); if (b) showArrowFor(b._heading); });
   }
   return { decorate, toggle, setAll, reveal, apply, place, isFolded: h => folded.has(h) };
 })();

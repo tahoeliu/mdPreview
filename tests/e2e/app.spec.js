@@ -90,7 +90,7 @@ test('clicking into the page starts editing: top bar, bold round-trip, Esc retur
   await expect(page.locator('.edit-bar')).toBeHidden();
   await page.click('#content p');
   await page.keyboard.press('Meta+e');
-  await expect(page.locator('.edit-bar')).toBeHidden();
+  await expect(page.locator('.edit-bar:not(.source-bar)')).toBeHidden();
 });
 test('pinned bar stays; table can be inserted, grown and shrunk from the bar',async({page})=>{
   await page.evaluate(()=>loadContent('/tmp/doc.md','Intro\n\nOutro',720,false,false));

@@ -43,6 +43,8 @@ test('the page ends with the mark and copy / share actions, not a read-time line
   await expect(end).toContainText('mdPreview');
   await expect(end).not.toContainText('min read');
   await expect(end.locator('button')).toHaveCount(3);
+  const widths=await end.evaluate(el=>[el.querySelector('.read-end-mark span').getBoundingClientRect().width,el.querySelector('.read-end-actions').getBoundingClientRect().width]);
+  expect(Math.abs(widths[0]-widths[1])).toBeLessThan(3);
 });
 test('outline: colour-only selection, word count at the bottom with three ways to count, smooth jump',async({page})=>{
   const body=Array.from({length:60},(_,i)=>'段落 '+i+' 一些中文和 English words here.\n').join('\n');

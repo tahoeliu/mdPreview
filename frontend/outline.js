@@ -72,6 +72,9 @@ window.DocumentOutline = {
           : fullWindowCenteredLeft;
       }
 
+      // leave room for the section arrows that sit just left of the headings
+      const minLeft = tw + 26;
+      if (targetLeft < minLeft) { targetLeft = minLeft; targetWidth = Math.min(targetWidth, Math.max(0, windowWidth - minLeft)); }
       page.style.setProperty('--toc-aware-page-left', Math.round(targetLeft) + 'px');
       page.style.setProperty('--toc-aware-page-width', Math.round(targetWidth) + 'px');
     }
@@ -81,10 +84,10 @@ window.DocumentOutline = {
       const show = !!visible && state.tocHasContent;
       toc.classList.toggle('hidden', !show);
       const changed = document.body.classList.contains('has-toc') !== show;
-      if (changed) {
+      if (changed && setTocVisible.animate) {
         document.body.classList.add('toc-animating');
         clearTimeout(setTocVisible.timer);
-        setTocVisible.timer = setTimeout(() => document.body.classList.remove('toc-animating'), 420);
+        setTocVisible.timer = setTimeout(() => { document.body.classList.remove('toc-animating'); if (window.Folding) Folding.place(); }, 420);
       }
       document.body.classList.toggle('has-toc', show);
       syncTocToggle(!show);
@@ -249,7 +252,9 @@ window.DocumentOutline = {
     function toggleToc() {
       const toc = document.getElementById('tocSidebar');
       state.tocManualOverride = toc.classList.contains('hidden');
+      setTocVisible.animate = true;   // only a deliberate open / close glides; loading a document must not
       setTocVisible(state.tocManualOverride);
+      setTocVisible.animate = false;
     }
 
 

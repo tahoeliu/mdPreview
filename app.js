@@ -399,14 +399,6 @@ var {
   // keep their relative ratios via the --content-font-size CSS variable).
   // In-memory only (not persisted), clamped to a sane range.
   let contentFontSize = 16;
-  // 'cmd+shift+e' style specs; letters match by physical key so a non-Latin input source does not break them
-  function shortcutMatches(e, spec) {
-    const parts = String(spec).split('+'), key = parts.pop();
-    const want = { cmd: parts.includes('cmd'), ctrl: parts.includes('ctrl'), alt: parts.includes('alt'), shift: parts.includes('shift') };
-    if (e.metaKey !== want.cmd || e.ctrlKey !== want.ctrl || e.altKey !== want.alt || e.shiftKey !== want.shift) return false;
-    const code = e.code || '';
-    return e.key.toLowerCase() === key || code === 'Key' + key.toUpperCase() || code === 'Digit' + key;
-  }
   function applyReadingFont() { document.documentElement.setAttribute('data-reading-font', appSettings.reading_font === 'serif' ? 'serif' : 'sans'); }
   window.toggleFormatBar = function () { if (window.formatToolbar) window.formatToolbar.togglePinned(); };
   function applyFontSize() {
@@ -950,6 +942,7 @@ var {
       source.classList.remove('visible');
     }
     updateEmptyState();
+    if (window.SourceToolbar) SourceToolbar.sync();
     if (_flashModeNext) { _flashModeNext = false; showModeIndicator(); }
   }
 

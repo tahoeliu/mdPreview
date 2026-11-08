@@ -166,6 +166,10 @@ def _set_represented_file(window, path):
             browser = BrowserView.instances.get(window.uid)
             if browser is not None:
                 browser.window.setRepresentedFilename_(path if path and os.path.isfile(path) else '')
+                try:
+                    browser.window.setTitlebarSeparatorStyle_(1)   # no hairline between the title bar and the top bar / page
+                except Exception:
+                    pass
         except Exception:
             pass
     try:
@@ -496,7 +500,8 @@ if HAS_COCOA:
                 control.selectItemAtIndex_(choices.index(values[key]))
             else:
                 control = NSButton.alloc().initWithFrame_(NSMakeRect(0,0,240,25))
-                control.setButtonType_(NSSwitchButton); control.setTitle_(''); control.setState_(int(values[key]))
+                control.setButtonType_(NSSwitchButton); control.setTitle_(title); control.setState_(int(values[key]))
+                label.setStringValue_('')   # the label column is narrow; a checkbox carries its own title so it is never cut off
             holder['acc'].addSubview_(label); holder['acc'].addSubview_(control)
             rows.append((key,label,control,formats,choices))
         holder['output_controls'] = rows
@@ -2094,6 +2099,21 @@ class MarkdownAPI:
             return {'success': True}
         except Exception as e:
             return {'success': False, 'error': str(e)}
+
+    def get_chrome_color(self):
+        """The system's window / title bar colour (e.g. '#ececec'), so the top bar can blend with the title bar."""
+        if not HAS_COCOA:
+            return {'color': None}
+        try:
+            from AppKit import NSApplication, NSColor, NSColorSpace
+            holder = {}
+            def grab():
+                holder['c'] = NSColor.windowBackgroundColor().colorUsingColorSpace_(NSColorSpace.sRGBColorSpace())
+            NSApplication.sharedApplication().effectiveAppearance().performAsCurrentDrawingAppearance_(grab)
+            c = holder['c']
+            return {'color': '#%02x%02x%02x' % tuple(int(round(v * 255)) for v in (c.redComponent(), c.greenComponent(), c.blueComponent()))}
+        except Exception:
+            return {'color': None}
 
     def share_document(self, x=None, y=None):
         """Open the Share sheet next to the footer button that asked for it."""

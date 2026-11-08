@@ -212,7 +212,19 @@ window.RenderedEditing = {
         pre.querySelectorAll('.task-toggle').forEach((box) => {
           const mark = document.createElement('span'); mark.className = 'task-marker'; mark.textContent = 'x'; mark.setAttribute('data-task-marker', box.dataset.taskMarker || ''); box.replaceWith(mark);
         });
+        // The sanitizer drops attribute values that contain "-->" (every Mermaid arrow), so raw sources travel base64-encoded.
+        const RAW = ['data-source', 'data-raw', 'data-image-raw', 'data-resource-raw'];
+        const encode = text => btoa(unescape(encodeURIComponent(text)));
+        const decode = text => decodeURIComponent(escape(atob(text)));
+        pre.querySelectorAll(RAW.map(n => '[' + n + ']').join(',')).forEach((el) => {
+          for (const name of RAW) if (el.hasAttribute(name)) { el.setAttribute('data-mdp-b64-' + name.slice(5), encode(el.getAttribute(name))); el.removeAttribute(name); }
+        });
+        pre.querySelectorAll('.mermaid-diagram').forEach((el) => { el.textContent = 'x'; });   // the drawn SVG is output only; its labels must not leak into the text
         tmp.innerHTML = sanitizeHtmlString(pre.innerHTML);
+        tmp.querySelectorAll('*').forEach((el) => {
+          if (el.classList.contains('mermaid-diagram') && !el.textContent.trim()) el.textContent = 'x';   // empty elements are skipped by the converter
+          for (const name of RAW) { const key = 'data-mdp-b64-' + name.slice(5); if (el.hasAttribute(key)) { try { el.setAttribute(name, decode(el.getAttribute(key))); } catch (e) {} el.removeAttribute(key); } }
+        });
         tmp.querySelectorAll('blockquote').forEach((quote) => {
           // Nested quotes may already have been removed together with their
           // ancestor (forEach iterates a static snapshot) — guard each removal.
