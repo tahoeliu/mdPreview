@@ -55,7 +55,7 @@ brew install --cask --no-quarantine tahoeliu/tap/mdpreview
 
 The release signing key fingerprint (SHA-256 of the public key) is published in [SECURITY.md](SECURITY.md).
 
-Requires macOS 13 or later. Apple Silicon builds are verified by the maintainer; Intel builds are produced and smoke-tested by CI on an Intel runner.
+Requires macOS 13 or later. Available in English, 简体中文, 繁體中文, 日本語, 한국어, Deutsch, Français and Español. Apple Silicon builds are verified by the maintainer; Intel builds are produced and smoke-tested by CI on an Intel runner.
 
 ### Make it the default for `.md` files
 

@@ -55,7 +55,7 @@ brew install --cask --no-quarantine tahoeliu/tap/mdpreview
 
 发布签名密钥指纹（公钥的 SHA-256）公布在 [SECURITY.md](SECURITY.md)。
 
-需要 macOS 13 或更高版本。Apple 芯片版本由维护者实测；Intel 版本由 CI 在 Intel 机器上构建并做冒烟测试。
+需要 macOS 13 或更高版本。界面支持英文、简体中文、繁體中文、日本語、한국어、Deutsch、Français、Español。Apple 芯片版本由维护者实测；Intel 版本由 CI 在 Intel 机器上构建并做冒烟测试。
 
 ### 设为 `.md` 的默认打开方式
 

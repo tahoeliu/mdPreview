@@ -12,6 +12,10 @@ A rebuild of everything that happens when you *share* a document, plus a more re
 - **Reading font:** sans-serif or serif, in Settings.
 - **Share-ready HTML export:** a single self-contained page with a sticky outline on wide screens, reading time, dark mode and print styles.
 - **Finder spacebar preview (Quick Look)** is bundled; the app registers and enables it on first launch (if it does not appear, enable *mdPreview Quick Look* in System Settings → General → Login Items & Extensions → Quick Look).
+- **Eight interface languages:** English, 简体中文, 繁體中文, 日本語, 한국어, Deutsch, Français and Español — menus, dialogs, the sample document and Settings, chosen automatically from the system or in Settings. (Translations beyond Chinese and English have not had a native-speaker review; corrections are welcome.)
+- **More native behaviour:** *File → Share…* (the system share sheet; shares the file, or the current text when it is unsaved), the document icon in the title bar (drag it out, ⌘-click for the path), a one-time offer on first launch to make mdPreview the default for Markdown files (also in the app menu), the system serif font (New York) for the serif reading font, and the system accent colour for the caret and controls.
+- Outline width adapts to the longest heading and the window; long headings stay on one line with an ellipsis and show in full on hover.
+- Slightly faster start (the update-verification code is loaded only when checking for updates).
 - A new project website under `docs/` (English and 中文).
 - **Go to Heading** (`⌘J`): type a few letters to jump anywhere in a long document.
 - **New from Clipboard** (`⌥⌘N`, also a button on the empty screen): copy an answer from any chat app and read it rendered immediately.

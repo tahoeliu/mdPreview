@@ -2,7 +2,7 @@
    折叠按钮放在 #content 之外的覆盖层里，折叠状态只是 CSS 类，不会进入 Markdown 或任何导出。 */
 window.Folding = (() => {
   const CODE_LINES = 28, TABLE_ROWS = 14, CODE_SHOW = 18, ROWS_SHOW = 10;
-  const tr = (en, zh) => (window.I18n && I18n.t ? I18n.t(en, zh) : en);
+  const t = (en, zh) => (window.I18n && I18n.t ? I18n.t(en, zh) : en);
   const HEADING = /^H[1-6]$/;
   let content = null, layer = null, folded = new Set(), observer = null, frame = 0;
 
@@ -42,8 +42,8 @@ window.Folding = (() => {
         const isFolded = folded.has(h);
         button.classList.toggle('collapsed', isFolded);
         button.setAttribute('aria-expanded', String(!isFolded));
-        button.setAttribute('aria-label', (isFolded ? tr('Expand section: ', '展开本节：') : tr('Collapse section: ', '收起本节：')) + h.textContent.trim());
-        button.title = isFolded ? tr('Expand section', '展开本节') : tr('Collapse section', '收起本节');
+        button.setAttribute('aria-label', (isFolded ? t('Expand section: {title}', '展开本节：{title}') : t('Collapse section: {title}', '收起本节：{title}')).replace('{title}', h.textContent.trim()));
+        button.title = isFolded ? t('Expand section', '展开本节') : t('Collapse section', '收起本节');
         button.style.top = (rect.top - pr.top + (Math.min(line, rect.height) - 20) / 2) + 'px';
         button.style.left = (cr.left - pr.left - 26) + 'px';
         button.addEventListener('click', () => toggle(h));
@@ -82,7 +82,7 @@ window.Folding = (() => {
   }
   function moreButton(block, count, unit) {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'fold-more'; button.contentEditable = 'false';
-    button.textContent = tr('Show all ', '显示全部 ') + count + (unit === 'rows' ? tr(' rows', ' 行') : tr(' lines', ' 行'));
+    button.textContent = (unit === 'rows' ? t('Show all {n} rows', '显示全部 {n} 行') : t('Show all {n} lines', '显示全部 {n} 行')).replace('{n}', count);
     button.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); expandBlock(block); });
     (block.closest('.table-wrap') || block).after(button);
   }

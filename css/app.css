@@ -246,3 +246,7 @@ body:not(.is-editing):not(.edit-pinned) #content { caret-color: transparent; }
 @media print { .fold-layer, .fold-more { display: none !important; } .markdown .fold-hidden { display: revert !important; } .markdown pre.is-folded { max-height: none !important; } .markdown tr.row-folded { display: table-row !important; } .markdown .fold-collapsed::after { content: none; } }
 .edit-bar button[data-kind="ul"] { font-size: 18px; line-height: 1; }
 @media (prefers-color-scheme: dark) { .modal-button.secondary { background: #3a3a3c; color: #f0f0f0; border-color: #555; } .modal-button.secondary:hover { background: #48484a; } .modal-body .set-title, .set-note { color: #a0a0a6; } }
+
+/* Follow the system accent colour for controls and the caret (falls back to the fixed blue where unsupported) */
+:root { accent-color: #0062cc; accent-color: AccentColor; }
+#content, #textarea { caret-color: #0062cc; caret-color: AccentColor; }

@@ -39,7 +39,7 @@ window.SaveDialogs = {
         return;
       }
       const name = state.filePath && state.filePath !== 'Untitled.md' ? state.filePath.split('/').pop() : 'Untitled.md';
-      const bodyHtml = '<p>' + t('Do you want to save the changes you made to', '是否保存对') + ' <strong>' + escHtml(name) + '</strong> ' + t('?', '所做的更改？') + '</p>' +
+      const bodyHtml = '<p>' + t('Do you want to save the changes you made to {name}?', '是否保存对 {name} 所做的更改？').replace('{name}', '<strong>' + escHtml(name) + '</strong>') + '</p>' +
         '<p style="color:#666;margin-bottom:0;">' + t('Your changes will be lost if you do not save them.', '若不保存，更改将丢失。') + '</p>';
       const actionsHtml = '<button class="modal-button secondary" id="closeCancel">' + t('Cancel', '取消') + '</button>' +
         '<button class="modal-button danger" id="closeDiscard">' + t("Don't Save", '不保存') + '</button>' +
@@ -88,7 +88,7 @@ window.SaveDialogs = {
         return;
       }
       const name = path ? path.split('/').pop() : t('this file', '此文件');
-      const bodyHtml = '<p>' + t('The file', '文件') + ' <strong>' + escHtml(name) + '</strong> ' + t('has changed on disk since it was opened or last saved.', '自打开或上次保存以来已在磁盘上发生变化。') + '</p>' +
+      const bodyHtml = '<p>' + t('The file {name} has changed on disk since it was opened or last saved.', '文件 {name} 自打开或上次保存以来已在磁盘上发生变化。').replace('{name}', '<strong>' + escHtml(name) + '</strong>') + '</p>' +
         '<p>' + t('Choose how to continue:', '请选择如何继续：') + '</p>' +
         '<ul style="margin:8px 0 0 18px;padding:0;color:#555;line-height:1.5;">' +
         '<li><strong>' + t('Save As', '另存为') + '</strong> ' + t('keeps the changed file untouched and saves this document to a new path.', '保持磁盘文件不变，将本文档保存到新路径。') + '</li>' +

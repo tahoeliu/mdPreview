@@ -36,7 +36,21 @@ if '--install-update-helper' in sys.argv:
     install_helper()
     sys.exit(0)
 import webview
-from mdpreview_core.release import version_tuple, verify_bundle, verify_asset
+
+
+def version_tuple(*args, **kwargs):  # 更新校验模块只在检查更新时才加载，缩短冷启动
+    from mdpreview_core.release import version_tuple as impl
+    return impl(*args, **kwargs)
+
+
+def verify_bundle(*args, **kwargs):
+    from mdpreview_core.release import verify_bundle as impl
+    return impl(*args, **kwargs)
+
+
+def verify_asset(*args, **kwargs):
+    from mdpreview_core.release import verify_asset as impl
+    return impl(*args, **kwargs)
 
 _START_T0 = time.time()  # cold-start profiling
 
@@ -107,7 +121,12 @@ def _locale_bundle():
             except Exception:
                 language = os.environ.get('LC_ALL') or os.environ.get('LANG', 'en')
     tag = str(language).replace('_', '-').lower()
-    locale = 'zh-Hant' if tag.startswith(('zh-hant', 'zh-tw', 'zh-hk', 'zh-mo')) else 'zh-Hans' if tag.startswith('zh') else 'en'
+    if tag.startswith(('zh-hant', 'zh-tw', 'zh-hk', 'zh-mo')):
+        locale = 'zh-Hant'
+    elif tag.startswith('zh'):
+        locale = 'zh-Hans'
+    else:
+        locale = next((code for code in ('ja', 'ko', 'de', 'fr', 'es') if tag == code or tag.startswith(code + '-')), 'en')
     try:
         with open(get_resource_path('frontend/' + locale + '.json'), encoding='utf-8') as stream:
             messages = json.load(stream)
@@ -135,6 +154,25 @@ def _apply_appearance(value):
 def _t(en, zh):
     bundle = _locale_bundle()
     return bundle['messages'].get(en, zh if bundle['locale'] == 'zh-Hans' else en)
+
+
+def _set_represented_file(window, path):
+    """标题栏文件图标（代理图标）：可拖出文件，⌘点击标题显示路径。"""
+    if not HAS_COCOA or window is None:
+        return
+    def apply():
+        try:
+            from webview.platforms.cocoa import BrowserView
+            browser = BrowserView.instances.get(window.uid)
+            if browser is not None:
+                browser.window.setRepresentedFilename_(path if path and os.path.isfile(path) else '')
+        except Exception:
+            pass
+    try:
+        from PyObjCTools import AppHelper
+        AppHelper.callAfter(apply)
+    except Exception:
+        pass
 
 
 def _is_privacy_sensitive_user_path(path):
@@ -891,6 +929,7 @@ class MarkdownAPI:
         return True
 
     def get_initial_content(self):
+        _set_represented_file(self.window, self.file_path)
         cfg = load_config()
         preferences = self.get_settings()
         page_width = preferences['page_width']
@@ -990,6 +1029,7 @@ class MarkdownAPI:
                 if self.window:
                     name = os.path.basename(self.file_path) if self.file_path else 'Untitled.md'
                     self.window.set_title(_edited_title(name, self.is_dirty))
+                    _set_represented_file(self.window, self.file_path)
             except Exception:
                 log_exception('set dirty title failed')
             return True
@@ -1077,6 +1117,7 @@ class MarkdownAPI:
             self.close_confirmed = False
             if self.window:
                 self.window.set_title('Untitled.md')
+                _set_represented_file(self.window, None)
         except Exception:
             log_exception('reset to untitled failed')
         return True
@@ -1636,7 +1677,8 @@ class MarkdownAPI:
 
     def get_example(self):
         with open(get_resource_path('frontend/welcome.json'), encoding='utf-8') as stream:
-            return json.load(stream)[_locale_bundle()['locale']]
+            examples = json.load(stream)
+            return examples.get(_locale_bundle()['locale']) or examples['en']
 
     def get_release_notes(self):
         import re
@@ -1904,10 +1946,10 @@ class MarkdownAPI:
 
                     alert = NSAlert.alloc().init()
                     alert.setMessageText_(
-                        _t('Do you want to save the changes you made to "%s"?' % base_name,
-                           '是否保存对"%s"所做的更改？' % base_name) if not is_untitled else
-                        _t('Do you want to keep this new document "%s"?' % base_name,
-                           '是否保留这个新文档"%s"？' % base_name))
+                        (_t('Do you want to save the changes you made to "%s"?',
+                           '是否保存对"%s"所做的更改？') % base_name) if not is_untitled else
+                        (_t('Do you want to keep this new document "%s"?',
+                           '是否保留这个新文档"%s"？') % base_name))
                     alert.setInformativeText_(
                         _t("Your changes will be lost if you don't save them.",
                            '若不保存，您的更改将丢失。'))
@@ -1989,8 +2031,8 @@ class MarkdownAPI:
 
                     alert = NSAlert.alloc().init()
                     alert.setMessageText_(
-                        _t('The file "%s" has changed on disk since it was opened or last saved.' % name,
-                           '文件"%s"自打开或上次保存以来已在磁盘上发生变化。' % name))
+                        (_t('The file "%s" has changed on disk since it was opened or last saved.',
+                           '文件"%s"自打开或上次保存以来已在磁盘上发生变化。') % name))
                     alert.setInformativeText_(
                         _t('Save Current overwrites the changed file. Save As keeps it untouched and saves this document to a new path.',
                            '「保存当前」将用当前窗口内容覆盖磁盘文件；「另存为」保持磁盘文件不变，将本文档保存到新路径。'))
@@ -2743,6 +2785,7 @@ def update_main_window(main_window, main_api, file_path, hash=''):
                     from mdpreview_core.csp_bridge import run_body
                     run_body(main_window, 'reloadContent();')
                     main_window.set_title(_edited_title(os.path.basename(file_path), main_api.is_dirty))
+                    _set_represented_file(main_window, file_path)
                     return
                 except Exception:
                     pass
@@ -2909,7 +2952,7 @@ if HAS_COCOA:
                 for i in range(main_menu.numberOfItems()):
                     item = main_menu.itemAtIndex_(i)
                     sub = item.submenu()
-                    if sub and sub.title() in ('View', '显示', '视图'):
+                    if sub and sub.title() in ('View', '显示', '视图', _t('View', '显示')):
                         view_menu = sub
                         break
 
@@ -3003,7 +3046,7 @@ if HAS_COCOA:
                 for i in range(main_menu.numberOfItems()):
                     item = main_menu.itemAtIndex_(i)
                     sub = item.submenu()
-                    if sub and sub.title() in ('File', '文件'):
+                    if sub and sub.title() in ('File', '文件', _t('File', '文件')):
                         file_menu = sub
                         file_menu_index = i
                         break
@@ -3069,6 +3112,13 @@ if HAS_COCOA:
                     print_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Print…", "打印…"), "printDocument:", "p")
                     print_item.setTarget_(_view_menu_handler)
                     file_menu.addItem_(print_item)
+                    share_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Share…", "共享…"), "shareDocument:", "")
+                    share_item.setTarget_(_view_menu_handler)
+                    try:
+                        _set_symbol_icon(share_item, 'square.and.arrow.up')
+                    except Exception:
+                        pass
+                    file_menu.addItem_(share_item)
                     file_menu.addItem_(NSMenuItem.separatorItem())
                     # New File
                     new_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("New", "新建"), "newFile:", "n")
@@ -3087,7 +3137,7 @@ if HAS_COCOA:
                 for i in range(main_menu.numberOfItems()):
                     item = main_menu.itemAtIndex_(i)
                     sub = item.submenu()
-                    if sub and sub.title() in ('Edit', '编辑', '编辑'):
+                    if sub and sub.title() in ('Edit', '编辑', _t('Edit', '编辑')):
                         edit_menu = sub
                         break
 
@@ -3160,6 +3210,9 @@ if HAS_COCOA:
                 cli_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t('Install Command Line Tool…', '安装命令行工具…'), 'installCommandLine:', '')
                 cli_item.setTarget_(_view_menu_handler)
                 main_menu.itemAtIndex_(0).submenu().addItem_(cli_item)
+                default_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t('Set as Default for Markdown Files…', '设为 Markdown 文件的默认打开方式…'), 'setDefaultMarkdownApp:', '')
+                default_item.setTarget_(_view_menu_handler)
+                main_menu.itemAtIndex_(0).submenu().addItem_(default_item)
                 _view_menu_handler._help_menu_setup = True
             with open(get_resource_path('frontend/shortcuts.json'), encoding='utf-8') as stream:
                 shortcuts = {item['action']: item for item in json.load(stream)}
@@ -3174,6 +3227,28 @@ if HAS_COCOA:
                     if item.submenu():
                         apply_shortcuts(item.submenu())
             apply_shortcuts(main_menu)
+            # pywebview 创建的系统标准菜单是英文的：按界面语言重新命名（匹配英文原标题）
+            standard_titles = {
+                'Edit': _t('Edit', '编辑'), 'View': _t('View', '显示'), 'Undo': _t('Undo', '撤销'), 'Redo': _t('Redo', '重做'),
+                'Cut': _t('Cut', '剪切'), 'Copy': _t('Copy', '复制'), 'Paste': _t('Paste', '粘贴'), 'Select All': _t('Select All', '全选'),
+                'AutoFill': _t('AutoFill', '自动填充'), 'Start Dictation…': _t('Start Dictation…', '开始听写…'),
+                'Emoji & Symbols': _t('Emoji & Symbols', '表情与符号'), 'Services': _t('Services', '服务'),
+                'Hide mdPreview': _t('Hide mdPreview', '隐藏 mdPreview'), 'Hide Others': _t('Hide Others', '隐藏其他'),
+                'Show All': _t('Show All', '全部显示'), 'Quit mdPreview': _t('Quit mdPreview', '退出 mdPreview'),
+                'Quit and Keep Windows': _t('Quit and Keep Windows', '退出并保留窗口'), 'About mdPreview': _t('About mdPreview', '关于 mdPreview'),
+            }
+            def localize_standard(menu):
+                for item in menu.itemArray():
+                    title = str(item.title() or '')
+                    if title not in standard_titles and item.submenu():
+                        title = str(item.submenu().title() or '')
+                    if title in standard_titles and standard_titles[title] != title:
+                        item.setTitle_(standard_titles[title])
+                        if item.submenu():
+                            item.submenu().setTitle_(standard_titles[title])
+                    if item.submenu():
+                        localize_standard(item.submenu())
+            localize_standard(main_menu)
         except Exception:
             log_exception('setup menus failed')
 
@@ -3354,6 +3429,36 @@ if HAS_COCOA:
 
         def decreaseWidth_(self, sender):
             _dispatch_js('adjustPageWidth(-40)')
+
+        def shareDocument_(self, sender):
+            try:
+                from AppKit import NSSharingServicePicker
+                from Foundation import NSURL, NSMakeRect
+                from webview.platforms.cocoa import BrowserView
+                ref = _get_target_window()
+                api = _window_apis.get(id(ref)) if ref else None
+                browser = BrowserView.instances.get(ref.uid) if ref else None
+                if api is None or browser is None:
+                    return
+                path = api.file_path
+                if path and os.path.isfile(path) and not api.is_dirty:
+                    items = [NSURL.fileURLWithPath_(path)]
+                else:
+                    text = api.cached_content or ''
+                    if not text.strip():
+                        return
+                    items = [text]
+                picker = NSSharingServicePicker.alloc().initWithItems_(items)
+                view = browser.webview
+                bounds = view.bounds()
+                flipped = bool(view.isFlipped())
+                anchor = NSMakeRect(bounds.size.width - 44, 6 if flipped else bounds.size.height - 6, 1, 1)
+                picker.showRelativeToRect_ofView_preferredEdge_(anchor, view, 3 if flipped else 1)
+            except Exception:
+                log_exception('share failed')
+
+        def setDefaultMarkdownApp_(self, sender):
+            _set_default_markdown_app(announce=True)
 
         def installCommandLine_(self, sender):
             _dispatch_js("Bridge.call('install_cli').then(r=>showStatus(r.success?'CLI: '+r.path+' — PATH: '+r.addToPath:r.error,!r.success))")
@@ -3869,6 +3974,11 @@ def main():
                 _register_quicklook()
             except Exception:
                 pass
+            try:
+                time.sleep(1.2)
+                _offer_default_handler()
+            except Exception:
+                pass
         threading.Thread(target=_post_startup, daemon=True).start()
         if not os.environ.get('MDPREVIEW_DISABLE_UPDATES'):
             _schedule_startup_update_check()
@@ -4202,6 +4312,60 @@ def _manual_check_error():
         alert.runModal()
     except Exception:
         pass
+
+
+def _current_markdown_handler():
+    try:
+        try:
+            from LaunchServices import LSCopyDefaultRoleHandlerForContentType, kLSRolesAll
+        except Exception:
+            from CoreServices import LSCopyDefaultRoleHandlerForContentType, kLSRolesAll
+        return LSCopyDefaultRoleHandlerForContentType('net.daringfireball.markdown', kLSRolesAll)
+    except Exception:
+        return None
+
+
+def _set_default_markdown_app(announce=False):
+    """由用户明确同意后才把 mdPreview 设为 .md 默认应用。"""
+    result = MarkdownAPI().set_as_default_for_md()
+    if announce:
+        ok = bool(result.get('success'))
+        _dispatch_js_to_active("showStatus(%s,%s)" % (json.dumps(_t('mdPreview is now the default for Markdown files.', 'mdPreview 已设为 Markdown 文件的默认打开方式。') if ok else _t('Could not change the default app. Use Finder: Get Info → Open with.', '无法更改默认应用，请在访达中“显示简介 → 打开方式”里设置。')), 'false' if ok else 'true'))
+    return result
+
+
+def _dispatch_js_to_active(code):
+    try:
+        ref = _get_target_window()
+        if ref is not None:
+            _dispatch_js_to(ref, code)
+    except Exception:
+        pass
+
+
+def _offer_default_handler():
+    """首次启动只问一次：要不要用 mdPreview 打开 .md 文件。"""
+    if not HAS_COCOA or os.environ.get('MDPREVIEW_DATA_DIR') or os.environ.get('MDPREVIEW_DISABLE_UPDATES'):
+        return
+    if load_config().get('default_handler_offered'):
+        return
+    update_config({'default_handler_offered': True})
+    if _current_markdown_handler() == 'tahoeliu.mdpreview':
+        return
+    def ask():
+        try:
+            from AppKit import NSAlert, NSAlertFirstButtonReturn
+            alert = NSAlert.alloc().init()
+            alert.setMessageText_(_t('Open Markdown files with mdPreview?', '用 mdPreview 打开 Markdown 文件？'))
+            alert.setInformativeText_(_t('Double-click any .md file to read it here. You can change this any time in Finder (Get Info → Open with), or from the mdPreview menu.', '双击任意 .md 文件就会在这里阅读。你可以随时在访达（显示简介 → 打开方式）或 mdPreview 菜单里更改。'))
+            alert.addButtonWithTitle_(_t('Use mdPreview', '使用 mdPreview'))
+            alert.addButtonWithTitle_(_t('Not Now', '暂不'))
+            if alert.runModal() == NSAlertFirstButtonReturn:
+                _set_default_markdown_app(announce=True)
+        except Exception:
+            log_exception('default handler offer failed')
+    from PyObjCTools import AppHelper
+    AppHelper.callAfter(ask)
 
 
 def _try_set_default_handler():

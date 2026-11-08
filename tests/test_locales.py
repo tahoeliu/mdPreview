@@ -12,6 +12,30 @@ def load(name):
     return json.loads((FRONTEND / f'{name}.json').read_text(encoding='utf-8'))
 
 
+class MoreLanguageTests(unittest.TestCase):
+    def test_every_language_covers_every_key_with_matching_placeholders(self):
+        import re
+        english = load('en')
+        pattern = r'\{\w+\}|%s'
+        for name in ('ja', 'ko', 'de', 'fr', 'es'):
+            data = load(name)
+            self.assertEqual(set(english), set(data), name)
+            for key, value in data.items():
+                self.assertTrue(isinstance(value, str) and value.strip(), f'{name}: empty value for {key!r}')
+                self.assertEqual(sorted(re.findall(pattern, value)), sorted(re.findall(pattern, key)), f'{name}: placeholders {key!r}')
+
+    def test_example_documents_exist_for_every_language(self):
+        examples = json.loads((FRONTEND / 'welcome.json').read_text(encoding='utf-8'))
+        for name in ('en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 'fr', 'es'):
+            self.assertIn(name, examples)
+            self.assertIn(f'lang: {name}', examples[name])
+
+    def test_languages_are_selectable_and_normalised(self):
+        from mdpreview_core.settings import CHOICES
+        for name in ('ja', 'ko', 'de', 'fr', 'es'):
+            self.assertIn(name, CHOICES['language'])
+
+
 class LocaleTests(unittest.TestCase):
     def test_same_keys_and_no_empty_values(self):
         english, hans, hant = load('en'), load('zh-Hans'), load('zh-Hant')
