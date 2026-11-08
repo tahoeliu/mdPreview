@@ -943,7 +943,7 @@ var {
     }
     updateEmptyState();
     if (window.SourceToolbar) SourceToolbar.sync();
-    if (_flashModeNext) { _flashModeNext = false; showModeIndicator(); }
+    _flashModeNext = false;   // the mode is now shown by the top bar itself (Source / Preview button), not a floating label
   }
 
   let _modeIndicatorTimer = null;

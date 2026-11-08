@@ -363,5 +363,8 @@
   "Table size": "표 크기",
   "Export…": "내보내기…",
   "link text": "링크 텍스트",
-  "Decrease indent": "들여쓰기 줄이기"
+  "Decrease indent": "들여쓰기 줄이기",
+  "Source": "소스",
+  "Switch to Source (⌘E)": "소스로 전환 (⌘E)",
+  "Switch to Preview (⌘E)": "미리보기로 전환 (⌘E)"
 }

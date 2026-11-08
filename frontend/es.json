@@ -363,5 +363,8 @@
   "Table size": "Tamaño de la tabla",
   "Export…": "Exportar…",
   "link text": "texto del enlace",
-  "Decrease indent": "Reducir sangría"
+  "Decrease indent": "Reducir sangría",
+  "Source": "Código",
+  "Switch to Source (⌘E)": "Cambiar a código (⌘E)",
+  "Switch to Preview (⌘E)": "Cambiar a vista previa (⌘E)"
 }

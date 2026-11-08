@@ -363,5 +363,8 @@
   "Table size": "表のサイズ",
   "Export…": "書き出し…",
   "link text": "リンクテキスト",
-  "Decrease indent": "インデントを減らす"
+  "Decrease indent": "インデントを減らす",
+  "Source": "ソース",
+  "Switch to Source (⌘E)": "ソースに切り替え (⌘E)",
+  "Switch to Preview (⌘E)": "プレビューに切り替え (⌘E)"
 }

@@ -192,7 +192,7 @@ window.FormatToolbar = (() => {
       strike: '<path d="M16.8 7.4C16.3 5.6 14.6 4.5 12.2 4.5 9.6 4.5 7.8 5.8 7.8 7.7c0 1.5 1 2.4 2.7 3M13.8 13.2c1.8.6 2.8 1.6 2.8 3.2 0 2-2 3.3-4.6 3.3-2.5 0-4.3-1.1-4.9-3M3.5 12h17"/>',
       code: '<path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.6 6.5l-3.2 11"/>',
       ul: '<path d="M9.5 7h10.5M9.5 12h10.5M9.5 17h10.5"/><circle cx="5" cy="7" r=".9" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r=".9" fill="currentColor" stroke="none"/><circle cx="5" cy="17" r=".9" fill="currentColor" stroke="none"/>',
-      ol: '<path d="M10 7h10M10 12h10M10 17h10M4.5 5.6 6 5v4M4.4 13.8c0-.8.6-1.2 1.3-1.2s1.2.5 1.2 1.1c0 .5-.3.8-.7 1.1L4.4 16.3H7M4.4 18.3h2.4l-1.1 1.1c.7 0 1.3.4 1.3 1.1s-.6 1.1-1.4 1.1c-.6 0-1-.2-1.3-.6"/>',
+      ol: '<path d="M10.5 6h9.5M10.5 12h9.5M10.5 18h9.5M3.9 4.9 5.5 3.7v5.4M3.7 10.9c.2-1 1-1.6 1.9-1.6s1.7.6 1.7 1.5c0 .8-.6 1.3-1.5 2.1L3.7 15.2h3.7M3.8 16.6c.3-.8.9-1.2 1.8-1.2s1.6.5 1.6 1.3c0 .8-.7 1.2-1.5 1.2.9 0 1.7.4 1.7 1.3 0 .9-.8 1.5-1.8 1.5s-1.6-.5-1.9-1.3"/>',
       task: '<path d="M18.5 12.5v4.8a2.2 2.2 0 0 1-2.2 2.2H6.7a2.2 2.2 0 0 1-2.2-2.2V7.7a2.2 2.2 0 0 1 2.2-2.2h8.8"/><path d="m8.5 11.5 3 3L20 6"/>',
       outdent: '<path d="M20 5H9M20 12h-7M20 19H9M7 9.5 3.5 12 7 14.5"/>',
       indent: '<path d="M20 5H9M20 12h-7M20 19H9M3.5 9.5 7 12l-3.5 2.5"/>',
@@ -341,6 +341,9 @@ window.FormatToolbar = (() => {
       group.append(Object.assign(document.createElement('span'), { className: 'edit-sep' }));
       for (const item of tableButtons) addButton(group, item);
       bar.append(group);
+      const mode = document.createElement('button'); mode.type = 'button'; mode.className = 'edit-mode'; mode.dataset.kind = 'mode'; mode.textContent = t('Source', '源码'); mode.dataset.tip = t('Switch to Source (⌘E)', '切换到源码 (⌘E)'); mode.setAttribute('aria-label', mode.dataset.tip);
+      mode.addEventListener('mousedown', e => e.preventDefault()); mode.addEventListener('click', () => { window.toggleView && toggleView(); });
+      bar.append(mode);
       const done = document.createElement('button'); done.type = 'button'; done.className = 'edit-done'; done.textContent = t('Done', '完成'); done.dataset.kind = 'done';
       done.addEventListener('mousedown', e => e.preventDefault());
       done.addEventListener('click', () => { leave(true); });

@@ -31,9 +31,10 @@ window.applyChromeColor = function () {
   } catch (e) {}
 };
 try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => setTimeout(applyChromeColor, 120)); } catch (e) {}
-const syncWindowActive = () => document.body.classList.toggle('win-inactive', !document.hasFocus());
-window.addEventListener('focus', () => { syncWindowActive(); applyChromeColor(); });
-window.addEventListener('blur', syncWindowActive);
-document.addEventListener('visibilitychange', syncWindowActive);
-document.addEventListener('DOMContentLoaded', syncWindowActive);
+const resample = () => { setTimeout(applyChromeColor, 120); setTimeout(applyChromeColor, 500); };
+window.addEventListener('focus', resample);
+window.addEventListener('blur', resample);
+document.addEventListener('visibilitychange', resample);
+// the page does not always get a blur event when another app takes focus, so keep the colour in step with the real title bar
+setInterval(() => { if (!document.hidden) applyChromeColor(); }, 1200);
 document.addEventListener('DOMContentLoaded', () => { setTimeout(applyChromeColor, 300); setTimeout(applyChromeColor, 1500); });

@@ -2101,17 +2101,37 @@ class MarkdownAPI:
             return {'success': False, 'error': str(e)}
 
     def get_chrome_color(self):
-        """The system's window / title bar colour (e.g. '#ececec'), so the top bar can blend with the title bar."""
+        """The colour the window's title bar is drawn with right now (active or not), sampled from the real title bar,
+        so the top bar can match it exactly. Falls back to the system window colour."""
         if not HAS_COCOA:
             return {'color': None}
+        def hexed(c):
+            return '#%02x%02x%02x' % tuple(int(round(v * 255)) for v in (c.redComponent(), c.greenComponent(), c.blueComponent()))
+        try:
+            from AppKit import NSColorSpace, NSBitmapImageRep
+            from webview.platforms.cocoa import BrowserView
+            ref = _get_target_window()
+            browser = BrowserView.instances.get(ref.uid) if ref else None
+            if browser is not None:
+                frame = browser.window.contentView().superview()
+                for view in frame.subviews():
+                    if view.className() == 'NSTitlebarContainerView':
+                        bounds = view.bounds()
+                        rep = view.bitmapImageRepForCachingDisplayInRect_(bounds)
+                        view.cacheDisplayInRect_toBitmapImageRep_(bounds, rep)
+                        x = int(rep.pixelsWide() * 0.8)
+                        c = rep.colorAtX_y_(x, 3).colorUsingColorSpace_(NSColorSpace.sRGBColorSpace())
+                        if c is not None and c.alphaComponent() > 0.9:
+                            return {'color': hexed(c)}
+        except Exception:
+            pass
         try:
             from AppKit import NSApplication, NSColor, NSColorSpace
             holder = {}
             def grab():
                 holder['c'] = NSColor.windowBackgroundColor().colorUsingColorSpace_(NSColorSpace.sRGBColorSpace())
             NSApplication.sharedApplication().effectiveAppearance().performAsCurrentDrawingAppearance_(grab)
-            c = holder['c']
-            return {'color': '#%02x%02x%02x' % tuple(int(round(v * 255)) for v in (c.redComponent(), c.greenComponent(), c.blueComponent()))}
+            return {'color': hexed(holder['c'])}
         except Exception:
             return {'color': None}
 
