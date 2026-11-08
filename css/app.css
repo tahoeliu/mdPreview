@@ -93,7 +93,7 @@ mark.find-highlight.current { background: #ff8c00; color: #fff; }
 .toc-toggle:hover { color: #555; background: rgba(0,0,0,0.05); }
 .toc-toggle-icon { width: 9px; height: 9px; border-top: 1.8px solid currentColor; border-left: 1.8px solid currentColor; transform: rotate(-45deg); transition: transform 0.2s ease; }
 .toc-toggle.collapsed .toc-toggle-icon { transform: rotate(135deg); }
-.toc-sidebar a { display: block; color: #636366; text-decoration: none; padding-top: 3px; padding-bottom: 3px; padding-right: 6px; border-radius: 4px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow-wrap: anywhere; }
+.toc-sidebar a { display: block; color: #636366; text-decoration: none; padding-top: 3px; padding-bottom: 3px; padding-right: 6px; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .toc-sidebar a:hover { color: #444; background: rgba(0,0,0,0.04); }
 .toc-sidebar a.toc-active { color: #0062cc; font-weight: 600; background: rgba(0,122,255,0.06); }
 .toc-sidebar .toc-level-1 { padding-left: 0; font-weight: 600; }

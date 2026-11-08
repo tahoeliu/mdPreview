@@ -114,7 +114,7 @@ window.DocumentOutline = {
       toc.innerHTML = '<ul>' + headings.map((h, index) => {
         const level = parseInt(h.tagName.slice(1), 10);
         const relativeIndent = Math.max(0, visibleHeadingLevels.indexOf(level)) * 12;
-        return `<li><a class="toc-level-${level}" style="padding-left: ${relativeIndent}px;" href="#${encodeURIComponent(h.id)}" data-target="${escHtml(h.id)}">${escHtml(h.textContent)}</a></li>`;
+        return `<li><a class="toc-level-${level}" style="padding-left: ${relativeIndent}px;" href="#${encodeURIComponent(h.id)}" data-target="${escHtml(h.id)}" title="${escHtml(h.textContent)}">${escHtml(h.textContent)}</a></li>`;
       }).join('') + '</ul>';
       applyTocVisibility();
       setupScrollSpy(headings);
