@@ -27,7 +27,10 @@ window.renderFragment = async function (markdown) {
 window.applyChromeColor = function () {
   try {
     if (!(window.Bridge && Bridge.ready())) return;
-    Bridge.call('get_chrome_color').then(r => { if (r && r.color) document.documentElement.style.setProperty('--chrome-bg', r.color); }).catch(() => {});
+    Bridge.call('get_chrome_color').then(r => {
+      const h = r && r.overlay ? r.height : 0;
+      document.documentElement.style.setProperty('--titlebar-h', h + 'px');
+    }).catch(() => {});
   } catch (e) {}
 };
 try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => setTimeout(applyChromeColor, 120)); } catch (e) {}

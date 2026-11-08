@@ -194,7 +194,7 @@ body:not(.has-toc) .page { margin: 0 auto; max-width: var(--page-width, 720px); 
 .toc-sidebar li { position: relative; }
 
 /* ── Selection toolbar for the rendered view ── */
-.edit-bar { position: fixed; top: 0; left: 0; right: 0; height: 42px; z-index: 950; display: flex; align-items: center; gap: 2px; padding: 0 12px; overflow-x: auto; overflow-y: hidden; background: var(--chrome-bg, var(--bg)); color: #3c3c43; border-bottom: 1px solid rgba(0,0,0,.12); user-select: none; -webkit-user-select: none; scrollbar-width: none; }
+.edit-bar { position: fixed; top: 0; left: 0; right: 0; height: 42px; z-index: 950; display: flex; align-items: center; gap: 2px; padding: 0 12px; overflow-x: auto; overflow-y: hidden; background: var(--bg); color: #3c3c43; border-bottom: 1px solid rgba(0,0,0,.12); user-select: none; -webkit-user-select: none; scrollbar-width: none; }
 .edit-bar::-webkit-scrollbar { display: none; }
 .edit-bar > :first-child { margin-left: auto; } .edit-bar > :last-child { margin-right: auto; }
 .edit-bar[hidden], .edit-table-group[hidden] { display: none; }
@@ -215,7 +215,7 @@ body:not(.has-toc) .page { margin: 0 auto; max-width: var(--page-width, 720px); 
 .edit-menu button { display: flex; align-items: center; gap: 10px; width: 100%; height: 32px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; text-align: left; cursor: pointer; }
 .edit-menu button:hover { background: rgba(0,98,204,.12); }
 body:not(.is-editing):not(.edit-pinned) #content { caret-color: transparent; }
-@media (prefers-color-scheme: dark) { .edit-bar { background: var(--chrome-bg, var(--bg)); color: #e5e5ea; border-color: rgba(255,255,255,.14); } .edit-bar button:hover:not(:disabled) { background: rgba(255,255,255,.1); } .edit-bar button.on { background: rgba(108,178,255,.2); color: #6cb2ff; } .edit-bar .edit-done { color: #6cb2ff; } .edit-bar .edit-menu-btn[data-kind="insert"] { color: #98989d; } .edit-menu { background: #2c2c2e; color: #f0f0f0; border-color: rgba(255,255,255,.14); } .edit-menu button:hover { background: rgba(108,178,255,.2); } }
+@media (prefers-color-scheme: dark) { .edit-bar { background: var(--bg); color: #e5e5ea; border-color: rgba(255,255,255,.14); } .edit-bar button:hover:not(:disabled) { background: rgba(255,255,255,.1); } .edit-bar button.on { background: rgba(108,178,255,.2); color: #6cb2ff; } .edit-bar .edit-done { color: #6cb2ff; } .edit-bar .edit-menu-btn[data-kind="insert"] { color: #98989d; } .edit-menu { background: #2c2c2e; color: #f0f0f0; border-color: rgba(255,255,255,.14); } .edit-menu button:hover { background: rgba(108,178,255,.2); } }
 @media print { .edit-bar { display: none !important; } }
 
 .scroll-wrap:focus, .goto-box ul:focus { outline: none; }
@@ -360,3 +360,12 @@ svg.edit-icon { stroke-width: 1.15px; }
 .modal-actions { flex-wrap: wrap; }
 .modal-close:focus-visible, .modal-button:focus-visible { outline-offset: 1px; }
 .edit-bar .edit-mode { margin-left: 6px; padding: 0 10px; font-size: 13px; color: inherit; }
+
+/* 标题栏透明后页面延伸到标题栏下面：顶部元素整体下移一个标题栏高度（--titlebar-h 由原生窗口告知，默认 0） */
+.scroll-wrap { top: var(--titlebar-h, 0px); }
+.toc-sidebar { top: var(--titlebar-h, 0px); }
+.toc-toggle { top: calc(16px + var(--titlebar-h, 0px)); }
+body.has-edit-bar .toc-toggle { top: calc(52px + var(--titlebar-h, 0px)); }
+.edit-bar { top: var(--titlebar-h, 0px); }
+.find-bar { top: var(--titlebar-h, 0px); }
+.read-progress { top: var(--titlebar-h, 0px); }

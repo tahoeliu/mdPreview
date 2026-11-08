@@ -156,6 +156,35 @@ def _t(en, zh):
     return bundle['messages'].get(en, zh if bundle['locale'] == 'zh-Hans' else en)
 
 
+_TITLEBAR_STATE = {'overlay': False, 'height': 0}
+
+
+def _blend_titlebar(window):
+    """Main thread only. Lets the page extend under a transparent title bar: the title bar takes the page's own colour
+    (white / dark), with no grey strip and no hairline, in both the active and the inactive state."""
+    try:
+        from webview.platforms.cocoa import BrowserView
+        browser = BrowserView.instances.get(window.uid)
+        if browser is None:
+            return
+        win = browser.window
+        if not (win.styleMask() & (1 << 15)):
+            win.setStyleMask_(win.styleMask() | (1 << 15))
+        win.setTitlebarAppearsTransparent_(True)
+        for view in win.contentView().superview().subviews():
+            if view.className() == 'NSTitlebarContainerView':
+                layer = view.layer()
+                if layer is not None:
+                    layer.setBackgroundColor_(None)
+                for sub in view.subviews():
+                    if sub.className() == '_NSTitlebarDecorationView':
+                        sub.setHidden_(True)
+        _TITLEBAR_STATE['overlay'] = True
+        _TITLEBAR_STATE['height'] = round(max(0.0, win.frame().size.height - win.contentLayoutRect().size.height))
+    except Exception:
+        log_exception('title bar blend failed')
+
+
 def _set_represented_file(window, path):
     """标题栏文件图标（代理图标）：可拖出文件，⌘点击标题显示路径。"""
     if not HAS_COCOA or window is None:
@@ -166,10 +195,7 @@ def _set_represented_file(window, path):
             browser = BrowserView.instances.get(window.uid)
             if browser is not None:
                 browser.window.setRepresentedFilename_(path if path and os.path.isfile(path) else '')
-                try:
-                    browser.window.setTitlebarSeparatorStyle_(1)   # no hairline between the title bar and the top bar / page
-                except Exception:
-                    pass
+                _blend_titlebar(window)
         except Exception:
             pass
     try:
@@ -2101,39 +2127,18 @@ class MarkdownAPI:
             return {'success': False, 'error': str(e)}
 
     def get_chrome_color(self):
-        """The colour the window's title bar is drawn with right now (active or not), sampled from the real title bar,
-        so the top bar can match it exactly. Falls back to the system window colour."""
+        """Tells the page how tall the (transparent) title bar is, so its top bar and outline start below the traffic lights.
+        AppKit work happens on the main thread; this call only schedules it and returns the last known height."""
         if not HAS_COCOA:
-            return {'color': None}
-        def hexed(c):
-            return '#%02x%02x%02x' % tuple(int(round(v * 255)) for v in (c.redComponent(), c.greenComponent(), c.blueComponent()))
+            return {'overlay': False, 'height': 0}
         try:
-            from AppKit import NSColorSpace, NSBitmapImageRep
-            from webview.platforms.cocoa import BrowserView
+            from PyObjCTools import AppHelper
             ref = _get_target_window()
-            browser = BrowserView.instances.get(ref.uid) if ref else None
-            if browser is not None:
-                frame = browser.window.contentView().superview()
-                for view in frame.subviews():
-                    if view.className() == 'NSTitlebarContainerView':
-                        bounds = view.bounds()
-                        rep = view.bitmapImageRepForCachingDisplayInRect_(bounds)
-                        view.cacheDisplayInRect_toBitmapImageRep_(bounds, rep)
-                        x = int(rep.pixelsWide() * 0.8)
-                        c = rep.colorAtX_y_(x, 3).colorUsingColorSpace_(NSColorSpace.sRGBColorSpace())
-                        if c is not None and c.alphaComponent() > 0.9:
-                            return {'color': hexed(c)}
+            if ref is not None:
+                AppHelper.callAfter(_blend_titlebar, ref)
         except Exception:
             pass
-        try:
-            from AppKit import NSApplication, NSColor, NSColorSpace
-            holder = {}
-            def grab():
-                holder['c'] = NSColor.windowBackgroundColor().colorUsingColorSpace_(NSColorSpace.sRGBColorSpace())
-            NSApplication.sharedApplication().effectiveAppearance().performAsCurrentDrawingAppearance_(grab)
-            return {'color': hexed(holder['c'])}
-        except Exception:
-            return {'color': None}
+        return {'overlay': bool(_TITLEBAR_STATE['overlay']), 'height': _TITLEBAR_STATE['height']}
 
     def share_document(self, x=None, y=None):
         """Open the Share sheet next to the footer button that asked for it."""

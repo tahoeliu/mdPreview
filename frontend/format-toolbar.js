@@ -341,9 +341,6 @@ window.FormatToolbar = (() => {
       group.append(Object.assign(document.createElement('span'), { className: 'edit-sep' }));
       for (const item of tableButtons) addButton(group, item);
       bar.append(group);
-      const mode = document.createElement('button'); mode.type = 'button'; mode.className = 'edit-mode'; mode.dataset.kind = 'mode'; mode.textContent = t('Source', '源码'); mode.dataset.tip = t('Switch to Source (⌘E)', '切换到源码 (⌘E)'); mode.setAttribute('aria-label', mode.dataset.tip);
-      mode.addEventListener('mousedown', e => e.preventDefault()); mode.addEventListener('click', () => { window.toggleView && toggleView(); });
-      bar.append(mode);
       const done = document.createElement('button'); done.type = 'button'; done.className = 'edit-done'; done.textContent = t('Done', '完成'); done.dataset.kind = 'done';
       done.addEventListener('mousedown', e => e.preventDefault());
       done.addEventListener('click', () => { leave(true); });

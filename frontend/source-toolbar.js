@@ -91,9 +91,6 @@ window.SourceToolbar = (() => {
       if (item === '|') { bar.append(Object.assign(document.createElement('span'), { className: 'edit-sep' })); continue; }
       kit.addButton(bar, item);
     }
-    const mode = document.createElement('button'); mode.type = 'button'; mode.className = 'edit-mode'; mode.dataset.kind = 'mode'; mode.textContent = t('Preview', '预览'); mode.dataset.tip = t('Switch to Preview (⌘E)', '切换到预览 (⌘E)'); mode.setAttribute('aria-label', mode.dataset.tip);
-    mode.addEventListener('click', () => { window.toggleView && toggleView(); });
-    bar.append(mode);
     kit.fitIcons(bar);
     // buttons take no focus so the caret and selection stay in the text
     bar.addEventListener('mousedown', e => { if (!e.target.closest('input')) e.preventDefault(); });
