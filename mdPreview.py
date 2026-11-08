@@ -2943,7 +2943,14 @@ if HAS_COCOA:
                     outline_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 19))  # Cmd+Option+O
                     _set_symbol_icon(outline_item, 'list.bullet.rectangle')
                     view_menu.insertItem_atIndex_(outline_item, first_section_end + 1)
-                    view_menu.insertItem_atIndex_(NSMenuItem.separatorItem(), first_section_end + 2)
+                    bar_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Always Show Formatting Bar", "始终显示格式工具条"), "toggleFormatBar:", "t")
+                    bar_item.setKeyEquivalentModifierMask_((1 << 20) | (1 << 19))  # Cmd+Option+T
+                    try:
+                        bar_item.setState_(1 if __import__('mdpreview_core.settings', fromlist=['settings']).settings(load_config()).get('format_bar') else 0)
+                    except Exception:
+                        pass
+                    view_menu.insertItem_atIndex_(bar_item, first_section_end + 2)
+                    view_menu.insertItem_atIndex_(NSMenuItem.separatorItem(), first_section_end + 3)
 
                     # Section 3: Full Screen.
                     fullscreen_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Enter Full Screen", "进入全屏幕"), "toggleFullScreen:", "f")
@@ -3384,6 +3391,13 @@ if HAS_COCOA:
         def toggleOutline_(self, sender):
             _dispatch_js('toggleToc()')
 
+        def toggleFormatBar_(self, sender):
+            try:
+                sender.setState_(0 if sender.state() else 1)
+            except Exception:
+                pass
+            _dispatch_js('toggleFormatBar()')
+
         def showProperties_(self, sender):
             _show_native_properties_panel()
 
@@ -3734,6 +3748,24 @@ def _start_log(stage):
         pass
 
 
+def _register_quicklook():
+    """Finder 空格预览：把应用内置的预览扩展登记并启用（每个版本/位置只做一次）。"""
+    if os.environ.get('MDPREVIEW_DATA_DIR') or not getattr(sys, 'frozen', False):
+        return
+    appex = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(sys.executable))), 'PlugIns', 'MDPreviewQuickLook.appex')
+    if not os.path.isdir(appex):
+        return
+    stamp = _get_current_version() + '|' + appex
+    config = load_config()
+    if config.get('quicklook_registered') == stamp:
+        return
+    import subprocess
+    for args in (['/usr/bin/pluginkit', '-a', appex], ['/usr/bin/pluginkit', '-e', 'use', '-i', 'tahoeliu.mdpreview.quicklook']):
+        subprocess.run(args, capture_output=True, timeout=20, check=False)
+    config['quicklook_registered'] = stamp
+    save_config(config)
+
+
 def main():
     global _initial_file_handled
     global _main_window_ref, _main_api_ref, _active_window_ref
@@ -3834,8 +3866,7 @@ def main():
             except Exception:
                 pass
             try:
-                if not os.environ.get('MDPREVIEW_DATA_DIR'):
-                    pass  # Default-file associations are changed only by explicit user action.
+                _register_quicklook()
             except Exception:
                 pass
         threading.Thread(target=_post_startup, daemon=True).start()

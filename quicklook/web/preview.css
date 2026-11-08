@@ -1,5 +1,5 @@
 /* Quick Look 预览页：复用 tokens.css/content.css 的文档排版，只补充页面外壳。 */
-html, body { margin: 0; background: var(--bg, #fff); }
+html, body { margin: 0; background: var(--bg, #fff); font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", Arial, sans-serif); -webkit-font-smoothing: antialiased; }
 .page { max-width: 760px; margin: 0 auto; padding: 28px 28px 64px; }
 .markdown { min-height: 0; }
 .markdown img { cursor: default; }

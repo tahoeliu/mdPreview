@@ -3,7 +3,7 @@
   :root { --content-font-size: var(--print-font-size, 10.75pt) !important; --content-line-height: 1.6 !important; }
   html, body { background: #fff !important; color: #000 !important; height: auto !important; overflow: visible !important; }
   .toc-sidebar, .toc-toggle, .find-bar, .status, .modal-overlay, .image-lightbox, .mode-indicator,
-  .edit-hint-bubble, .update-bubble, .welcome-overlay, .code-lang-label, .code-copy-btn, .remote-image-bar, .read-progress, .read-hud, .read-end, .format-toolbar { display: none !important; }
+  .edit-hint-bubble, .update-bubble, .welcome-overlay, .code-lang-label, .code-copy-btn, .remote-image-bar, .read-progress, .read-hud, .read-end, .edit-bar, .fold-layer, .fold-more { display: none !important; }
   .scroll-wrap { position: static !important; overflow: visible !important; }
   .page { max-width: none !important; width: auto !important; margin: 0 !important; padding: 0 !important; }
   .markdown { font-size: var(--content-font-size) !important; line-height: var(--content-line-height) !important; min-height: 0 !important; color: #000 !important; orphans: 3; widows: 3; }
@@ -27,3 +27,4 @@
   .print-show-urls .markdown a[href^="http"]::after { content: " (" attr(href) ")"; font-size: .85em; color: #555; word-break: break-all; }
   .print-hide-frontmatter .markdown .frontmatter { display: none !important; }
 }
+@media print { .fold-layer, .fold-more { display: none !important; } }

@@ -23,6 +23,23 @@ window.DocumentOutline = {
       return state.tocHasContent && !isTocAutoHideWidth();
     }
 
+    // 目录宽度随标题长度与窗口宽度自适应：最长标题决定理想宽度，夹在 188–300px 且不超过窗口的 28%。
+    let tocMeasure = null;
+    function computeTocWidth(entries) {
+      const base = deps.TOC_WIDTH || 200;
+      if (!entries || !entries.length || /jsdom/i.test(navigator.userAgent)) return base;
+      try {
+        tocMeasure = tocMeasure || document.createElement('canvas').getContext('2d');
+        const style = getComputedStyle(document.getElementById('tocSidebar'));
+        tocMeasure.font = '600 ' + style.fontSize + ' ' + style.fontFamily;
+        let widest = 0;
+        for (const { text, indent } of entries) widest = Math.max(widest, tocMeasure.measureText(text).width + indent);
+        const ideal = Math.ceil(widest + 16 + 12);
+        return Math.round(Math.max(188, Math.min(ideal, 300, window.innerWidth * 0.28)));
+      } catch (e) { return base; }
+    }
+    function tocWidthNow() { return computeTocWidth(state.tocEntries); }
+
     function updateTocAwarePageLayout() {
       const page = document.getElementById('page');
       if (!page) return;
@@ -33,18 +50,20 @@ window.DocumentOutline = {
         return;
       }
 
+      const tw = tocWidthNow();
       const windowWidth = window.innerWidth;
+      document.getElementById('tocSidebar').style.width = tw + 'px';
       const pageWidth = getPageWidth();
-      const compressedWidth = Math.max(0, windowWidth - deps.TOC_WIDTH);
+      const compressedWidth = Math.max(0, windowWidth - tw);
       let targetWidth = Math.min(pageWidth, compressedWidth);
-      let targetLeft = deps.TOC_WIDTH;
+      let targetLeft = tw;
 
-      if (windowWidth > deps.TOC_WIDTH + pageWidth) {
+      if (windowWidth > tw + pageWidth) {
         targetWidth = pageWidth;
-        const rightPaneCenterMaxWidth = Math.max(deps.TOC_RIGHT_PANE_CENTER_MAX_WIDTH, deps.TOC_WIDTH * 2 + pageWidth);
-        const rightPaneCenteredLeft = deps.TOC_WIDTH + (Math.min(windowWidth, rightPaneCenterMaxWidth) - deps.TOC_WIDTH - pageWidth) / 2;
+        const rightPaneCenterMaxWidth = Math.max(deps.TOC_RIGHT_PANE_CENTER_MAX_WIDTH, tw * 2 + pageWidth);
+        const rightPaneCenteredLeft = tw + (Math.min(windowWidth, rightPaneCenterMaxWidth) - tw - pageWidth) / 2;
         const fullWindowCenteredLeft = (windowWidth - pageWidth) / 2;
-        targetLeft = windowWidth <= rightPaneCenterMaxWidth + deps.TOC_WIDTH
+        targetLeft = windowWidth <= rightPaneCenterMaxWidth + tw
           ? rightPaneCenteredLeft
           : fullWindowCenteredLeft;
       }
@@ -91,11 +110,11 @@ window.DocumentOutline = {
         .sort((a, b) => a - b);
       state.tocHasContent = headings.length >= 2;
       if (toggle) toggle.style.display = state.tocHasContent ? '' : 'none';
-      const minutes = window.ReadingProgress && ReadingProgress.sectionMinutes ? ReadingProgress.sectionMinutes(headings) : [];
+      state.tocEntries = headings.map(h => ({ text: h.textContent.trim(), indent: Math.max(0, visibleHeadingLevels.indexOf(parseInt(h.tagName.slice(1), 10))) * 12 }));
       toc.innerHTML = '<ul>' + headings.map((h, index) => {
         const level = parseInt(h.tagName.slice(1), 10);
         const relativeIndent = Math.max(0, visibleHeadingLevels.indexOf(level)) * 12;
-        return `<li><a class="toc-level-${level}" style="padding-left: ${relativeIndent}px;" href="#${encodeURIComponent(h.id)}" data-target="${escHtml(h.id)}">${escHtml(h.textContent)}</a>${level <= 2 && minutes[index] >= 1 ? `<span class="toc-min" aria-hidden="true">${minutes[index]}′</span>` : ''}</li>`;
+        return `<li><a class="toc-level-${level}" style="padding-left: ${relativeIndent}px;" href="#${encodeURIComponent(h.id)}" data-target="${escHtml(h.id)}">${escHtml(h.textContent)}</a></li>`;
       }).join('') + '</ul>';
       applyTocVisibility();
       setupScrollSpy(headings);
@@ -219,6 +238,7 @@ window.DocumentOutline = {
       // of relying on the scroll-spy to observe where the scroll landed, and
       // scroll with the same measured math used elsewhere (a plain
       // scrollIntoView leaves the final geometry up to the engine).
+      if (window.Folding) Folding.reveal(target);
       markExplicitTocTarget(id);
       scrollToTocTarget(id);
       // Reflect the jump in the URL; harmless if the engine refuses on file://.

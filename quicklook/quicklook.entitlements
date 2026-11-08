@@ -3,5 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>com.apple.security.app-sandbox</key><true/>
+	<!-- WKWebView's WebContent process cannot start in a sandbox without this. The preview page itself forbids all network access through its Content-Security-Policy. -->
+	<key>com.apple.security.network.client</key><true/>
 </dict>
 </plist>

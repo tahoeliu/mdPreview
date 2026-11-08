@@ -150,6 +150,7 @@ window.DocumentFind = {
       } catch (e) {
         return;
       }
+      if (window.Folding) Folding.reveal(mark);
       const rect = mark.getBoundingClientRect();
       const wrap = document.querySelector('.scroll-wrap');
       const wrapRect = wrap.getBoundingClientRect();

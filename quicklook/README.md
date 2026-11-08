@@ -1,4 +1,4 @@
-# Finder spacebar preview (experimental, not in official builds)
+# Finder spacebar preview
 
 A Quick Look *preview extension* that renders `.md` files with the same pipeline as the app (marked + DOMPurify + KaTeX), offline and sandboxed.
 
@@ -8,9 +8,9 @@ A Quick Look *preview extension* that renders `.md` files with the same pipeline
 |---|---|
 | Preview page (`web/`) | **Tested** in Chromium and WebKit: rendering, math, front matter, 2 MB files, dark mode, remote images blocked, script/iframe/`javascript:` injection ignored, CSP blocks network (`tests/e2e/quicklook.spec.js`, runs in CI) |
 | Extension compiles, signs (ad-hoc, sandboxed, no network entitlement), embeds, registers with `pluginkit` | **Verified** on macOS 26.5 / arm64 |
-| macOS actually launching it from Finder | **Not verified.** Our automated attempt never saw the system start the extension. New third-party Quick Look extensions generally also have to be enabled by the user (System Settings > General > Login Items & Extensions > Quick Look), which cannot be scripted or observed in CI |
+| macOS launching it from Finder | **Verified** on macOS 26.5: with the app in /Applications, `pluginkit -a` + `pluginkit -e use`, Finder's preview pane rendered a `.md` file through the extension and the extension recorded `ok` in its container. A sandboxed WKWebView needs the `network.client` entitlement to start its web process (the page itself has a CSP that forbids all network). Other macOS versions are not verified |
 
-Because of that last row the extension is **not built into official releases** and the README does not advertise it. Nothing here runs unless you build it.
+The extension is now built into every release (`build.sh` calls `quicklook/build.sh`) and the app registers and enables it with `pluginkit` on first launch (`scripts/get.sh` does the same). Whether macOS then shows it in Finder depends on the system's extension switch; see the verification notes in the changelog and RELEASE.md.
 
 ## Try it yourself
 

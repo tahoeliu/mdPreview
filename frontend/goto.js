@@ -46,6 +46,7 @@ window.GoToHeading = (() => {
     function go(item) {
       close();
       const wrap = document.querySelector('.scroll-wrap');
+      if (window.Folding) Folding.reveal(item.el);
       if (wrap) wrap.scrollTo({ top: Math.max(0, item.el.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - 20), behavior: 'auto' });
       else item.el.scrollIntoView({ block: 'start' });
     }

@@ -7,6 +7,7 @@
  {"action":"closeWindow:","en":"Close","zh":"关闭","key":"w","modifiers":["command"]},
  {"action":"toggleView:","en":"Toggle Preview / Source","zh":"切换预览 / 源码","key":"e","modifiers":["command"]},
  {"action":"toggleOutline:","en":"Show/Hide Outline","zh":"显示/隐藏大纲","key":"o","modifiers":["command","option"]},
+ {"action":"toggleFormatBar:","en":"Always Show Formatting Bar","zh":"始终显示格式工具条","key":"t","modifiers":["command","option"]},
  {"action":"toggleFullScreen:","en":"Enter Full Screen","zh":"进入全屏幕","key":"f","modifiers":["command","control"]},
  {"action":"increaseWidth:","en":"Increase Width","zh":"加宽","key":"=","modifiers":["command","option"]},
  {"action":"decreaseWidth:","en":"Decrease Width","zh":"变窄","key":"-","modifiers":["command","option"]},

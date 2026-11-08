@@ -13,7 +13,8 @@ window.DocumentOutput = {
       const title = currentDocTitle();
       const mathCSS = await deps.MathRenderer.exportCSS(document.getElementById('content'));
       const clone = document.getElementById('content').cloneNode(true);
-      clone.querySelectorAll('.frontmatter-toggle, .colgroup, colgroup,.code-copy-btn,.remote-image-bar').forEach(el => el.remove());
+      clone.querySelectorAll('.frontmatter-toggle, .colgroup, colgroup,.code-copy-btn,.remote-image-bar,.fold-more').forEach(el => el.remove());
+      clone.querySelectorAll('.fold-hidden,.fold-collapsed,.is-folded,.has-folded-rows,.row-folded').forEach(el => el.classList.remove('fold-hidden','fold-collapsed','is-folded','has-folded-rows','row-folded'));
       clone.querySelectorAll('.task-toggle').forEach(el=>el.replaceWith(document.createTextNode(el.dataset.taskMarker||'')));
       clone.querySelectorAll('img[data-remote-src]').forEach(el=>el.setAttribute('src',el.dataset.remoteSrc));
       for (const image of clone.querySelectorAll('img[data-original-src]')) {
@@ -34,20 +35,24 @@ window.DocumentOutput = {
       const text = clone.textContent || '';
       const lang = documentLanguage(getCurrentMarkdown());
       const headings = [...clone.querySelectorAll('h1,h2,h3')];
-      let toc = '';
-      if (headings.length >= 5) {
-        toc = '<nav class="export-toc"><details><summary>' + t('Contents','目录') + '</summary><ul>' + headings.map((el,i) => {
+      let toc = '', side = '';
+      if (headings.length >= 4) {
+        const items = headings.map((el,i) => {
           if (!el.id) el.id = 'export-heading-' + i;
-          return '<li><a href="#' + escHtml(el.id) + '">' + escHtml(el.textContent) + '</a></li>';
-        }).join('') + '</ul></details></nav>';
+          return '<li class="l' + el.tagName.slice(1) + '"><a href="#' + escHtml(el.id) + '">' + escHtml(el.textContent) + '</a></li>';
+        }).join('');
+        toc = '<nav class="export-toc export-toc-top"><details><summary>' + t('Contents','目录') + '</summary><ul>' + items + '</ul></details></nav>';
+        side = '<nav class="export-toc export-toc-side" aria-label="' + t('Contents','目录') + '"><ul>' + items + '</ul></nav>';
       }
+      const minutes = window.ReadingProgress && ReadingProgress.estimateMinutes ? ReadingProgress.estimateMinutes(clone) : 0;
+      const meta = minutes >= 2 ? '<p class="share-meta">' + t('About ' + minutes + ' min read', '约 ' + minutes + ' 分钟读完') + '</p>' : '';
       const options = await deps.Bridge.call('get_output_settings');
       if (options.hide_frontmatter) clone.querySelectorAll('.frontmatter').forEach(el => el.remove());
       const html = '<!doctype html>\n<html lang="' + lang + '"><head><meta charset="utf-8">' +
         '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
         '<meta name="generator" content="mdPreview ' + escHtml(resources.version) + '"><title>' + escHtml(title) + '</title>' +
-        '<style>' + resources.css + '\n' + mathCSS + '\nbody{margin:0;background:var(--bg);font-family:var(--font-sans)}.page{max-width:720px;margin:40px auto;padding:0 40px}.export-toc{margin-bottom:24px}</style>' +
-        '</head><body><main class="page">' + toc + '<article class="markdown">' + deps.MarkdownPipeline.cleanExport(clone.innerHTML) + '</article></main></body></html>';
+        '<style>' + resources.css + '\n' + mathCSS + '\nbody{margin:0;background:var(--bg);font-family:var(--font-sans);-webkit-text-size-adjust:100%}.page{max-width:720px;margin:48px auto 72px;padding:0 24px}.export-toc{font-size:14px}.export-toc-top{margin-bottom:24px}.export-toc ul{list-style:none;margin:8px 0;padding:0}.export-toc li{margin:5px 0;line-height:1.45}.export-toc li.l2{padding-left:12px}.export-toc li.l3,.export-toc li.l4{padding-left:24px}.export-toc a{color:inherit;opacity:.72;text-decoration:none}.export-toc a:hover{opacity:1}.export-toc-side{display:none}.share-meta{margin:0 0 28px;font-size:13px;opacity:.6}.share-foot{margin:56px 0 0;padding-top:16px;border-top:1px solid rgba(128,128,128,.25);font-size:12px;opacity:.55}.share-foot a{color:inherit}@media(min-width:1180px){.export-toc-top{display:none}.export-toc-side{display:block;position:fixed;top:56px;left:max(24px,calc(50vw - 360px - 276px));width:236px;max-height:calc(100vh - 112px);overflow:auto}}@media print{.export-toc-side,.share-foot{display:none}.page{margin:0 auto;padding:0}}</style>' +
+        '</head><body>' + side + '<main class="page">' + toc + meta + '<article class="markdown">' + deps.MarkdownPipeline.cleanExport(clone.innerHTML) + '</article><p class="share-foot">' + t('Made with <a href="https://github.com/tahoeliu/mdPreview">mdPreview</a>', '由 <a href="https://github.com/tahoeliu/mdPreview">mdPreview</a> 排版') + '</p></main></body></html>';
       return html;
     }
 

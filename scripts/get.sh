@@ -115,5 +115,6 @@ else
 fi
 
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$dest" >/dev/null 2>&1 || true
+[[ ! -d "$dest/Contents/PlugIns/MDPreviewQuickLook.appex" ]] || { /usr/bin/pluginkit -a "$dest/Contents/PlugIns/MDPreviewQuickLook.appex" >/dev/null 2>&1; /usr/bin/pluginkit -e use -i tahoeliu.mdpreview.quicklook >/dev/null 2>&1; } || true
 info "Installed ${dest}"
 info "Open a file with:  open -a mdPreview yourfile.md"

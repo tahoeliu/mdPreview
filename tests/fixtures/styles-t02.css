@@ -445,28 +445,13 @@ body:not(.has-toc) .page { margin: 0 auto; max-width: var(--page-width, 720px); 
 @media (prefers-color-scheme: dark) { .goto-box { background: #2a2a2c; color: #f0f0f0; } .goto-box li.empty { color: #98989d; } }
 
 .toc-sidebar li { position: relative; }
-.toc-sidebar .toc-min { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font-size: 11px; color: #6e6e73; font-variant-numeric: tabular-nums; pointer-events: none; }
-.toc-sidebar li:has(.toc-min) > a { padding-right: 30px; }
-@media (prefers-color-scheme: dark) { .toc-sidebar .toc-min { color: #98989d; } }
 
 /* ── Selection toolbar for the rendered view ── */
-.format-toolbar { position: fixed; z-index: 950; display: flex; gap: 2px; padding: 4px; background: #fff; color: #1d1d1f; border: 1px solid rgba(0,0,0,.12); border-radius: 9px; box-shadow: 0 6px 22px rgba(0,0,0,.16); user-select: none; -webkit-user-select: none; }
-.format-toolbar[hidden] { display: none; }
-.format-toolbar button { min-width: 30px; height: 28px; padding: 0 7px; border: 0; border-radius: 6px; background: transparent; color: inherit; font: 600 13px/1 var(--font-sans); cursor: pointer; }
-.format-toolbar button[data-kind="italic"] { font-style: italic; font-weight: 500; }
-.format-toolbar button[data-kind="strike"] { text-decoration: line-through; font-weight: 500; }
-.format-toolbar button[data-kind="code"] { font-family: var(--font-mono); font-size: 12px; }
-.format-toolbar button:hover { background: rgba(0,0,0,.07); }
-.format-toolbar button.on { background: #0062cc; color: #fff; }
-.format-toolbar input { width: 280px; height: 28px; border: 0; outline: none; padding: 0 8px; font-size: 13px; background: transparent; color: inherit; }
-@media (prefers-color-scheme: dark) { .format-toolbar { background: #2c2c2e; color: #f0f0f0; border-color: rgba(255,255,255,.14); } .format-toolbar button:hover { background: rgba(255,255,255,.1); } }
-@media print { .format-toolbar { display: none !important; } }
 @media print {
   /* 10.75pt 的实际 H 字形约 8.09pt；与屏幕字号隔离。 */
   :root { --content-font-size: var(--print-font-size, 10.75pt) !important; --content-line-height: 1.6 !important; }
   html, body { background: #fff !important; color: #000 !important; height: auto !important; overflow: visible !important; }
   .toc-sidebar, .toc-toggle, .find-bar, .status, .modal-overlay, .image-lightbox, .mode-indicator,
-  .edit-hint-bubble, .update-bubble, .welcome-overlay, .code-lang-label, .code-copy-btn, .remote-image-bar, .read-progress, .read-hud, .read-end, .format-toolbar { display: none !important; }
   .scroll-wrap { position: static !important; overflow: visible !important; }
   .page { max-width: none !important; width: auto !important; margin: 0 !important; padding: 0 !important; }
   .markdown { font-size: var(--content-font-size) !important; line-height: var(--content-line-height) !important; min-height: 0 !important; color: #000 !important; orphans: 3; widows: 3; }

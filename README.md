@@ -67,14 +67,14 @@ Select any `.md` file in Finder → **File → Get Info → Open with → mdPrev
 - Outline sidebar, dark mode, adjustable text size (`⌘=` / `⌘-`, reset `⌘0`) and reading width (`⌥⌘=` / `⌥⌘-`)
 - Remembers your window position, text size and reading position per document
 - Reloads automatically when another program (or an AI agent) changes the file
-- **Made for long AI answers:** reading-time left and progress (only in long documents), per-section reading time in the outline, **Go to Heading** (`⌘J`), **New from Clipboard** (`⌥⌘N`)
+- **Made for long AI answers:** reading-time left and progress (only in long documents), **fold any section**, long code blocks and tables fold to a head, **Go to Heading** (`⌘J`), **New from Clipboard** (`⌥⌘N`)
 - Find (`⌘F`), multiple windows, open linked `.md` files with a click, drag a `.md` file onto the window
 - Tables, task lists (click to tick), footnotes, front matter, syntax-highlighted code with a copy button
 - **Math** with KaTeX (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`), **Mermaid** diagrams, GitHub-style alerts (`> [!NOTE]`)
 - Chinese typography done properly (language-aware fonts, spacing)
 
 ### Editing
-- Edit the rendered view directly — select text and a small toolbar offers bold, headings, lists and links, so no Markdown syntax is needed. Or or switch to source (`⌘E`) with `⌘B` / `⌘I` / `⌘K`, list continuation and Tab indenting
+- Click into the rendered page and a slim formatting bar appears at the top — bold, headings, lists, links, tables (add/remove rows and columns) — so no Markdown syntax is needed. `Esc` returns to reading; *View → Always Show Formatting Bar* (`⌥⌘T`) pins it. Or switch to source (`⌘E`) with `⌘B` / `⌘I` / `⌘K`, list continuation and Tab indenting
 - **Paste as Markdown** (`⇧⌘V`): paste formatted text from web pages, docs and AI chats and get clean Markdown
 - Paste or drop images: they are saved next to the document in `assets/` and linked with relative paths
 - Drafts are autosaved; saving never overwrites changes you made while the disk write was pending
@@ -86,7 +86,7 @@ Export with **File → Export As…** or print with `⌘P`:
 |---|---|
 | **PDF** | Real pagination on A4 or Letter, compact 10.5 pt body independent of on-screen zoom, page numbers, bookmarks from headings, searchable and copyable Chinese text, links kept |
 | **Word (.docx)** | Native Word document: real Heading styles, tables with repeating header rows, images, footnotes; formulas and diagrams as images |
-| **HTML** | One self-contained file (images embedded), print styles included, works in dark mode |
+| **HTML** | A shareable single page: images embedded, outline sidebar on wide screens, reading time, dark mode, print styles |
 | **PNG** | One long, light-themed image |
 | **Plain text / Markdown** | Real plain text (no `##` or `**`), or the Markdown source |
 | **Copy as Rich Text** (`⇧⌘C`) | Puts HTML, RTF and plain text on the clipboard, so headings, tables and code keep their formatting when pasted into apps such as Mail, Notes, Word or chat tools |
@@ -135,7 +135,7 @@ Markdown can contain HTML. All rendered content goes through DOMPurify with URL 
 
 **Does it work offline?** Yes. Nothing is needed from the network except the optional update check.
 
-**Does it support Finder's spacebar preview (Quick Look)?** Not in official builds. An experimental extension lives in [`quicklook/`](quicklook/README.md); the page is tested, but macOS launching it could not be verified.
+**Does it support Finder's spacebar preview (Quick Look)?** Yes — the extension is bundled and registered on first launch. If macOS does not show it, enable *mdPreview Quick Look* in System Settings → General → Login Items & Extensions → Quick Look. See [`quicklook/`](quicklook/README.md) for what is verified.
 
 **Is it a replacement for Typora / VS Code?** No — it is a focused reader with convenient editing and best-in-class sharing, not a writing studio or an IDE.
 

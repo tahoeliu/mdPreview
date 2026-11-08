@@ -15,6 +15,6 @@ w.pywebview.api.get_settings=()=>({remote_images:'ask',auto_update:false,auto_re
 w.pywebview.api.get_output_settings=()=>({paper:'auto',margins:'normal',font:'normal',pdf_layout:'paged',png_width:'original',page_numbers:true,show_urls:false,hide_frontmatter:true,h1_new_page:false});
 w.pywebview.api.set_settings=patch=>{settingsPatch=patch;return {success:true,settings:patch}};w.pywebview.api.set_output_settings=()=>({success:true});
 await w.openSettings();assert.equal(w.document.querySelector('#modalBody input[type=checkbox]').checked,false);
-w.document.querySelector('#modalActions button').click();await new Promise(r=>setTimeout(r,30));assert.equal(settingsPatch.auto_update,false);assert.equal(settingsPatch.remote_images,'ask');
+w.document.querySelector('#modalActions button:last-child').click();await new Promise(r=>setTimeout(r,30));assert.equal(settingsPatch.auto_update,false);assert.equal(settingsPatch.remote_images,'ask');
 console.log('T17/T18/T20 设置编辑与dirty保护断言通过');
 }finally{a.close()}})().catch(e=>{console.error(e);process.exitCode=1});

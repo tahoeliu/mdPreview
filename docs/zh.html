@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>mdPreview — 轻到几乎感觉不到的 Mac Markdown 阅读器</title>
+<meta name="description" content="mdPreview 秒开 Markdown，让 AI 生成的长文更容易读完；点一下就能像 Word 一样编辑，可导出 PDF、Word 和可分享的网页。免费、开源、离线。">
+<link rel="canonical" href="https://tahoeliu.github.io/mdPreview/zh.html">
+<link rel="alternate" hreflang="en" href="https://tahoeliu.github.io/mdPreview/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="mdPreview — 把 AI 的长回答读完">
+<meta property="og:description" content="轻到几乎感觉不到的 Mac Markdown 阅读器。秒开、清爽，编辑像 Word 一样简单。">
+<meta property="og:url" content="https://tahoeliu.github.io/mdPreview/zh.html">
+<meta property="og:image" content="https://tahoeliu.github.io/mdPreview/images/hero-reading.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<nav class="top"><div class="wrap"><a class="brand" href="#">mdPreview</a><div class="links"><a class="hide" href="#reading">阅读</a><a class="hide" href="#editing">编辑</a><a class="hide" href="#sharing">分享</a><a href="#install">安装</a><a href="index.html">English</a><a href="https://github.com/tahoeliu/mdPreview">GitHub</a></div></div></nav>
+
+<header class="hero"><div class="wrap">
+  <h1>把 AI 的长回答，<br>真正读完。</h1>
+  <p class="lead">轻到几乎感觉不到的 Mac Markdown 阅读器。秒开、排版干净，编辑像改 Word 一样轻松，不用学任何语法。</p>
+  <div class="cta"><a class="btn primary" href="https://github.com/tahoeliu/mdPreview/releases/latest">下载 Mac 版</a><a class="btn ghost" href="#install">一行命令安装</a></div>
+  <p class="fine">免费 · 开源（MIT）· 无需账号、无数据上报 · 完全离线</p>
+  <div class="shot"><img src="images/hero-reading-zh.png" alt="mdPreview 阅读长文档：大纲与阅读进度" width="1200" height="750"></div>
+</div></header>
+
+<section><div class="wrap">
+  <h2>现在，AI 就用 Markdown 写作。</h2>
+  <p class="sub">ChatGPT、Claude、Gemini 都用 Markdown 回答：又长又有结构，在文本编辑器里却很难读。mdPreview 就是你安静读它的那个窗口。</p>
+  <div class="pillars">
+    <div class="pillar"><h3>轻，而且快</h3><p>约半秒启动。双击文件，已经排好版。后台不跑任何东西。</p></div>
+    <div class="pillar"><h3>为读完而设计</h3><p>一条细进度线、“还剩 12 分钟”、章节折叠和跳转标题，让五千字的回答不再望不到头。</p></div>
+    <div class="pillar"><h3>像文档一样编辑</h3><p>点哪里，格式工具条就在顶部出现：加粗、标题、列表、链接、表格，再也看不到 <code>**</code>。</p></div>
+  </div>
+</div></section>
+
+<section class="alt" id="reading"><div class="wrap split">
+  <div class="text"><h2>为长回答而做</h2><p class="sub" style="margin-bottom:0">克制的排版，加上只在文档足够长时才出现的几个小帮手。</p>
+    <ul><li>进度条与“还剩 N 分钟”：只出现在长文档里</li><li>点边上的小箭头，收起任意章节</li><li><code>⌘J</code> 输入几个字就跳到某个标题</li><li>很长的代码块和表格只显示开头，一点就展开</li><li>表格、公式、Mermaid 图、脚注和提示块都能正确显示</li><li>AI 工具改了文件，页面自动刷新</li></ul></div>
+  <div class="shot"><img src="images/hero-goto-zh.png" alt="跳转到标题面板" width="1200" height="750" loading="lazy"></div>
+</div></section>
+
+<section id="editing"><div class="wrap split flip">
+  <div class="text"><h2>点一下，就能写</h2><p class="sub" style="margin-bottom:0">文档默认是阅读状态。光标落在哪里，顶部就滑出一条细工具条；按 <code>Esc</code> 就收起。</p>
+    <ul><li>工具条里直接加粗、斜体、标题、列表、引用、链接</li><li>插入表格，增删行列</li><li>从网页或聊天里复制，用 <code>⇧⌘V</code> 粘贴成干净的 Markdown</li><li>拖入图片，自动保存在文档旁边</li><li>想看源码？<code>⌘E</code> 一键切换</li></ul></div>
+  <div class="shot"><img src="images/edit-bar-zh.png" alt="编辑时顶部的格式工具条" width="1200" height="750" loading="lazy"></div>
+</div></section>
+
+<section class="alt" id="sharing"><div class="wrap">
+  <h2>发给任何人</h2>
+  <p class="sub">给别人能直接打开的东西，而不是一个 <code>.md</code> 文件。</p>
+  <div class="grid3">
+    <div class="cell"><h3>PDF</h3><p>真分页、页码、书签，中文可搜索。</p></div>
+    <div class="cell"><h3>Word（.docx）</h3><p>原生标题样式、表格、图片和脚注。</p></div>
+    <div class="cell"><h3>分享网页</h3><p>单个自包含的 HTML，带目录与深色模式，哪里都能打开。</p></div>
+    <div class="cell"><h3>富文本</h3><p><code>⇧⌘C</code> 复制后粘到邮件、备忘录、Word 或聊天软件。</p></div>
+    <div class="cell"><h3>PNG 与纯文本</h3><p>一张长图，或不带 <code>##</code> 的真正纯文本。</p></div>
+    <div class="cell"><h3>命令行</h3><p><code>mdpreview export notes.md --to pdf</code></p></div>
+  </div>
+</div></section>
+
+<section id="install"><div class="wrap narrow">
+  <h2>安装</h2>
+  <p class="sub">在“终端”里运行一行命令。它会先校验签名与校验和，安装后 macOS 不会弹出安全提示。</p>
+  <pre class="cmd">curl -fsSL https://raw.githubusercontent.com/tahoeliu/mdPreview/main/scripts/get.sh | bash</pre>
+  <p class="note">也可以用 <code>brew install --cask --no-quarantine tahoeliu/tap/mdpreview</code>，或下载<a href="https://github.com/tahoeliu/mdPreview/releases/latest">磁盘镜像</a>。浏览器下载的版本第一次需要在“系统设置 → 隐私与安全性”里点“仍要打开”，因为 mdPreview 是没有付费 Apple 证书的免费软件。需要 macOS 13 或更高版本。</p>
+</div></section>
+
+<section class="alt"><div class="wrap narrow">
+  <h2>常见问题</h2>
+  <details><summary>需要懂 Markdown 吗？</summary><p>不需要。读、点一下用工具条编辑、导出就行；想看源码也随时能切。</p></details>
+  <details><summary>真的免费吗？</summary><p>是的，MIT 开源，无账号、无广告、无数据上报。给个 GitHub Star 会帮助更多人发现它。</p></details>
+  <details><summary>我的文档会被上传吗？</summary><p>不会。唯一的网络请求是可关闭的更新检查；远程图片在你允许前不会加载。</p></details>
+  <details><summary>能替代 Typora 或 VS Code 吗？</summary><p>不能，也不想。它是专注阅读、顺手编辑、擅长分享的小工具，不是写作工作室或 IDE。</p></details>
+  <details><summary>Finder 里能按空格预览吗？</summary><p>应用已内置。如果没有生效，请在“系统设置 → 通用 → 登录项与扩展 → Quick Look”里启用 mdPreview Quick Look。</p></details>
+</div></section>
+
+<footer><div class="wrap"><a href="https://github.com/tahoeliu/mdPreview">GitHub</a> · <a href="https://github.com/tahoeliu/mdPreview/releases">发布页</a> · <a href="https://github.com/tahoeliu/mdPreview/blob/main/CHANGELOG.md">更新日志</a> · <a href="https://github.com/tahoeliu/mdPreview/blob/main/SECURITY.md">安全</a> · MIT © Tahoe Liu</div></footer>
+</body>
+</html>

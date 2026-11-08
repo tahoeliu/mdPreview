@@ -26,10 +26,12 @@ for(const [state,prepare] of [
    await page.evaluate(()=>{document.querySelector('.scroll-wrap').scrollTop=800;});
    await page.waitForSelector('.read-hud.on');
    await page.evaluate(()=>openGoToHeading());await page.waitForSelector('#gotoOverlay');}],
- ['选区格式工具栏',async page=>{
+ ['顶部格式工具条',async page=>{
    await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),DOCUMENT);
-   await page.evaluate(()=>{const p=document.querySelector('#content p, #content li');const r=document.createRange();r.selectNodeContents(p);const s=getSelection();s.removeAllRanges();s.addRange(r);document.dispatchEvent(new Event('mouseup'));});
-   await page.waitForSelector('.format-toolbar:not([hidden])');}],
+   await page.click('#content p');
+   await page.waitForSelector('.edit-bar:not([hidden])');
+   await page.click('.edit-bar button[data-kind="table"]');
+   await page.waitForSelector('.edit-table-group:not([hidden])');}],
  ['源码视图',async page=>{await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),DOCUMENT);await page.evaluate(()=>toggleView());}],
 ]){
  for(const colorScheme of ['light','dark']){

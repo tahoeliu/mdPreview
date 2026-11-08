@@ -72,16 +72,65 @@ test('replace controls are hidden in preview and shown in source mode',async({pa
   await page.keyboard.press('Meta+f');
   await expect(page.locator('.replace-action').first()).toBeVisible();
 });
-test('selecting text shows the formatting toolbar and bold round-trips to Markdown',async({page})=>{
+test('clicking into the page starts editing: top bar, bold round-trip, Esc returns to reading',async({page})=>{
   await page.evaluate(()=>loadContent('/tmp/doc.md','Hello brave world',720,false,false));
-  await page.evaluate(()=>{const p=document.querySelector('#content p');const r=document.createRange();r.setStart(p.firstChild,6);r.setEnd(p.firstChild,11);const s=getSelection();s.removeAllRanges();s.addRange(r);document.dispatchEvent(new Event('mouseup'));});
-  const bold=page.locator('.format-toolbar button[data-kind="bold"]');
+  await expect(page.locator('.edit-bar')).toBeHidden();
+  await page.click('#content p');
+  const bold=page.locator('.edit-bar button[data-kind="bold"]');
   await expect(bold).toBeVisible();
+  await page.evaluate(()=>{const p=document.querySelector('#content p');const r=document.createRange();r.setStart(p.firstChild,6);r.setEnd(p.firstChild,11);const s=getSelection();s.removeAllRanges();s.addRange(r);});
   await bold.click();
   await expect(page.locator('#content strong, #content b')).toHaveText('brave');
   expect(await page.evaluate(()=>getCurrentMarkdown())).toContain('**brave**');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.edit-bar')).toBeHidden();
+  await page.click('#content p');
+  await expect(page.locator('.edit-bar')).toBeVisible();
+  await page.click('.edit-bar .edit-done');
+  await expect(page.locator('.edit-bar')).toBeHidden();
+  await page.click('#content p');
   await page.keyboard.press('Meta+e');
-  await expect(page.locator('.format-toolbar')).toBeHidden();
+  await expect(page.locator('.edit-bar')).toBeHidden();
+});
+test('pinned bar stays; table can be inserted, grown and shrunk from the bar',async({page})=>{
+  await page.evaluate(()=>loadContent('/tmp/doc.md','Intro\n\nOutro',720,false,false));
+  await page.evaluate(()=>toggleFormatBar());
+  await expect(page.locator('.edit-bar')).toBeVisible();
+  await page.click('#content p');
+  await page.click('.edit-bar button[data-kind="table"]');
+  await expect(page.locator('#content table')).toHaveCount(1);
+  await expect(page.locator('.edit-bar button[data-kind="addrow"]')).toBeVisible();
+  await page.click('.edit-bar button[data-kind="addrow"]');
+  await expect(page.locator('#content tbody tr')).toHaveCount(3);
+  await page.click('.edit-bar button[data-kind="addcol"]');
+  await expect(page.locator('#content thead th')).toHaveCount(4);
+  await page.click('.edit-bar button[data-kind="delcol"]');
+  await expect(page.locator('#content thead th')).toHaveCount(3);
+  expect(await page.evaluate(()=>getCurrentMarkdown())).toMatch(/\|.*Column.*\|/);
+  await page.evaluate(()=>toggleFormatBar());
+  await page.click('#content p >> nth=0');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.edit-bar')).toBeHidden();
+});
+test('sections fold, long code and tables show a head, folds never reach Markdown',async({page})=>{
+  const code='```js\n'+Array.from({length:40},(_,n)=>'line '+n).join('\n')+'\n```';
+  const rows='| a | b |\n|---|---|\n'+Array.from({length:20},(_,n)=>'| r'+n+' | x |').join('\n');
+  const md='# Title\n\nIntro\n\n## One\n\nBody one\n\n### Deep\n\nDeep text\n\n## Two\n\nBody two\n\n'+code+'\n\n'+rows+'\n';
+  await page.setViewportSize({width:1100,height:800});
+  await page.evaluate(m=>loadContent('/tmp/f.md',m,720,false,false),md);
+  const before=await page.evaluate(()=>getCurrentMarkdown());
+  await expect(page.locator('.fold-more')).toHaveCount(2);
+  await expect(page.locator('#content tr.row-folded')).toHaveCount(10);
+  await page.locator('.fold-toggle[aria-label*="One"]').click({force:true});
+  await expect(page.locator('#content p:has-text("Body one")')).toBeHidden();
+  await expect(page.locator('#content h3')).toBeHidden();
+  await expect(page.locator('#content p:has-text("Body two")')).toBeVisible();
+  expect(await page.evaluate(()=>getCurrentMarkdown())).toBe(before);
+  await page.evaluate(()=>{const h=document.querySelector('#content h3');scrollToHash('#'+h.id);});
+  await expect(page.locator('#content p:has-text("Deep text")')).toBeVisible();
+  await page.locator('.fold-more').first().click();
+  await expect(page.locator('#content pre.is-folded')).toHaveCount(0);
+  expect(await page.evaluate(()=>getCurrentMarkdown())).toBe(before);
 });
 test('long document renders its tail and source outline navigates',async({page},testInfo)=>{
   const measurements=await page.evaluate(async()=>{

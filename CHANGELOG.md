@@ -7,10 +7,15 @@ All notable changes to mdPreview. Format based on [Keep a Changelog](https://kee
 A rebuild of everything that happens when you *share* a document, plus a more reliable, more private and much faster core.
 
 ### Added
-- **Made for long AI answers:** a hairline progress bar and a quiet "N min left · 63%" pill appear only in long documents; every section in the outline shows its reading time; a closing "End · about N min read" mark; calmer heading rhythm and body contrast. Nothing is injected into the document or its exports.
+- **Made for long AI answers:** a hairline progress bar and a quiet "N min left · 63%" pill appear only in long documents; a closing "End · about N min read" mark; calmer heading rhythm and body contrast. Nothing is injected into the document or its exports.
+- **Fold sections:** a small arrow beside each heading collapses its whole section; very long code blocks and tables show only their head with a *Show all* button. Folding never changes the file or any export.
+- **Reading font:** sans-serif or serif, in Settings.
+- **Share-ready HTML export:** a single self-contained page with a sticky outline on wide screens, reading time, dark mode and print styles.
+- **Finder spacebar preview (Quick Look)** is bundled; the app registers and enables it on first launch (if it does not appear, enable *mdPreview Quick Look* in System Settings → General → Login Items & Extensions → Quick Look).
+- A new project website under `docs/` (English and 中文).
 - **Go to Heading** (`⌘J`): type a few letters to jump anywhere in a long document.
 - **New from Clipboard** (`⌥⌘N`, also a button on the empty screen): copy an answer from any chat app and read it rendered immediately.
-- **Edit like Word:** select text in the rendered view and a small toolbar offers bold, italic, strikethrough, code, link, headings, lists and quotes — no Markdown syntax needed. Changes are written back as clean Markdown.
+- **Edit like Word:** documents open for reading; click into the text and a slim formatting bar appears at the top (bold, italic, strikethrough, code, link, H1–H3, lists, quote, and *Insert table* with add/remove row and column). `Esc`, *Done* or clicking outside the text returns to reading. *View → Always Show Formatting Bar* (`⌥⌘T`) keeps it visible. No Markdown syntax needed; changes are written back as clean Markdown.
 - **Appearance** setting: follow the system, or force light or dark.
 - **One native output pipeline** for print and PDF: real pagination on A4 or Letter, configurable margins, a compact 10.5 pt body that no longer follows the on-screen text size, page numbers, bookmarks from headings, document title and creator metadata, link annotations kept. Code and table backgrounds now print; dark mode never leaks into output.
 - **Native Word export** (OOXML): real Heading styles, tables with repeating header rows, images, footnotes (one per reference), and formulas/diagrams as images. Replaces the HTML-in-a-container approach that only desktop Word could open.

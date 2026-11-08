@@ -45,6 +45,7 @@ window.ReadingFeatures = (() => {
       const button=document.createElement('button');button.className='code-copy-btn';button.contentEditable='false';button.textContent=t('Copy','复制');button.setAttribute('aria-label',t('Copy code','复制代码'));
       button.addEventListener('click',async e=>{e.preventDefault();e.stopPropagation();if(await copyTextToClipboard(pre.querySelector('code')?.textContent||'')){button.textContent=t('Copied','已复制');setTimeout(()=>button.textContent=t('Copy','复制'),1500);}});pre.append(button);
     }
+    if(window.Folding)Folding.decorate(root);
     const positions=tasks(markdown);let index=0;
     if(root.querySelectorAll('li[data-task]:not(.markdown-alert li):not(.footnotes li)').length!==positions.length){remoteBar(root);return;}
     for(const li of root.querySelectorAll('li[data-task]')){

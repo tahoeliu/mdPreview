@@ -1,5 +1,5 @@
 const documentSession = new DocumentSession();
-let appSettings={remote_images:'ask',auto_update:true,auto_reload:true,font_size:16,page_width:720,restore_session:false,language:'system'};
+let appSettings={remote_images:'ask',auto_update:true,auto_reload:true,font_size:16,page_width:720,restore_session:false,language:'system',format_bar:false,reading_font:'sans'};
 let saveInFlight = null;
 let syncInFlight = null;
 let syncRetryCount = 0;
@@ -399,6 +399,8 @@ var {
   // keep their relative ratios via the --content-font-size CSS variable).
   // In-memory only (not persisted), clamped to a sane range.
   let contentFontSize = 16;
+  function applyReadingFont() { document.documentElement.setAttribute('data-reading-font', appSettings.reading_font === 'serif' ? 'serif' : 'sans'); }
+  window.toggleFormatBar = function () { if (window.formatToolbar) window.formatToolbar.togglePinned(); };
   function applyFontSize() {
     document.documentElement.style.setProperty('--content-font-size', contentFontSize + 'px');
   }
@@ -759,6 +761,8 @@ var {
     filePath = path;
     ReadingFeatures.reset();
     appSettings={...appSettings,...(meta.settings||{})};
+    if(window.formatToolbar)window.formatToolbar.setPinned(!!appSettings.format_bar,false);
+    applyReadingFont();
     I18n.configure(meta.i18n||{locale:appSettings.language==='system'?(zh?'zh-Hans':'en'):appSettings.language,messages:{}});
     contentFontSize=meta.fontSize||appSettings.font_size;applyFontSize();
     if(appSettings.language!=='system')zh=appSettings.language.startsWith('zh');
@@ -885,8 +889,10 @@ var {
     }
   }
 
+  let _flashModeNext = false;
   async function toggleView() {
     imageViewer.close();
+    _flashModeNext = true;
     if (!isSource) {
       // rendered → source: capture cursor, convert, position
       const content = document.getElementById('content');
@@ -936,7 +942,7 @@ var {
       source.classList.remove('visible');
     }
     updateEmptyState();
-    showModeIndicator();
+    if (_flashModeNext) { _flashModeNext = false; showModeIndicator(); }
   }
 
   let _modeIndicatorTimer = null;
