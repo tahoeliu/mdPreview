@@ -6,6 +6,38 @@ window.openSettings=async function(){
     const modalVersion=body.dataset.version;
     const controls=[];
     let card=null;function group(title){const heading=document.createElement('h3');heading.className='set-title';heading.textContent=title;body.append(heading);card=document.createElement('div');card.className='set-card';body.append(card);}
+
+    // 切换预览 / 源码的快捷键：点一下，再按想要的组合键
+    function shortcutRow(current){
+      const SYMBOLS={ctrl:'⌃',alt:'⌥',shift:'⇧',cmd:'⌘'};
+      const show=spec=>{const p=spec.split('+');return ['ctrl','alt','shift','cmd'].filter(x=>p.includes(x)).map(x=>SYMBOLS[x]).join('')+p[p.length-1].toUpperCase();};
+      const TAKEN=new Set(['c','v','x','z','a','s','q','w','n','o','p','f','g','h','m','j','i','b','k','t','r','l','d','u',',','=','-','0','.']);
+      const state={value:current};
+      const row=document.createElement('div');row.className='set-row';
+      const name=document.createElement('span');name.className='set-label';name.textContent=t('Switch Preview / Source','切换预览 / 源码');
+      const side=document.createElement('span');side.className='set-shortcut';
+      const button=document.createElement('button');button.type='button';button.className='set-shortcut-btn';
+      const reset=document.createElement('button');reset.type='button';reset.className='set-shortcut-reset';reset.textContent=t('Reset','恢复默认');
+      const note=document.createElement('div');note.className='set-note set-shortcut-note';note.hidden=true;
+      let listening=false;
+      const paint=()=>{button.textContent=listening?t('Press new shortcut…','请按下新的快捷键…'):show(state.value);button.classList.toggle('listening',listening);reset.hidden=state.value==='cmd+e'||listening;};
+      const stop=()=>{listening=false;document.removeEventListener('keydown',onKey,true);paint();};
+      function onKey(e){
+        e.preventDefault();e.stopPropagation();
+        if(e.key==='Escape'){note.hidden=true;stop();return;}
+        if(['Meta','Control','Alt','Shift'].includes(e.key))return;
+        const code=e.code||'';const key=/^Key[A-Z]$/.test(code)?code.slice(3).toLowerCase():/^Digit[0-9]$/.test(code)?code.slice(5):'';
+        if(!key){note.textContent=t('Use a letter or number key.','请使用字母或数字键。');note.hidden=false;return;}
+        if(!e.metaKey&&!e.ctrlKey){note.textContent=t('Include ⌘ or ⌃ so typing is not affected.','请同时按住 ⌘ 或 ⌃，以免影响输入。');note.hidden=false;return;}
+        const spec=[e.metaKey&&'cmd',e.ctrlKey&&'ctrl',e.altKey&&'alt',e.shiftKey&&'shift',key].filter(Boolean).join('+');
+        if(TAKEN.has(key)&&spec===(e.metaKey?'cmd+':'ctrl+')+key){note.textContent=t('{key} is already used by another command.','{key} 已被其他功能使用。').replace('{key}',show(spec));note.hidden=false;return;}
+        state.value=spec;note.hidden=true;stop();
+      }
+      button.addEventListener('click',()=>{if(listening){stop();return;}listening=true;note.hidden=true;paint();document.addEventListener('keydown',onKey,true);});
+      reset.addEventListener('click',()=>{state.value='cmd+e';note.hidden=true;paint();});
+      side.append(reset,button);row.append(name,side);(card||body).append(row,note);paint();
+      controls.push({key:'toggle_shortcut',input:state,section:'settings',value:''});
+    }
     function field(key,label,value,choices,section='settings'){
       const row=document.createElement('label');row.className='set-row';const name=document.createElement('span');name.className='set-label';name.textContent=label;row.append(name);
       const input=document.createElement(choices?'select':'input');
@@ -14,7 +46,7 @@ window.openSettings=async function(){
       else {input.type='number';input.value=value;input.min=key==='font_size'?12:360;input.max=key==='font_size'?24:2016;}
       row.append(input);(card||body).append(row);controls.push({key,input,section,value});
     }
-    group(t('General','通用'));field('language',t('Interface language','界面语言'),values.language,[['system',t('System','跟随系统')],['en','English'],['zh-Hans',t('Simplified Chinese','简体中文')],['zh-Hant','繁體中文'],['ja','日本語'],['ko','한국어'],['de','Deutsch'],['fr','Français'],['es','Español']]);
+    group(t('General','通用'));shortcutRow(values.toggle_shortcut||'cmd+e');field('language',t('Interface language','界面语言'),values.language,[['system',t('System','跟随系统')],['en','English'],['zh-Hans',t('Simplified Chinese','简体中文')],['zh-Hant','繁體中文'],['ja','日本語'],['ko','한국어'],['de','Deutsch'],['fr','Français'],['es','Español']]);
     field('appearance',t('Appearance','外观'),values.appearance,[['system',t('System','跟随系统')],['light',t('Light','浅色')],['dark',t('Dark','深色')]]);
     field('restore_session',t('Restore documents at startup','启动时恢复文档'),values.restore_session);field('auto_update',t('Check for updates automatically (GitHub)','自动检查更新（访问 GitHub）'),values.auto_update);
     group(t('Reading','阅读'));field('reading_font',t('Reading font','阅读字体'),values.reading_font,[['sans',t('Sans-serif','无衬线')],['serif',t('Serif','衬线')]]);field('font_size',t('Text size','文字大小'),values.font_size,[[14,t('Small','小')],[16,t('Standard','标准')],[18,t('Large','大')],[20,t('Extra large','特大')]]);field('page_width',t('Reading width','阅读宽度'),values.page_width,[[600,t('Narrow','窄')],[720,t('Standard','标准')],[860,t('Wide','宽')],[1000,t('Extra wide','特宽')]]);field('remote_images',t('Remote images','远程图片'),values.remote_images,[['ask',t('Ask','询问')],['always',t('Always','总是')],['never',t('Never','从不')]]);field('auto_reload',t('Reload external changes','外部修改自动刷新'),values.auto_reload);
@@ -23,7 +55,7 @@ window.openSettings=async function(){
     const choices={paper:['auto','a4','letter'],margins:['narrow','normal','wide'],font:['small','normal','large'],pdf_layout:['paged','continuous'],png_width:['original','mobile']};
     const choiceNames={auto:t('Auto','自动'),a4:'A4',letter:'Letter',narrow:t('Narrow','窄'),normal:t('Normal','标准'),wide:t('Wide','宽'),small:t('Small','小'),large:t('Large','大'),paged:t('Paged','分页'),continuous:t('Continuous long page','连续长页'),original:t('Current width','当前宽度'),mobile:t('Phone-sized','手机尺寸')};
     for(const key of Object.keys(labels))field(key,labels[key],output[key],choices[key]?.map(v=>[v,choiceNames[v]||v]),'output');
-    group(t('Privacy','隐私'));const privacy=document.createElement('p');privacy.className='set-note';privacy.textContent=t('Offline by default. GitHub is contacted only for enabled update checks; remote images require permission. Preview/source: ⌘E.','默认离线。仅主动检查更新或开启自动更新时访问 GitHub；远程图片仅在你允许后加载。预览/源码切换：⌘E。');card.remove();body.append(privacy);
+    group(t('Privacy','隐私'));const privacy=document.createElement('p');privacy.className='set-note';privacy.textContent=t('Offline by default. GitHub is contacted only for enabled update checks; remote images require permission.','默认离线。仅主动检查更新或开启自动更新时访问 GitHub；远程图片仅在你允许后加载。');card.remove();body.append(privacy);
     group(t('About','关于'));card.remove();const info=await Bridge.call('get_export_css');if(body.dataset.version!==modalVersion||!document.getElementById('modalOverlay').classList.contains('visible'))return;const about=document.createElement('p');about.className='set-note';about.textContent='mdPreview '+info.version;body.append(about);const links=document.createElement('div');links.className='set-links';body.append(links);
     for(const [label,action] of [['GitHub',()=>Bridge.callSafe('open_external_link','https://github.com/tahoeliu/mdPreview')],[t('Credits','致谢'),async()=>{const text=await Bridge.call('get_credits');setModal(t('Credits','致谢'),'','');const pre=document.createElement('pre');pre.style.whiteSpace='pre-wrap';pre.textContent=text;document.getElementById('modalBody').append(pre);}],[t('Export Diagnostics','导出诊断信息'),async()=>{const result=await Bridge.call('export_diagnostics');if(!result.success&&!result.cancelled)showStatus(t('Diagnostics export failed','诊断导出失败'),true);}]]){const button=document.createElement('button');button.textContent=label;button.className='modal-button secondary';button.addEventListener('click',action);links.append(button);}
     const save=document.createElement('button');save.textContent=t('Save','保存');save.addEventListener('click',async()=>{

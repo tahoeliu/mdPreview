@@ -243,10 +243,10 @@
 html:not([data-output]) .markdown { --fg: #2b2b2f; }
 @media screen and (prefers-color-scheme: dark) { html:not([data-output]) .markdown { --fg: #dcdce0; } }
 html:not([data-output]) .markdown p { margin-bottom: 1.05em; }
-html:not([data-output]) .markdown h2 { margin-top: 2.6em; padding-top: 1.4em; border-top: 1px solid rgba(128,128,128,.22); margin-bottom: .6em; }
+html:not([data-output]) .markdown h2 { margin-top: 2.2em; margin-bottom: .6em; }
 html:not([data-output]) .markdown h1 + h2,
 html:not([data-output]) .markdown .frontmatter + h1 + h2,
-html:not([data-output]) .markdown h1 + .frontmatter + h2 { margin-top: 1.6em; padding-top: 0; border-top: 0; }
+html:not([data-output]) .markdown h1 + .frontmatter + h2 { margin-top: 1.6em; }
 html:not([data-output]) .markdown h3 { margin-top: 1.9em; margin-bottom: .45em; }
 html:not([data-output]) .markdown h4 { margin-top: 1.6em; }
 html:not([data-output]) .markdown strong { font-weight: 600; color: var(--fg-strong); }

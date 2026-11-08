@@ -1,5 +1,5 @@
 const documentSession = new DocumentSession();
-let appSettings={remote_images:'ask',auto_update:true,auto_reload:true,font_size:16,page_width:720,restore_session:false,language:'system',format_bar:false,reading_font:'sans'};
+let appSettings={remote_images:'ask',auto_update:true,auto_reload:true,font_size:16,page_width:720,restore_session:false,language:'system',format_bar:false,reading_font:'sans',toggle_shortcut:'cmd+e'};
 let saveInFlight = null;
 let syncInFlight = null;
 let syncRetryCount = 0;
@@ -399,6 +399,14 @@ var {
   // keep their relative ratios via the --content-font-size CSS variable).
   // In-memory only (not persisted), clamped to a sane range.
   let contentFontSize = 16;
+  // 'cmd+shift+e' style specs; letters match by physical key so a non-Latin input source does not break them
+  function shortcutMatches(e, spec) {
+    const parts = String(spec).split('+'), key = parts.pop();
+    const want = { cmd: parts.includes('cmd'), ctrl: parts.includes('ctrl'), alt: parts.includes('alt'), shift: parts.includes('shift') };
+    if (e.metaKey !== want.cmd || e.ctrlKey !== want.ctrl || e.altKey !== want.alt || e.shiftKey !== want.shift) return false;
+    const code = e.code || '';
+    return e.key.toLowerCase() === key || code === 'Key' + key.toUpperCase() || code === 'Digit' + key;
+  }
   function applyReadingFont() { document.documentElement.setAttribute('data-reading-font', appSettings.reading_font === 'serif' ? 'serif' : 'sans'); }
   window.toggleFormatBar = function () { if (window.formatToolbar) window.formatToolbar.togglePinned(); };
   function applyFontSize() {
@@ -829,7 +837,7 @@ var {
     const discardText = t('Discard','放弃');
     const dismissText = t('Dismiss','忽略');
     banner.innerHTML = '<span>' + msg + '</span>' +
-      '<a href="#" id="draftDiscard" style="color:#856404;font-weight:600;text-decoration:underline;">' + discardText + '</a>' +
+      '<a href="#" id="draftDiscard" style="color:#856404;font-weight:500;text-decoration:underline;">' + discardText + '</a>' +
       '<a href="#" id="draftDismiss" style="color:#856404;text-decoration:underline;">' + dismissText + '</a>';
     document.body.appendChild(banner);
     const discard = document.getElementById('draftDiscard');
@@ -903,7 +911,7 @@ var {
         // Normalize WebKit editing junk (empty trailing quote lines, quote
         // <div>s) before converting, so the source stays clean.
         const html = normalizeRenderedHtmlForTurndown(content.innerHTML);
-        textarea.value = turndownService ? turndownService.turndown(html) : html;
+        textarea.value = turndownService ? renderedToMarkdown(html, textarea.value) : html;
       }
       // Otherwise the textarea already holds the pristine markdown.
       syncHighlight();
@@ -1019,7 +1027,12 @@ var {
     if (!renderedDirty) return document.getElementById('textarea').value;
     const html = normalizeRenderedHtmlForTurndown(document.getElementById('content').innerHTML);
     if (!turndownService) throw new Error(t('Markdown converter is not ready. Please retry.', 'Markdown 转换器尚未就绪，请重试。'));
-    return turndownService.turndown(html);
+    return renderedToMarkdown(html, document.getElementById('textarea').value);
+  }
+  // The browser turns a space next to inline formatting into a non-breaking space while typing; keep it out of the Markdown unless the document already used them.
+  function renderedToMarkdown(html, original) {
+    const out = turndownService.turndown(html);
+    return /\u00a0|&nbsp;/.test(original || '') ? out : out.replace(/\u00a0/g, ' ');
   }
 
   function markSaved(markdown, snapshot = documentSession.snapshot(markdown)) {
@@ -1271,7 +1284,7 @@ var {
     if (cmd && e.key === '-') { e.preventDefault(); e.altKey?adjustPageWidth(-10):zoomOut(); }
     // Width: ⌘. / ⌘, (moved off ⌘= / ⌘- which are now Zoom).
     if (cmd && e.key === ',') { e.preventDefault(); openSettings(); }
-    if (cmd && e.key === 'e') { e.preventDefault(); toggleView(); }
+    if (shortcutMatches(e, appSettings.toggle_shortcut || 'cmd+e')) { e.preventDefault(); toggleView(); return; }
     if (cmd && e.key === 'f') { e.preventDefault(); openFindBar(); }
     if (cmd && e.key === 'g') { e.preventDefault(); e.shiftKey ? findPrev() : findNext(); }
     // Paste as Markdown: normally the native Edit menu item (Cmd+Shift+V)

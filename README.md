@@ -74,7 +74,7 @@ Select any `.md` file in Finder → **File → Get Info → Open with → mdPrev
 - Chinese typography done properly (language-aware fonts, spacing)
 
 ### Editing
-- Click into the rendered page and a slim formatting bar appears at the top — bold, headings, lists, links, tables (add/remove rows and columns) — so no Markdown syntax is needed. `Esc` returns to reading; *View → Always Show Formatting Bar* (`⌥⌘T`) pins it. Or switch to source (`⌘E`) with `⌘B` / `⌘I` / `⌘K`, list continuation and Tab indenting
+- Click into the rendered page and a slim word-processor-style bar appears at the top — text style, bold, italic, lists, task lists, links, quote, tables (add/remove rows and columns), undo and redo — so no Markdown syntax is needed. `Esc` returns to reading; *View → Always Show Formatting Bar* (`⌥⌘T`) pins it. Or switch to source (`⌘E`) with `⌘B` / `⌘I` / `⌘K`, list continuation and Tab indenting
 - **Paste as Markdown** (`⇧⌘V`): paste formatted text from web pages, docs and AI chats and get clean Markdown
 - Paste or drop images: they are saved next to the document in `assets/` and linked with relative paths
 - Drafts are autosaved; saving never overwrites changes you made while the disk write was pending

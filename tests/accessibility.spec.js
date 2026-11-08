@@ -30,7 +30,7 @@ for(const [state,prepare] of [
    await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),DOCUMENT);
    await page.click('#content p');
    await page.waitForSelector('.edit-bar:not([hidden])');
-   await page.click('.edit-bar button[data-kind="table"]');
+   await page.click('.edit-bar button[data-kind="insert"]');await page.click('.edit-menu button[data-kind="table"]');
    await page.waitForSelector('.edit-table-group:not([hidden])');}],
  ['源码视图',async page=>{await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),DOCUMENT);await page.evaluate(()=>toggleView());}],
 ]){

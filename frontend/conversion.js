@@ -6,9 +6,10 @@ window.MarkdownConversion = {
     } = deps;
     function _initTurndown() {
       if (state.turndownService || typeof deps.TurndownService === 'undefined') return;
-      state.turndownService = new deps.TurndownService({ headingStyle: 'atx', codeBlockStyle: 'fenced', bulletListMarker: '-', emDelimiter: '*', strongDelimiter: '**' });
+      state.turndownService = new deps.TurndownService({ headingStyle: 'atx', hr: '---', codeBlockStyle: 'fenced', bulletListMarker: '-', emDelimiter: '*', strongDelimiter: '**' });
       state.turndownService.remove(node=>node.matches?.('.code-copy-btn,.remote-image-bar,.fold-more'));
-      state.turndownService.addRule('taskToggle',{filter:node=>node.matches?.('.task-toggle'),replacement:(_,node)=>node.dataset.taskMarker||''});
+      state.turndownService.addRule('strike',{filter:['del','s','strike'],replacement:c=>'~~'+c+'~~'});
+      state.turndownService.addRule('taskToggle',{filter:node=>node.matches?.('.task-toggle,.task-marker'),replacement:(_,node)=>{const m=(node.dataset.taskMarker||'').trim();return m?m+' ':'';}});
       state.turndownService.addRule('frontmatter', {
         filter: function (node) {
           return node.classList && node.classList.contains('frontmatter');

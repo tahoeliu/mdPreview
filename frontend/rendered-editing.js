@@ -207,7 +207,12 @@ window.RenderedEditing = {
     function normalizeRenderedHtmlForTurndown(html) {
       try {
         const tmp = document.createElement('div');
-        tmp.innerHTML = sanitizeHtmlString(html);
+        // Task checkboxes are buttons, which the sanitizer removes: turn them into marker spans first so "- [x]" survives edits.
+        const pre = document.createElement('div'); pre.innerHTML = html;
+        pre.querySelectorAll('.task-toggle').forEach((box) => {
+          const mark = document.createElement('span'); mark.className = 'task-marker'; mark.textContent = 'x'; mark.setAttribute('data-task-marker', box.dataset.taskMarker || ''); box.replaceWith(mark);
+        });
+        tmp.innerHTML = sanitizeHtmlString(pre.innerHTML);
         tmp.querySelectorAll('blockquote').forEach((quote) => {
           // Nested quotes may already have been removed together with their
           // ancestor (forEach iterates a static snapshot) — guard each removal.

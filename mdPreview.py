@@ -1673,7 +1673,17 @@ class MarkdownAPI:
 
     def get_shortcuts(self):
         with open(get_resource_path('frontend/shortcuts.json'), encoding='utf-8') as stream:
-            return json.load(stream)
+            items = json.load(stream)
+        try:
+            parts = self.get_settings()['toggle_shortcut'].split('+')
+            names = {'cmd': 'command', 'alt': 'option', 'shift': 'shift', 'ctrl': 'control'}
+            for item in items:
+                if item.get('action') == 'toggleView:':
+                    item['key'] = parts[-1]
+                    item['modifiers'] = [names[x] for x in parts[:-1]]
+        except Exception:
+            pass
+        return items
 
     def get_example(self):
         with open(get_resource_path('frontend/welcome.json'), encoding='utf-8') as stream:
@@ -1707,6 +1717,12 @@ class MarkdownAPI:
             update_config({'settings': values})
             if 'appearance' in patch:
                 _apply_appearance(values['appearance'])
+            if 'toggle_shortcut' in patch:
+                try:
+                    from PyObjCTools import AppHelper
+                    AppHelper.callAfter(_apply_toggle_shortcut, values['toggle_shortcut'])
+                except Exception:
+                    pass
             return {'success': load_config().get('settings') == values, 'settings': values}
 
     def save_font_size(self, size):
@@ -2078,6 +2094,14 @@ class MarkdownAPI:
             return {'success': True}
         except Exception as e:
             return {'success': False, 'error': str(e)}
+
+    def share_document(self, x=None, y=None):
+        """Open the Share sheet next to the footer button that asked for it."""
+        if not HAS_COCOA:
+            return {'success': False}
+        from PyObjCTools import AppHelper
+        AppHelper.callAfter(_share_active_document, x, y)
+        return {'success': True}
 
     def set_as_default_for_md(self):
         """Register mdPreview as the default handler for .md/.markdown files."""
@@ -2977,6 +3001,13 @@ if HAS_COCOA:
                     toggle_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(
                         _t("Toggle Preview / Source", "切换预览 / 源码"), "toggleView:", "e")
                     toggle_item.setKeyEquivalentModifierMask_(1 << 20)  # Command
+                    global _toggle_menu_item
+                    _toggle_menu_item = toggle_item
+                    try:
+                        from mdpreview_core.settings import settings as _settings_of
+                        _apply_toggle_shortcut(_settings_of(load_config()).get('toggle_shortcut'))
+                    except Exception:
+                        pass
                     md_icon = _make_md_icon()
                     if md_icon is not None:
                         toggle_item.setImage_(md_icon)
@@ -3431,31 +3462,7 @@ if HAS_COCOA:
             _dispatch_js('adjustPageWidth(-40)')
 
         def shareDocument_(self, sender):
-            try:
-                from AppKit import NSSharingServicePicker
-                from Foundation import NSURL, NSMakeRect
-                from webview.platforms.cocoa import BrowserView
-                ref = _get_target_window()
-                api = _window_apis.get(id(ref)) if ref else None
-                browser = BrowserView.instances.get(ref.uid) if ref else None
-                if api is None or browser is None:
-                    return
-                path = api.file_path
-                if path and os.path.isfile(path) and not api.is_dirty:
-                    items = [NSURL.fileURLWithPath_(path)]
-                else:
-                    text = api.cached_content or ''
-                    if not text.strip():
-                        return
-                    items = [text]
-                picker = NSSharingServicePicker.alloc().initWithItems_(items)
-                view = browser.webview
-                bounds = view.bounds()
-                flipped = bool(view.isFlipped())
-                anchor = NSMakeRect(bounds.size.width - 44, 6 if flipped else bounds.size.height - 6, 1, 1)
-                picker.showRelativeToRect_ofView_preferredEdge_(anchor, view, 3 if flipped else 1)
-            except Exception:
-                log_exception('share failed')
+            _share_active_document()
 
         def setDefaultMarkdownApp_(self, sender):
             _set_default_markdown_app(announce=True)
@@ -4314,6 +4321,56 @@ def _manual_check_error():
         pass
 
 
+_toggle_menu_item = None
+
+
+def _apply_toggle_shortcut(spec):
+    """Give the View ▸ Toggle Preview / Source menu item the user's chosen shortcut (e.g. 'cmd+shift+e')."""
+    item = _toggle_menu_item
+    if item is None or not spec:
+        return
+    parts = spec.split('+')
+    masks = {'cmd': 1 << 20, 'shift': 1 << 17, 'ctrl': 1 << 18, 'alt': 1 << 19}
+    mask = 0
+    for name in parts[:-1]:
+        mask |= masks.get(name, 0)
+    item.setKeyEquivalent_(parts[-1])
+    item.setKeyEquivalentModifierMask_(mask)
+
+
+def _share_active_document(x=None, y=None):
+    """Open the system Share sheet for the front document (file if saved and unchanged, else its text)."""
+    try:
+        from AppKit import NSSharingServicePicker
+        from Foundation import NSURL, NSMakeRect
+        from webview.platforms.cocoa import BrowserView
+        ref = _get_target_window()
+        api = _window_apis.get(id(ref)) if ref else None
+        browser = BrowserView.instances.get(ref.uid) if ref else None
+        if api is None or browser is None:
+            return
+        path = api.file_path
+        if path and os.path.isfile(path) and not api.is_dirty:
+            items = [NSURL.fileURLWithPath_(path)]
+        else:
+            text = api.cached_content or ''
+            if not text.strip():
+                return
+            items = [text]
+        picker = NSSharingServicePicker.alloc().initWithItems_(items)
+        view = browser.webview
+        bounds = view.bounds()
+        flipped = bool(view.isFlipped())
+        if x is None or y is None:
+            ax, ay = bounds.size.width - 44, 6
+        else:
+            ax, ay = float(x), float(y)
+        anchor = NSMakeRect(ax, ay if flipped else bounds.size.height - ay, 1, 1)
+        picker.showRelativeToRect_ofView_preferredEdge_(anchor, view, 3 if flipped else 1)
+    except Exception:
+        log_exception('share failed')
+
+
 def _current_markdown_handler():
     try:
         try:
@@ -4350,16 +4407,26 @@ def _offer_default_handler():
     if load_config().get('default_handler_offered'):
         return
     update_config({'default_handler_offered': True})
-    if _current_markdown_handler() == 'tahoeliu.mdpreview':
+    current = (_current_markdown_handler() or '')
+    if current.lower() == 'tahoeliu.mdpreview':
+        return
+    if 'mdpreview' in current.lower():
+        # An earlier mdPreview build the user already chose: carry the choice over silently.
+        _set_default_markdown_app()
         return
     def ask():
         try:
             from AppKit import NSAlert, NSAlertFirstButtonReturn
             alert = NSAlert.alloc().init()
             alert.setMessageText_(_t('Open Markdown files with mdPreview?', '用 mdPreview 打开 Markdown 文件？'))
-            alert.setInformativeText_(_t('Double-click any .md file to read it here. You can change this any time in Finder (Get Info → Open with), or from the mdPreview menu.', '双击任意 .md 文件就会在这里阅读。你可以随时在访达（显示简介 → 打开方式）或 mdPreview 菜单里更改。'))
             alert.addButtonWithTitle_(_t('Use mdPreview', '使用 mdPreview'))
             alert.addButtonWithTitle_(_t('Not Now', '暂不'))
+            try:
+                from AppKit import NSApp
+                NSApp.activateIgnoringOtherApps_(True)  # an inactive app draws the main button grey
+                alert.buttons()[0].setKeyEquivalent_('\r')
+            except Exception:
+                pass
             if alert.runModal() == NSAlertFirstButtonReturn:
                 _set_default_markdown_app(announce=True)
         except Exception:

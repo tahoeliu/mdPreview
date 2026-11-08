@@ -5,7 +5,7 @@ body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","PingFa
 a{color:var(--accent)}.wrap{max-width:1040px;margin:0 auto;padding:0 24px}.narrow{max-width:720px}
 nav.top{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
 nav.top .wrap{display:flex;align-items:center;justify-content:space-between;height:58px}
-.brand{font-weight:700;font-size:17px;letter-spacing:-.01em;color:var(--ink);text-decoration:none}
+.brand{font-weight:600;font-size:17px;letter-spacing:-.01em;color:var(--ink);text-decoration:none}
 nav.top .links{display:flex;gap:22px;align-items:center;font-size:14px}nav.top a{color:var(--muted);text-decoration:none}nav.top a:hover{color:var(--ink)}
 .hero{padding:84px 0 40px;text-align:center}
 .hero h1{font-size:clamp(36px,6vw,64px);line-height:1.08;margin:0 0 18px;letter-spacing:-.03em}

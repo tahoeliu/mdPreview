@@ -97,7 +97,8 @@ test('pinned bar stays; table can be inserted, grown and shrunk from the bar',as
   await page.evaluate(()=>toggleFormatBar());
   await expect(page.locator('.edit-bar')).toBeVisible();
   await page.click('#content p');
-  await page.click('.edit-bar button[data-kind="table"]');
+  await page.click('.edit-bar button[data-kind="insert"]');
+  await page.click('.edit-menu button[data-kind="table"]');
   await expect(page.locator('#content table')).toHaveCount(1);
   await expect(page.locator('.edit-bar button[data-kind="addrow"]')).toBeVisible();
   await page.click('.edit-bar button[data-kind="addrow"]');

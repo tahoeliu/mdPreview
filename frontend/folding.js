@@ -44,8 +44,8 @@ window.Folding = (() => {
         button.setAttribute('aria-expanded', String(!isFolded));
         button.setAttribute('aria-label', (isFolded ? t('Expand section: {title}', '展开本节：{title}') : t('Collapse section: {title}', '收起本节：{title}')).replace('{title}', h.textContent.trim()));
         button.title = isFolded ? t('Expand section', '展开本节') : t('Collapse section', '收起本节');
-        button.style.top = (rect.top - pr.top + (Math.min(line, rect.height) - 20) / 2) + 'px';
-        button.style.left = (cr.left - pr.left - 26) + 'px';
+        button.style.top = (rect.top - pr.top + (Math.min(line, rect.height) - 16) / 2) + 'px';
+        button.style.left = (cr.left - pr.left - 20) + 'px';
         button.addEventListener('click', () => toggle(h));
         host.append(button);
       }

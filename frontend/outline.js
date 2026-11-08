@@ -45,10 +45,14 @@ window.DocumentOutline = {
       if (!page) return;
 
       if (!document.body.classList.contains('has-toc')) {
-        page.style.removeProperty('--toc-aware-page-left');
-        page.style.removeProperty('--toc-aware-page-width');
+        // Keep an explicit pixel position (centred) so showing / hiding the outline can glide instead of jumping.
+        const pw = Math.min(getPageWidth(), window.innerWidth);
+        page.style.setProperty('--toc-aware-page-left', Math.max(0, Math.round((window.innerWidth - pw) / 2)) + 'px');
+        page.style.setProperty('--toc-aware-page-width', Math.round(pw) + 'px');
+        document.body.classList.add('page-measured');
         return;
       }
+      document.body.classList.add('page-measured');
 
       const tw = tocWidthNow();
       const windowWidth = window.innerWidth;
@@ -76,6 +80,12 @@ window.DocumentOutline = {
       const toc = document.getElementById('tocSidebar');
       const show = !!visible && state.tocHasContent;
       toc.classList.toggle('hidden', !show);
+      const changed = document.body.classList.contains('has-toc') !== show;
+      if (changed) {
+        document.body.classList.add('toc-animating');
+        clearTimeout(setTocVisible.timer);
+        setTocVisible.timer = setTimeout(() => document.body.classList.remove('toc-animating'), 420);
+      }
       document.body.classList.toggle('has-toc', show);
       syncTocToggle(!show);
       updateTocAwarePageLayout();
@@ -100,6 +110,67 @@ window.DocumentOutline = {
       if (!state.isSource) scheduleScrollSpy();
     }
 
+
+    // ── 字数统计：目录最底部，随目录一起收起 / 展开 ──
+    const COUNT_MODES = ['words', 'chars', 'charsWithSpaces'];
+    function countMode() { try { const v = localStorage.getItem('mdp-count-mode'); return COUNT_MODES.includes(v) ? v : 'words'; } catch (e) { return 'words'; } }
+    function countText(root) {
+      const clone = root.cloneNode(true);
+      clone.querySelectorAll('.code-copy-btn, .fold-more, .fold-toggle, .task-toggle, .read-end, style, script').forEach(el => el.remove());
+      return (clone.textContent || '').replace(/ /g, ' ');
+    }
+    function countAll(text) {
+      const noBreaks = text.replace(/[\r\n]+/g, '');
+      const cjk = (text.match(/[㐀-鿿豈-﫿぀-ヿ가-힯]/gu) || []).length;
+      const latin = (text.replace(/[㐀-鿿豈-﫿぀-ヿ가-힯]/gu, ' ').match(/[\p{L}\p{N}]+(?:['’\-][\p{L}\p{N}]+)*/gu) || []).length;
+      return { words: cjk + latin, chars: noBreaks.replace(/\s/g, '').length, charsWithSpaces: noBreaks.length };
+    }
+    function formatCount(mode, n) {
+      const number = n.toLocaleString(document.documentElement.lang || undefined);
+      if (mode === 'words') return t('{n} words', '{n} 个字').replace('{n}', number);
+      return t('{n} characters', '{n} 个字符').replace('{n}', number);
+    }
+    let countMenu = null;
+    function closeCountMenu() { if (countMenu) { countMenu.remove(); countMenu = null; } }
+    function refreshCount() {
+      const footer = document.querySelector('#tocSidebar .toc-count');
+      if (!footer) return;
+      const content = document.getElementById('content');
+      if (!content) return;
+      const totals = countAll(countText(content));
+      footer.dataset.totals = JSON.stringify(totals);
+      const mode = countMode();
+      footer.querySelector('.toc-count-label').textContent = formatCount(mode, totals[mode]);
+    }
+    function addCountFooter(toc) {
+      const footer = document.createElement('div'); footer.className = 'toc-count';
+      const button = document.createElement('button'); button.type = 'button'; button.setAttribute('aria-haspopup', 'menu');
+      button.innerHTML = '<span class="toc-count-label"></span><svg viewBox="0 0 10 6" width="8" height="5" aria-hidden="true"><path d="m1 1 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+      button.addEventListener('click', () => {
+        if (countMenu) { closeCountMenu(); return; }
+        const totals = JSON.parse(footer.dataset.totals || '{}'), current = countMode();
+        const names = { words: t('Words', '字数'), chars: t('Characters (no spaces)', '字符数（不计空格）'), charsWithSpaces: t('Characters (with spaces)', '字符数（计空格）') };
+        countMenu = document.createElement('div'); countMenu.className = 'count-menu'; countMenu.setAttribute('role', 'menu');
+        for (const mode of COUNT_MODES) {
+          const item = document.createElement('button'); item.type = 'button'; item.setAttribute('role', 'menuitemradio'); item.setAttribute('aria-checked', String(mode === current));
+          item.innerHTML = '<span class="count-check">' + (mode === current ? '✓' : '') + '</span><span class="count-name"></span><span class="count-num"></span>';
+          item.querySelector('.count-name').textContent = names[mode]; item.querySelector('.count-num').textContent = (totals[mode] || 0).toLocaleString();
+          item.addEventListener('click', () => { try { localStorage.setItem('mdp-count-mode', mode); } catch (e) {} closeCountMenu(); refreshCount(); });
+          countMenu.append(item);
+        }
+        document.body.append(countMenu);
+        const box = button.getBoundingClientRect();
+        countMenu.style.left = Math.max(8, box.left) + 'px';
+        countMenu.style.bottom = (innerHeight - box.top + 6) + 'px';
+      });
+      footer.append(button); toc.append(footer);
+      refreshCount();
+    }
+    document.addEventListener('mousedown', (e) => { if (countMenu && !countMenu.contains(e.target) && !e.target.closest('.toc-count')) closeCountMenu(); }, true);
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCountMenu(); }, true);
+    let countTimer = 0;
+    document.addEventListener('input', (e) => { if (e.target && e.target.id === 'content') { clearTimeout(countTimer); countTimer = setTimeout(refreshCount, 500); } });
+
     function buildToc(container) {
       const toc = document.getElementById('tocSidebar');
       const toggle = document.getElementById('tocToggle');
@@ -116,6 +187,7 @@ window.DocumentOutline = {
         const relativeIndent = Math.max(0, visibleHeadingLevels.indexOf(level)) * 12;
         return `<li><a class="toc-level-${level}" style="padding-left: ${relativeIndent}px;" href="#${encodeURIComponent(h.id)}" data-target="${escHtml(h.id)}" title="${escHtml(h.textContent)}">${escHtml(h.textContent)}</a></li>`;
       }).join('') + '</ul>';
+      if (state.tocHasContent) addCountFooter(toc, container);
       applyTocVisibility();
       setupScrollSpy(headings);
       // Re-sync the highlight once layout settles (e.g. after mermaid reflow).
@@ -167,7 +239,7 @@ window.DocumentOutline = {
     // the explicitly-clicked target expires and the spy takes over again.
     function scheduleTocSync() {
       const wrap = document.querySelector('.scroll-wrap');
-      if (explicitTocTarget && wrap && Math.abs(wrap.scrollTop - lastProgrammaticScrollTop) > 2) {
+      if (explicitTocTarget && wrap && Date.now() > smoothUntil && Math.abs(wrap.scrollTop - lastProgrammaticScrollTop) > 2) {
         explicitTocTarget = null;
       }
       if (state.isSource) scheduleSourceTocHighlight();
@@ -240,7 +312,7 @@ window.DocumentOutline = {
       // scrollIntoView leaves the final geometry up to the engine).
       if (window.Folding) Folding.reveal(target);
       markExplicitTocTarget(id);
-      scrollToTocTarget(id);
+      scrollToTocTarget(id, true);
       // Reflect the jump in the URL; harmless if the engine refuses on file://.
       try {
         if (history && history.replaceState) history.replaceState(null, '', '#' + encodeURIComponent(target.id));
@@ -397,7 +469,8 @@ window.DocumentOutline = {
       lastProgrammaticScrollTop = wrap.scrollTop;
     }
 
-    function scrollToTocTarget(headingId) {
+    let smoothUntil = 0;
+    function scrollToTocTarget(headingId, smooth) {
       if (!headingId) return;
       const target = document.getElementById(headingId);
       if (!target) return;
@@ -406,8 +479,16 @@ window.DocumentOutline = {
         // Scroll the wrap directly so the heading lands near the top — more
         // reliable than scrollIntoView inside the embedded WebView.
         const top = target.getBoundingClientRect().top - wrap.getBoundingClientRect().top + wrap.scrollTop - 20;
-        wrap.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
-        lastProgrammaticScrollTop = wrap.scrollTop;
+        const calm = smooth && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+        if (calm) {
+          const goal = Math.max(0, Math.min(top, wrap.scrollHeight - wrap.clientHeight));
+          smoothUntil = Date.now() + 1200;                  // glide to the heading instead of jumping
+          wrap.scrollTo({ top: goal, behavior: 'smooth' });
+          lastProgrammaticScrollTop = goal;
+        } else {
+          wrap.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+          lastProgrammaticScrollTop = wrap.scrollTop;
+        }
       } else {
         target.scrollIntoView({ behavior: 'auto', block: 'start' });
       }

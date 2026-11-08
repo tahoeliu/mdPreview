@@ -35,6 +35,11 @@ A rebuild of everything that happens when you *share* a document, plus a more re
 - **One-line installer** (`scripts/get.sh`), per-architecture ZIP releases (arm64 and x86_64), a Homebrew tap template, and an experimental Quick Look extension (opt-in, see `quicklook/`).
 - Release signing: every release carries `SHA256SUMS` signed with a pinned ECDSA key; the updater and installer verify it.
 
+- **A calmer top bar, modelled on a word processor:** a full-width strip with light line icons — Insert (table, divider), undo / redo, clear formatting, text style (body / title / heading / subheading), bold, italic, strikethrough, code, bulleted / numbered / task lists, indent, link, quote. Only what Markdown can express is offered (no fonts, sizes, colours or alignment). Table edits and every other change now undo and redo with ⌘Z / ⇧⌘Z.
+- **A quiet end of page:** instead of a read-time line, every document ends with the mdPreview mark and three small actions — copy as rich text, copy as Markdown, Share.
+- **Your own Preview / Source shortcut:** the first row of Settings; click it and press the combination you want (⌘E by default).
+- Section arrows are smaller, lighter and sit right beside the heading; the divider line the preview used to draw above second-level headings is gone, so the page shows exactly what the Markdown says.
+
 ### Changed
 - HTML export is a single self-contained file sharing the app's document styles (correct `lang`, cross-platform font stack, dark mode, optional outline). PNG export uses a native snapshot and is always light. "Plain text" export is now real plain text; "Markdown source" is a separate format.
 - Remote images are no longer loaded automatically (a bar offers *Load* / *Always load*). A strict Content-Security-Policy is enforced and inline event handlers are gone.
@@ -43,6 +48,7 @@ A rebuild of everything that happens when you *share* a document, plus a more re
 - Tests, fixtures and CI now live in the repository (`tests/`, `.github/`).
 
 ### Fixed
+- Editing a page with task lists no longer drops the `[x]` / `[ ]` markers; strikethrough typed in the preview is saved as `~~text~~`; a space next to bold text no longer turns into a non-breaking space in the Markdown; dividers are saved as `---`.
 - A heading titled "Mermaid" no longer stops every diagram from rendering (heading ids could shadow the lazily loaded library).
 - Settings no longer clips its title and Save/Close buttons in short windows; option values are localized.
 - Menus: duplicate Full Screen and tab items removed, Undo/Redo added; the unsaved-changes prompt says "Don't Save" for existing files; Replace buttons no longer show in preview mode.
