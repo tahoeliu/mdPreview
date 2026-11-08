@@ -363,5 +363,6 @@
   "Table size": "Taille du tableau",
   "Export…": "Exporter…",
   "link text": "texte du lien",
-  "Decrease indent": "Réduire le retrait"
+  "Decrease indent": "Réduire le retrait",
+  "Paragraph spacing is automatic — no need for extra blank lines.": "L’espacement entre paragraphes est automatique : inutile d’ajouter des lignes vides."
 }

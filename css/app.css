@@ -369,3 +369,12 @@ body.has-edit-bar .toc-toggle { top: calc(52px + var(--titlebar-h, 0px)); }
 .edit-bar { top: var(--titlebar-h, 0px); }
 .find-bar { top: var(--titlebar-h, 0px); }
 .read-progress { top: var(--titlebar-h, 0px); }
+
+/* 页尾：名称两侧各一条很淡的细线，明确"文章到此结束" */
+.read-end { margin-top: 88px; }
+.read-end-mark { flex-direction: row; align-items: center; gap: 16px; }
+.read-end-mark::before, .read-end-mark::after { content: ""; width: 64px; height: 1px; background: rgba(128,128,128,.28); flex: none; }
+
+/* 字数统计：文字距窗口左边与下边同为 16，视觉对等 */
+.toc-count { padding: 10px 16px 16px; }
+.toc-count button { padding: 0; margin-left: 0; line-height: 1.4; }

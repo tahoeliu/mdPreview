@@ -339,3 +339,21 @@ test('source mode shows the top bar by default and its buttons edit the Markdown
   await page.keyboard.press('Meta+e');
   await expect(sbar).toBeHidden();
 });
+test('a single line break inside a paragraph survives editing, and Enter on an empty paragraph adds nothing',async({page})=>{
+  await load(page,'Line one\nLine two\n\nPara');
+  await page.locator('#content p',{hasText:'Line one'}).click();
+  await page.keyboard.press('End');
+  await page.keyboard.type('!');
+  const out=await page.evaluate(md);
+  expect(out).toMatch(/Line one\s*\n\s*Line two!?|Line one\s*\nLine two/);
+  expect(out).not.toContain('Line oneLine');
+  await page.locator('#content p',{hasText:'Para'}).click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Enter');
+  const empties=await page.evaluate(()=>[...document.querySelectorAll('#content > p')].filter(p=>!p.textContent.trim()).length);
+  expect(empties).toBeLessThanOrEqual(1);
+  await page.keyboard.type('Next');
+  expect(await page.evaluate(md)).toMatch(/Para\n\nNext/);
+});

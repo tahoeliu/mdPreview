@@ -363,5 +363,6 @@
   "Table size": "表のサイズ",
   "Export…": "書き出し…",
   "link text": "リンクテキスト",
-  "Decrease indent": "インデントを減らす"
+  "Decrease indent": "インデントを減らす",
+  "Paragraph spacing is automatic — no need for extra blank lines.": "段落の間隔は自動で調整されます。空行を重ねる必要はありません。"
 }

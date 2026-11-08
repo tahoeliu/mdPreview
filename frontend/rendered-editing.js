@@ -154,6 +154,14 @@ window.RenderedEditing = {
       const startEl = startNode.nodeType === Node.ELEMENT_NODE ? startNode : startNode.parentElement;
       if (!startEl) return;
       if (startEl.closest('pre, code, table, .mermaid-diagram, .math-block, .frontmatter')) return;
+      // An empty paragraph cannot be saved in Markdown (spacing between paragraphs is automatic), so Enter on one does nothing
+      // instead of piling up blank lines that would vanish the next time the document is opened.
+      const here = startEl.closest('p');
+      if (here && here.parentElement === content && !here.textContent.trim() && !here.querySelector('img') && !e.shiftKey) {
+        e.preventDefault();
+        if (!handleRenderedEnter.told) { handleRenderedEnter.told = true; try { showStatus(t('Paragraph spacing is automatic — no need for extra blank lines.', '段落之间的间距是自动的，不需要多按回车。')); } catch (x) {} }
+        return;
+      }
       const quote = startEl.closest('blockquote');
       if (!quote || !content.contains(quote)) return;
       // The line block the caret sits in (innermost block inside the quote).
@@ -256,9 +264,9 @@ window.RenderedEditing = {
         tmp.querySelectorAll('p, div').forEach((line) => {
           if (!line.parentNode) return;
           if (line.closest('.table-wrap, .mermaid-diagram, .math-block, .frontmatter')) return;
-          while (line.lastElementChild && line.lastElementChild.tagName === 'BR') {
-            line.removeChild(line.lastElementChild);
-          }
+          // Only a <br> that is the very last thing in the block (nothing but whitespace after it) is junk; a <br> between two lines is a real line break.
+          const tailJunk = (node) => node && ((node.nodeType === 3 && !node.textContent.trim()) || (node.nodeType === 1 && node.tagName === 'BR'));
+          while (tailJunk(line.lastChild)) line.removeChild(line.lastChild);
         });
         // Paragraph-like <div>s inside a blockquote are inline content for
         // turndown, which merges quote lines together; they become <p> first.

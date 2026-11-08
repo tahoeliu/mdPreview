@@ -363,5 +363,6 @@
   "Table size": "Tamaño de la tabla",
   "Export…": "Exportar…",
   "link text": "texto del enlace",
-  "Decrease indent": "Reducir sangría"
+  "Decrease indent": "Reducir sangría",
+  "Paragraph spacing is automatic — no need for extra blank lines.": "El espacio entre párrafos es automático: no hace falta añadir líneas en blanco."
 }

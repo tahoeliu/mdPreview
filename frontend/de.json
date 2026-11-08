@@ -363,5 +363,6 @@
   "Table size": "Tabellengröße",
   "Export…": "Exportieren …",
   "link text": "Linktext",
-  "Decrease indent": "Einzug verkleinern"
+  "Decrease indent": "Einzug verkleinern",
+  "Paragraph spacing is automatic — no need for extra blank lines.": "Der Absatzabstand ergibt sich automatisch – zusätzliche Leerzeilen sind nicht nötig."
 }

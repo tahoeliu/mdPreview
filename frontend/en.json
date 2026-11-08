@@ -286,6 +286,7 @@
   "Load": "Load",
   "Always load": "Always load",
   "Load remote images for output? The remote server will learn about this visit.": "Load remote images for output? The remote server will learn about this visit.",
+  "Paragraph spacing is automatic — no need for extra blank lines.": "Paragraph spacing is automatic — no need for extra blank lines.",
   "Collapse": "Collapse",
   "Expand": "Expand",
   "Do you want to save the changes you made to {name}?": "Do you want to save the changes you made to {name}?",

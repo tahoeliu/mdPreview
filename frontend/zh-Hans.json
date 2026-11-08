@@ -286,6 +286,7 @@
   "Load": "加载",
   "Always load": "总是加载",
   "Load remote images for output? The remote server will learn about this visit.": "输出包含未加载的远程图片。是否加载？对方服务器将获知此次访问。",
+  "Paragraph spacing is automatic — no need for extra blank lines.": "段落之间的间距是自动的，不需要多按回车。",
   "Collapse": "折叠",
   "Expand": "展开",
   "Do you want to save the changes you made to {name}?": "是否保存对 {name} 所做的更改？",
