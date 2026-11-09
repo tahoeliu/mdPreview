@@ -385,3 +385,8 @@ body.has-edit-bar .toc-toggle { top: calc(52px + var(--titlebar-h, 0px)); }
 
 .read-end { color: #74747a; }
 @media (prefers-color-scheme: dark) { .read-end { color: #98989d; } }
+
+/* 页尾下方不留大片空白 */
+.page { padding-bottom: 40px; }
+.page.full-width { padding-bottom: 40px; }
+.read-end { margin-bottom: 0; }
