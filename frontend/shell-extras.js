@@ -41,3 +41,11 @@ document.addEventListener('visibilitychange', resample);
 // the page does not always get a blur event when another app takes focus, so keep the colour in step with the real title bar
 setInterval(() => { if (!document.hidden) applyChromeColor(); }, 1200);
 document.addEventListener('DOMContentLoaded', () => { setTimeout(applyChromeColor, 300); setTimeout(applyChromeColor, 1500); });
+
+// Grabbing an empty spot on the top bars moves the window, like a title bar.
+document.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  const bar = e.target.closest && e.target.closest('.edit-bar');
+  if (!bar || e.target.closest('button, input, a, [role="menuitem"]')) return;
+  try { Bridge.callSafe('begin_window_drag'); } catch (x) {}
+}, true);

@@ -157,6 +157,65 @@ def _t(en, zh):
 
 
 _TITLEBAR_STATE = {'overlay': False, 'height': 0}
+_DRAG_STRIP_CLASS = []
+
+
+def _drag_strip_class():
+    """A transparent view that lets the window be dragged by the title bar area even though the page extends under it."""
+    if _DRAG_STRIP_CLASS:
+        return _DRAG_STRIP_CLASS[0]
+    from AppKit import NSView
+
+    class MdpTitlebarDragView(NSView):
+        def mouseDownCanMoveWindow(self):
+            return True
+
+        def acceptsFirstMouse_(self, event):
+            return True
+
+        def mouseDown_(self, event):
+            try:
+                if event.clickCount() == 2:
+                    self.window().performZoom_(None)      # double-click the title bar: zoom, as in any Mac app
+                else:
+                    self.window().performWindowDragWithEvent_(event)
+            except Exception:
+                pass
+
+    _DRAG_STRIP_CLASS.append(MdpTitlebarDragView)
+    return MdpTitlebarDragView
+
+
+def _ensure_drag_strip(win, height):
+    from AppKit import NSMakeRect
+    frame = win.contentView().superview()
+    strip = getattr(win, '_mdp_drag_strip', None)
+    width = frame.frame().size.width
+    top = frame.frame().size.height
+    left = 76.0                                              # leave the traffic lights alone
+    if strip is None or strip.superview() is None:
+        strip = _drag_strip_class().alloc().initWithFrame_(NSMakeRect(left, top - height, max(0.0, width - left), height))
+        strip.setAutoresizingMask_(2 | 8)                    # width-sizable, pinned to the top
+        frame.addSubview_(strip)
+        try:
+            win._mdp_drag_strip = strip
+        except Exception:
+            pass
+    strip.setFrame_(NSMakeRect(left, top - height, max(0.0, width - left), height))
+
+
+def _begin_window_drag():
+    """Main thread: start dragging the front window (used when the page's own top bar is grabbed)."""
+    try:
+        from AppKit import NSApplication
+        from webview.platforms.cocoa import BrowserView
+        ref = _get_target_window()
+        browser = BrowserView.instances.get(ref.uid) if ref else None
+        event = NSApplication.sharedApplication().currentEvent()
+        if browser is not None and event is not None:
+            browser.window.performWindowDragWithEvent_(event)
+    except Exception:
+        log_exception('window drag failed')
 
 
 def _blend_titlebar(window):
@@ -180,6 +239,7 @@ def _blend_titlebar(window):
                     if sub.className() == '_NSTitlebarDecorationView':
                         sub.setHidden_(True)
         _TITLEBAR_STATE['overlay'] = True
+        _ensure_drag_strip(win, max(1.0, win.frame().size.height - win.contentLayoutRect().size.height))
         _TITLEBAR_STATE['height'] = round(max(0.0, win.frame().size.height - win.contentLayoutRect().size.height))
     except Exception:
         log_exception('title bar blend failed')
@@ -2139,6 +2199,14 @@ class MarkdownAPI:
         except Exception:
             pass
         return {'overlay': bool(_TITLEBAR_STATE['overlay']), 'height': _TITLEBAR_STATE['height']}
+
+    def begin_window_drag(self):
+        """The page's top bar was grabbed on an empty spot: move the window."""
+        if not HAS_COCOA:
+            return {'success': False}
+        from PyObjCTools import AppHelper
+        AppHelper.callAfter(_begin_window_drag)
+        return {'success': True}
 
     def share_document(self, x=None, y=None):
         """Open the Share sheet next to the footer button that asked for it."""
