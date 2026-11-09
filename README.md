@@ -1,22 +1,22 @@
 <div align="center">
 
-<img src="docs/images/icon-256.webp" alt="mdPreview app icon" width="112" height="112">
+<img src="docs/images/icon-256.webp" alt="mdPreview app icon" width="72" height="72">
 
 # mdPreview
 
 ### A minimal, local Markdown viewer and editor for Mac.
-**Double-click a `.md` file. Read it as a clean page. Edit it like Word. Share it as PDF, Word or a web page.** Nothing to set up, and your files never leave your Mac.
 
-**[Download for Mac](https://github.com/tahoeliu/mdPreview/releases/latest)** · [Website](https://tahoeliu.github.io/mdPreview/) · [Install](#install) · [FAQ](#frequently-asked-questions) · [简体中文](README.zh-CN.md)
+<p>
+  <a href="https://tahoeliu.github.io/mdPreview/">
+    <img src="docs/images/visit-website.svg" alt="Visit the official mdPreview website" width="300" height="52">
+  </a>
+</p>
 
-<br>
+See it in action · Explore features · Choose how to install
 
-<a href="https://tahoeliu.github.io/mdPreview/">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-reading-dark.webp">
-  <img src="docs/images/hero-reading.webp" alt="The mdPreview window on a Mac: a long Markdown document shown as a clean page, with a section outline on the left, a tip box and a table" width="860">
-</picture>
-</a>
+[Download for Mac](https://github.com/tahoeliu/mdPreview/releases/latest) · [Install](#install) · [FAQ](#frequently-asked-questions) · [简体中文](README.zh-CN.md)
+
+<sub>Official website: <a href="https://tahoeliu.github.io/mdPreview/">tahoeliu.github.io/mdPreview</a></sub>
 
 </div>
 
@@ -25,6 +25,23 @@
 ## Why people use mdPreview
 
 You have a `.md` file. Maybe it is an answer from ChatGPT or Claude, a note, a README or a report. Out of the box your Mac shows it as a wall of `#`, `**` and `|` symbols. **mdPreview turns it into a page you actually want to read.**
+
+### Same file. Less clutter.
+
+A development workspace on the left; a focused reading window on the right.
+
+<p align="center">
+<a href="https://tahoeliu.github.io/mdPreview/">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme-comparison-dark.webp">
+  <img src="docs/images/readme-comparison.webp" alt="The same Markdown report in two layouts: a generic editor with tabs, source code, an AI chat and a terminal on the left; mdPreview with a document outline and formatted text on the right" width="1096">
+</picture>
+</a>
+</p>
+
+<sub>Illustration from the official website. The left-hand editor is a generic example, not a specific product; its source excerpt is simplified. <a href="https://tahoeliu.github.io/mdPreview/">See the full demo →</a></sub>
+
+Double-click a `.md` file, edit it like Word, and share it as PDF, Word or a web page. Nothing to set up; your documents stay on your Mac.
 
 |  |  |
 |---|---|
@@ -48,6 +65,15 @@ You have a `.md` file. Maybe it is an answer from ChatGPT or Claude, a note, a R
 ### Read: a quiet page with an outline
 
 Long answers get a clickable outline, section folding, your choice of reading font, light or dark appearance, and a gentle progress hint. mdPreview remembers where you stopped and refreshes when the file changes.
+
+<p align="center">
+<a href="https://tahoeliu.github.io/mdPreview/">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-reading-dark.webp">
+  <img src="docs/images/hero-reading.webp" alt="The mdPreview window on a Mac: a long Markdown document shown as a clean page, with a section outline on the left, a tip box and a table" width="860">
+</picture>
+</a>
+</p>
 
 ### Jump: `⌘J` finds any heading in seconds
 

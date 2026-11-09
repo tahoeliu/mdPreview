@@ -1,22 +1,22 @@
 <div align="center">
 
-<img src="docs/images/icon-256.webp" alt="mdPreview 应用图标" width="112" height="112">
+<img src="docs/images/icon-256.webp" alt="mdPreview 应用图标" width="72" height="72">
 
 # mdPreview
 
 ### Mac 上极简、纯本地的 Markdown 阅读与编辑工具
-**双击 `.md` 文件，就是一页干净易读的文档。像 Word 一样直接修改，一键分享为 PDF、Word 或网页。** 无需设置，文件始终留在你的 Mac 上。
 
-**[下载 Mac 版](https://github.com/tahoeliu/mdPreview/releases/latest)** · [官网](https://tahoeliu.github.io/mdPreview/zh.html) · [安装](#安装) · [常见问题](#常见问题) · [English](README.md)
+<p>
+  <a href="https://tahoeliu.github.io/mdPreview/">
+    <img src="docs/images/visit-website-zh.svg" alt="访问 mdPreview 官网" width="300" height="52">
+  </a>
+</p>
 
-<br>
+看使用演示、了解功能，选择适合你的安装方式
 
-<a href="https://tahoeliu.github.io/mdPreview/zh.html">
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-reading-zh-dark.webp">
-  <img src="docs/images/hero-reading-zh.webp" alt="Mac 上的 mdPreview 窗口：左侧是文档大纲，右侧是排版好的长文档，含提示框和表格" width="860">
-</picture>
-</a>
+[下载 Mac 版](https://github.com/tahoeliu/mdPreview/releases/latest) · [安装](#安装) · [常见问题](#常见问题) · [English](README.md)
+
+<sub>官网：<a href="https://tahoeliu.github.io/mdPreview/">tahoeliu.github.io/mdPreview</a></sub>
 
 </div>
 
@@ -25,6 +25,23 @@
 ## 为什么用 mdPreview
 
 你手里有一个 `.md` 文件：可能是 ChatGPT 或 Claude 的回答、一份笔记、一份报告。Mac 默认只会把它显示成满屏的 `#`、`**` 和 `|`。**mdPreview 把它变成一页你愿意读的文档。**
+
+### 同一份文件，少一点干扰
+
+左边是开发工作区，右边是专注阅读的文档窗口。
+
+<p align="center">
+<a href="https://tahoeliu.github.io/mdPreview/">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme-comparison-zh-dark.webp">
+  <img src="docs/images/readme-comparison-zh.webp" alt="同一份 Markdown 报告的对比：左侧通用编辑器包含标签、源码、AI 对话和终端，右侧 mdPreview 显示文档大纲和排版好的正文" width="1096">
+</picture>
+</a>
+</p>
+
+<sub>示意图取自官网。左侧为通用编辑器界面，不代表任何具体软件；其中的源码片段经过简化。<a href="https://tahoeliu.github.io/mdPreview/">到官网看完整演示 →</a></sub>
+
+双击 `.md` 文件，像 Word 一样直接修改，再分享为 PDF、Word 或网页。无需设置，文档始终留在你的 Mac 上。
 
 |  |  |
 |---|---|
@@ -48,6 +65,15 @@
 ### 阅读：安静的页面，清晰的大纲
 
 长回答也有可点击的大纲、章节折叠、可选的阅读字体、浅色或深色外观，以及轻柔的进度提示。mdPreview 会记住你读到哪里，文件被修改时自动刷新。
+
+<p align="center">
+<a href="https://tahoeliu.github.io/mdPreview/zh.html">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-reading-zh-dark.webp">
+  <img src="docs/images/hero-reading-zh.webp" alt="Mac 上的 mdPreview 窗口：左侧是文档大纲，右侧是排版好的长文档，含提示框和表格" width="860">
+</picture>
+</a>
+</p>
 
 ### 跳转：`⌘J` 秒到任意标题
 

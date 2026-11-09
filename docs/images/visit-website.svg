@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="300" height="52" viewBox="0 0 300 52" role="img" aria-labelledby="title desc">
+  <title id="title">Visit the official website</title>
+  <desc id="desc">See mdPreview in action, explore its features and choose how to install.</desc>
+  <rect x="0.75" y="0.75" width="298.5" height="50.5" rx="10" fill="#e6f1fb" stroke="#185fa5" stroke-width="1.5"/>
+  <text x="135" y="32" text-anchor="middle" fill="#0c447c" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif" font-size="16" font-weight="600">Visit the official website</text>
+  <path d="M259 32l12-12m-10 0h10v10" fill="none" stroke="#0c447c" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
