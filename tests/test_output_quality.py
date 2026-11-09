@@ -38,11 +38,13 @@ class OutputBaselineTests(unittest.TestCase):
         cls.out = Path(tempfile.mkdtemp(prefix='baseline-', dir=out))
 
     def probe(self, name, *args):
-        command = [sys.executable, '-I', '-B', str(ROOT / 'scripts/output_probe.py'),
-                   '--out', str(self.out / f'{name}.pdf'), '--json', *map(str, args)]
         # A shared CI runner now and then hands back a page that has not been laid out yet; retry that
         # transient case. A genuine regression fails every attempt.
         for attempt in range(3):
+            # The probe refuses to overwrite earlier evidence, so every retry writes a new file.
+            target = self.out / (f'{name}.pdf' if attempt == 0 else f'{name}.retry{attempt}.pdf')
+            command = [sys.executable, '-I', '-B', str(ROOT / 'scripts/output_probe.py'),
+                       '--out', str(target), '--json', *map(str, args)]
             result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
                                     env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'), timeout=60)
             if result.returncode == 0:
