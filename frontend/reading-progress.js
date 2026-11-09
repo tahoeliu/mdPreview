@@ -53,7 +53,7 @@ window.ReadingProgress = (() => {
     const hud = document.createElement('div'); hud.className = 'read-hud'; hud.setAttribute('aria-hidden', 'true');
     const end = document.createElement('div'); end.className = 'read-end'; end.hidden = true;
     const svg = d => '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
-    end.innerHTML = '<div class="read-end-mark"><span>mdPreview</span></div><div class="read-end-actions"></div>';
+    end.innerHTML = '<div class="read-end-mark"><span aria-hidden="true">mdPreview</span></div><div class="read-end-actions"></div>';
     const actions = end.querySelector('.read-end-actions');
     for (const [icon, title, run] of [
       ['<rect x="8" y="8" width="12" height="12" rx="2.5"/><path d="M16 8V6.5A2.5 2.5 0 0 0 13.5 4h-7A2.5 2.5 0 0 0 4 6.5v7A2.5 2.5 0 0 0 6.5 16H8"/>', t('Copy as Markdown', '复制 Markdown 全文'), () => window.copyAsMarkdown && copyAsMarkdown()],

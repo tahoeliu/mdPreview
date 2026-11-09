@@ -378,3 +378,10 @@ body.has-edit-bar .toc-toggle { top: calc(52px + var(--titlebar-h, 0px)); }
 /* 字数统计：文字距窗口左边与下边同为 16，视觉对等 */
 .toc-count { padding: 10px 16px 16px; }
 .toc-count button { padding: 0; margin-left: 0; line-height: 1.4; }
+
+/* 页尾名称：与下方图标同一种灰（它只是装饰性的落款，对读屏软件隐藏） */
+.read-end-mark span { color: inherit; }
+@media (prefers-color-scheme: dark) { .read-end-mark span { color: inherit; } }
+
+.read-end { color: #74747a; }
+@media (prefers-color-scheme: dark) { .read-end { color: #98989d; } }
