@@ -65,11 +65,11 @@ jobs:
       - name: Build the application
         run: scripts/build.sh
 
-      - name: Native acceptance on the built app
+      # The window-based check (scripts/verify-native.py) cannot run on GitHub's display-less runners; it stays a local pre-release check.
+      - name: Native acceptance on the built app (headless and update pipeline)
         run: |
           APP="$PWD/WorkSpace/dist/release-$(cat VERSION)/mdPreview.app"
           .venv/bin/python scripts/verify-headless.py --app "$APP"
-          .venv/bin/python scripts/verify-native.py --app "$APP"
           .venv/bin/python scripts/verify-update-e2e.py --app "$APP"
 
       - name: Measure cold start (reported, not a CI gate on shared runners)
