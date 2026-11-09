@@ -824,7 +824,7 @@ var {
 
   function showDraftRecoveredBanner() {
     const banner = document.createElement('div');
-    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:950;background:#fff3cd;border-bottom:1px solid #ffc107;color:#856404;padding:8px 16px;font-size:13px;display:flex;align-items:center;gap:12px;justify-content:center;';
+    banner.style.cssText = 'position:fixed;top:var(--titlebar-h,0px);left:0;right:0;z-index:950;background:#fff3cd;border-bottom:1px solid #ffc107;color:#856404;padding:8px 16px;font-size:13px;display:flex;align-items:center;gap:12px;justify-content:center;';
     const msg = t('Unsaved changes from a previous session have been restored.','已恢复上次未保存的修改。');
     const discardText = t('Discard','放弃');
     const dismissText = t('Dismiss','忽略');

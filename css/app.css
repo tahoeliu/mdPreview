@@ -390,3 +390,6 @@ body.has-edit-bar .toc-toggle { top: calc(52px + var(--titlebar-h, 0px)); }
 .page { padding-bottom: 40px; }
 .page.full-width { padding-bottom: 40px; }
 .read-end { margin-bottom: 0; }
+
+/* 更新提示、草稿恢复条同样让到标题栏下面 */
+.update-bubble { top: calc(16px + var(--titlebar-h, 0px)); }
