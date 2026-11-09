@@ -25,6 +25,7 @@ test('T02 桥接错误安全上报且长导出不提前恢复布局', async ({ p
   await page.evaluate(async () => { window.__finishExport({ success: true }); await window.__pendingExport; });
   await expect(page.locator('#textarea')).toBeVisible();
   const logs = await page.evaluate(async () => {
+    window.__logs = []; // count only the errors raised below, not any from the export above
     window.dispatchEvent(new ErrorEvent('error', { message: 'SECRET正文', error: new TypeError('SECRET正文') }));
     const event = new Event('unhandledrejection');
     event.reason = new Error('SECRET正文');
