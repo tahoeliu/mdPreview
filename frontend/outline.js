@@ -72,9 +72,13 @@ window.DocumentOutline = {
           : fullWindowCenteredLeft;
       }
 
-      // leave room for the section arrows that sit just left of the headings
+      // leave room for the section arrows that sit just left of the headings, and the same room on the
+      // right, so the column stays centred between the outline and the window edge in narrow windows
       const minLeft = tw + 26;
-      if (targetLeft < minLeft) { targetLeft = minLeft; targetWidth = Math.min(targetWidth, Math.max(0, windowWidth - minLeft)); }
+      if (targetLeft < minLeft) {
+        targetWidth = Math.min(targetWidth, Math.max(0, windowWidth - tw - 52));
+        targetLeft = tw + (windowWidth - tw - targetWidth) / 2;
+      }
       page.style.setProperty('--toc-aware-page-left', Math.round(targetLeft) + 'px');
       page.style.setProperty('--toc-aware-page-width', Math.round(targetWidth) + 'px');
     }

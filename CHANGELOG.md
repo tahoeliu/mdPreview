@@ -7,6 +7,7 @@ All notable changes to mdPreview. Format based on [Keep a Changelog](https://kee
 ### Changed
 - The outline is narrower by default (about a fifth of the window, 168–220 px), leaving more room for the page.
 - Long outline headings fade out at the right edge instead of ending in an ellipsis; they still show in full on hover.
+- In narrow windows the reading column sits centred between the outline and the window edge, instead of leaning to the right.
 
 ## [2.0.2] - 2026-11-09
 
