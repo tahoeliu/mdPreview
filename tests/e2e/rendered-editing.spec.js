@@ -357,3 +357,15 @@ test('a single line break inside a paragraph survives editing, and Enter on an e
   await page.keyboard.type('Next');
   expect(await page.evaluate(md)).toMatch(/Para\n\nNext/);
 });
+test('⌘B / ⌘I work in the rendered page and the B button lights up inside bold text',async({page})=>{
+  await load(page,'plain **bold** end');
+  await page.locator('#content strong').click();
+  await expect(bar(page,'bold')).toHaveClass(/on/);
+  await page.locator('#content p').click({position:{x:2,y:8}});
+  await expect(bar(page,'bold')).not.toHaveClass(/on/);
+  await selectText(page,'#content p',0,5);
+  await page.keyboard.press('Meta+b');
+  expect(await page.evaluate(md)).toContain('**plain**');
+  await page.keyboard.press('Meta+i');
+  expect(await page.evaluate(md)).toMatch(/\*\*\*?plain/);
+});

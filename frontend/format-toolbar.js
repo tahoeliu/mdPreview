@@ -351,7 +351,7 @@ window.FormatToolbar = (() => {
       if (!bar.firstChild) build();
       fitIcons(bar);
       const enabled = name => { try { return document.queryCommandEnabled(name); } catch (e) { return true; } };
-      const active = { bold: document.queryCommandState('bold'), italic: document.queryCommandState('italic'), strike: document.queryCommandState('strikeThrough'),
+      const active = { bold: !!inside('strong, b'), italic: !!inside('em, i'), strike: !!inside('s, del, strike'),
         code: !!inside('code'), link: !!inside('a'), ul: !!inside('ul'), ol: !!inside('ol'), quote: !!inside('blockquote'), task: !!inside('li[data-task]') };
       const off = blocked();
       for (const button of bar.querySelectorAll('button')) {
@@ -413,6 +413,16 @@ window.FormatToolbar = (() => {
     }, 0));
     document.addEventListener('selectionchange', () => { if (!bar.hidden) setTimeout(refresh, 40); });
 
+    // ----- 渲染模式下的格式快捷键：⌘B 加粗、⌘I 斜体、⌘K 链接 -----
+    content.addEventListener('keydown', e => {
+      if (!e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.isComposing) return;
+      const key = e.key.toLowerCase();
+      if (!['b', 'i', 'k'].includes(key) || content.classList.contains('hidden') || blocked()) return;
+      e.preventDefault(); e.stopPropagation();
+      if (!editing) show();
+      if (key === 'b') run('bold'); else if (key === 'i') run('italic'); else linkEditor();
+      requestAnimationFrame(refresh);
+    }, true);
     // ----- 表格里的键盘：Enter / Tab 在单元格间移动，不会把表格拆坏 -----
     function stepCell(forward, vertical) {
       const info = cellInfo(); if (!info) return;
