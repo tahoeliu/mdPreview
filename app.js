@@ -646,6 +646,8 @@ var {
   document.querySelector('.update-bubble-body').tabIndex=0;
   document.querySelector('.update-bubble-body').addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();installUpdate();}else if(event.key==='Escape'){dismissUpdateBubble(event);document.getElementById(isSource?'textarea':'content').focus();}});
   document.querySelector('.update-bubble-close').addEventListener('click',event=>dismissUpdateBubble(event));
+  document.getElementById('content').addEventListener('error',event=>{const img=event.target;if(!img||img.tagName!=='IMG'||!img.hasAttribute('data-md-image')||img.classList.contains('img-broken'))return;img.classList.add('img-broken');const box=document.createElement('span');box.className='img-fallback';box.contentEditable='false';box.textContent=img.getAttribute('alt')||t('Image could not be displayed','图片无法显示');img.after(box);},true);
+  document.getElementById('content').addEventListener('load',event=>{const img=event.target;if(img&&img.tagName==='IMG'&&img.classList.contains('img-broken')){img.classList.remove('img-broken');if(img.nextElementSibling?.classList.contains('img-fallback'))img.nextElementSibling.remove();}},true);
   document.getElementById('content').addEventListener('click',event=>{const button=event.target.closest('.frontmatter-toggle');if(button){event.preventDefault();toggleFrontmatter(button);}});
   document.getElementById('modalOverlay').addEventListener('click',event=>{if(event.target.closest('.modal-close'))closeModal();});
   document.getElementById('modalOverlay').addEventListener('click', (e) => {
