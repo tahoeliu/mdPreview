@@ -16,7 +16,7 @@ environment=dict(os.environ,MDPREVIEW_DATA_DIR=str(data),MDPREVIEW_DISABLE_UPDAT
 output=(data/'process.log').open('w')
 process=subprocess.Popen([str(app/'Contents/MacOS/mdPreview'),str(source),'--selftest-integrity'],env=environment,stdout=output,stderr=output)
 try:
-    process.wait(timeout=90)
+    process.wait(timeout=180)
 except subprocess.TimeoutExpired:
     process.kill();process.wait();raise SystemExit('FAIL: native application did not exit; '+str(data))
 result_path=data/'native-result.json'

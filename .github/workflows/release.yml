@@ -73,6 +73,14 @@ jobs:
           .venv/bin/python scripts/verify-native.py --app "$APP"
           .venv/bin/python scripts/verify-update-e2e.py --app "$APP"
 
+      - name: Keep native-test evidence on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-evidence-${{ matrix.arch }}
+          path: WorkSpace/native-verification/**
+          if-no-files-found: ignore
+
       - name: Package
         run: |
           VERSION="$(cat VERSION)"

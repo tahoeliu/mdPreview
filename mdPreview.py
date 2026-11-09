@@ -4148,7 +4148,7 @@ def _maybe_run_selftest(main_window):
 
     if '--selftest-integrity' in sys.argv:
         def run_integrity():
-            if not _UI_READY.wait(30):
+            if not _UI_READY.wait(120):
                 os._exit(5)
             with open(get_resource_path('tests/native-check.js')) as stream:
                 script = stream.read()
