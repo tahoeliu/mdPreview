@@ -2,6 +2,12 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.3] - 2026-11-09
+
+### Changed
+- The outline is narrower by default (about a fifth of the window, 168–220 px), leaving more room for the page.
+- Long outline headings fade out at the right edge instead of ending in an ellipsis; they still show in full on hover.
+
 ## [2.0.2] - 2026-11-09
 
 ### Improved

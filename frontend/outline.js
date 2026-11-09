@@ -23,7 +23,7 @@ window.DocumentOutline = {
       return state.tocHasContent && !isTocAutoHideWidth();
     }
 
-    // 目录宽度随标题长度与窗口宽度自适应：最长标题决定理想宽度，夹在 188–300px 且不超过窗口的 28%。
+    // 目录宽度随标题长度与窗口宽度自适应：最长标题决定理想宽度，夹在 168–220px 且不超过窗口的 20%。
     let tocMeasure = null;
     function computeTocWidth(entries) {
       const base = deps.TOC_WIDTH || 200;
@@ -35,7 +35,7 @@ window.DocumentOutline = {
         let widest = 0;
         for (const { text, indent } of entries) widest = Math.max(widest, tocMeasure.measureText(text).width + indent);
         const ideal = Math.ceil(widest + 16 + 12);
-        return Math.round(Math.max(188, Math.min(ideal, 300, window.innerWidth * 0.28)));
+        return Math.round(Math.max(168, Math.min(ideal, 220, window.innerWidth * 0.2)));
       } catch (e) { return base; }
     }
     function tocWidthNow() { return computeTocWidth(state.tocEntries); }
