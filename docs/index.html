@@ -1,156 +1,833 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>mdPreview — A featherweight Markdown reader for Mac</title>
-<meta name="description" content="mdPreview opens Markdown instantly and makes long AI answers easy to read and finish. Click to edit like a document, export PDF, Word or a shareable page. Free, open source, offline.">
+<meta name="description" content="mdPreview, a little Mac app. Double-click Markdown files, enjoy a calm read, edit like Word, and export PDF, Word or web pages. No account. Your files stay local.">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#131418" media="(prefers-color-scheme: dark)">
 <link rel="canonical" href="https://tahoeliu.github.io/mdPreview/">
-<link rel="alternate" hreflang="en" href="https://tahoeliu.github.io/mdPreview/">
-<link rel="alternate" hreflang="zh-Hans" href="https://tahoeliu.github.io/mdPreview/zh.html">
+<link rel="alternate" hreflang="en" href="https://tahoeliu.github.io/mdPreview/?lang=en">
+<link rel="alternate" hreflang="zh-Hans" href="https://tahoeliu.github.io/mdPreview/?lang=zh">
 <link rel="alternate" hreflang="x-default" href="https://tahoeliu.github.io/mdPreview/">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a64d8'/%3E%3Cpath d='M14 44V20h6l6 9 6-9h6v24h-6V30l-6 9-6-9v14zM46 20h5v14h5l-7.500 10L41 34h5z' fill='%23fff'/%3E%3C/svg%3E">
+<meta property="og:url" content="https://tahoeliu.github.io/mdPreview/">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"mdPreview","applicationCategory":"UtilitiesApplication","operatingSystem":"macOS 13 or later","url":"https://tahoeliu.github.io/mdPreview/","downloadUrl":"https://github.com/tahoeliu/mdPreview/releases/latest","license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="mdPreview">
-<meta property="og:title" content="mdPreview — Read long AI answers, finish them">
-<meta property="og:description" content="A featherweight Markdown reader for Mac. Instant, clean, and as easy to edit as a Word document.">
-<meta property="og:url" content="https://tahoeliu.github.io/mdPreview/">
+<meta property="og:title" content="mdPreview — Open it. Settle into reading.">
+<meta property="og:description" content="A little Mac app that opens and edits Markdown files. Edit like Word, works offline, no account.">
 <meta property="og:image" content="https://tahoeliu.github.io/mdPreview/images/og.png">
 <meta property="og:image:width" content="2400">
 <meta property="og:image:height" content="1260">
-<meta property="og:image:alt" content="mdPreview showing a long document with an outline and reading progress">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:image" content="https://tahoeliu.github.io/mdPreview/images/og.png">
-<link rel="preload" as="image" href="images/hero-reading.webp" type="image/webp" media="(prefers-color-scheme: light)">
-<link rel="stylesheet" href="site.css">
-<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"mdPreview","applicationCategory":"UtilitiesApplication","operatingSystem":"macOS 13 or later","url":"https://tahoeliu.github.io/mdPreview/","downloadUrl":"https://github.com/tahoeliu/mdPreview/releases/latest","license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script>
+<title>mdPreview — Open it. Settle into reading.</title>
+<link rel="icon" type="image/png" href="images/icon-64.png">
+<link rel="apple-touch-icon" href="images/icon-180.png">
+<style>
+/* 视觉基调：克制、轻量。演示元素全部由代码按时间绘制，不使用视频。 */
+:root {
+  color-scheme: light dark;
+  --ink: #16181d; --muted: #5f6773; --line: #e7e9ee;
+  --accent: #0a64d8; --on-accent: #fff; --bg: #fff; --soft: #f6f7f9;
+  --blue-wash: #f2f7fd; --app-bg: #fff; --app-ink: #1d1d1f; --app-line: #e0e0e0;
+  --titlebar: #ececee; --tool: #5f5f64; --selection: rgba(0,122,255,.22);
+  --wall: radial-gradient(ellipse at 18% 12%,#ffe9ef 0,transparent 46%),radial-gradient(ellipse at 85% 85%,#d5e6ff 0,transparent 52%),linear-gradient(140deg,#e3ebfb,#ece6f7);
+  --menubar: rgba(255,255,255,.62); --dock: rgba(255,255,255,.5); --dock-line: rgba(255,255,255,.7);
+  --shadow: 0 30px 60px -18px rgba(28,42,61,.34), 0 10px 22px -10px rgba(28,42,61,.22), 0 0 0 1px rgba(0,0,0,.08);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #ececf0; --muted: #a0a6b2; --line: #2b2e36;
+    --accent: #77b5ff; --on-accent: #0b1220; --bg: #131418; --soft: #1a1c22;
+    --blue-wash: #192534; --app-bg: #1e1e1f; --app-ink: #f2f2f2; --app-line: #3a3a3c;
+    --titlebar: #323234; --tool: #c7c7cc; --selection: rgba(108,178,255,.25);
+    --wall: radial-gradient(ellipse at 18% 12%,#3a2a48 0,transparent 46%),radial-gradient(ellipse at 85% 85%,#1d3a63 0,transparent 52%),linear-gradient(140deg,#161b2a,#231d33);
+    --menubar: rgba(30,30,34,.6); --dock: rgba(40,40,46,.55); --dock-line: rgba(255,255,255,.12);
+    --shadow: 0 30px 70px rgba(0,0,0,.55), 0 0 0 1px rgba(255,255,255,.1);
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 40px; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.7 -apple-system,BlinkMacSystemFont,"SF Pro Text","PingFang SC","Segoe UI",sans-serif; -webkit-font-smoothing: antialiased; }
+button,textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: default; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visible,textarea:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
+svg { display: block; }
+img { display: block; }
+p,h1,h2,h3,figure { margin: 0; }
+h1,h2,h3 { font-weight: 600; }
+h2 { font-size: clamp(30px,4vw,44px); line-height: 1.25; letter-spacing: -.035em; }
+h3 { font-size: 23px; line-height: 1.4; letter-spacing: -.02em; }
+[hidden] { display: none !important; }
+.wrap { max-width: 1120px; padding: 0 32px; margin: auto; }
+.skip { position: fixed; top: 8px; left: 12px; z-index: 100; padding: 8px 16px; background: var(--bg); transform: translateY(-150%); }
+.skip:focus { transform: none; }
+
+/* 顶栏 */
+.top { height: 62px; border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20; background: color-mix(in srgb,var(--bg) 86%,transparent); -webkit-backdrop-filter: saturate(1.6) blur(16px); backdrop-filter: saturate(1.6) blur(16px); }
+.top .wrap { height: 100%; display: flex; justify-content: space-between; align-items: center; }
+.brand { display: inline-flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; letter-spacing: -.025em; color: var(--ink); }
+.brand:hover { text-decoration: none; }
+.brand img { width: 26px; height: 26px; }
+.top-links { display: flex; align-items: center; gap: 24px; font-size: 13px; }
+.top-links a,.lang-switch { color: var(--muted); }
+.lang-switch { border: 0; background: none; padding: 8px 0; font-size: 13px; }
+.lang-switch:disabled { display: none; }
+
+/* 首屏 */
+.hero { padding: 44px 0 0; }
+.hero-copy { display: grid; grid-template-columns: 1.15fr 1fr; gap: 48px; align-items: end; }
+.eyebrow { color: var(--muted); font-size: 12px; font-weight: 500; letter-spacing: .08em; margin-bottom: 14px; }
+.hero h1 { font-size: clamp(42px,6.2vw,80px); line-height: 1.06; letter-spacing: -.055em; font-weight: 600; }
+.hero h1 span { display: block; }
+.hero .lead { font-size: 16px; color: var(--muted); max-width: 430px; margin: 0 0 22px; line-height: 1.85; text-wrap: pretty; }
+.cta { display: flex; align-items: center; gap: 22px; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; border-radius: 10px; padding: 12px 22px; font-size: 15px; font-weight: 500; line-height: 1.5; text-decoration: none; }
+.btn:hover { text-decoration: none; filter: brightness(.96); }
+.primary { background: var(--accent); color: var(--on-accent); }
+.secondary { background: var(--bg); border-color: var(--line); color: var(--ink); }
+.text-link { font-size: 14px; font-weight: 500; }
+.hero-figure { margin-top: 30px; }
+
+/* 演示舞台：960×640 的画布，按比例缩放 */
+.stage { position: relative; width: min(100%, calc((100svh - 292px) * 1.5)); min-width: min(100%, 640px); margin: 0 auto; aspect-ratio: 960/640; overflow: hidden; border-radius: 16px; background: var(--wall); border: 1px solid var(--line); isolation: isolate; text-align: left; }
+.canvas { position: absolute; width: 960px; height: 640px; left: 0; top: 0; transform: scale(var(--scale,1)); transform-origin: top left; user-select: none; -webkit-user-select: none; }
+.stage.compact { aspect-ratio: 760/596; }
+.stage.compact .canvas { left: calc(-70px * var(--scale,1)); top: calc(-8px * var(--scale,1)); }
+.menubar { position: absolute; inset: 0 0 auto; height: 24px; display: flex; align-items: center; gap: 22px; padding: 0 20px; background: var(--menubar); -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px); font-size: 12px; color: var(--app-ink); }
+.menubar b { min-width: 74px; font-weight: 600; }
+.menubar .menu-label { padding: 1px 7px; margin: 0 -7px; border-radius: 4px; }
+.is-menu-open .menu-label.file { background: var(--selection); }
+.menu-right { margin-left: auto; color: var(--muted); }
+.file-menu { position: absolute; left: 112px; top: 24px; width: 200px; padding: 5px; background: var(--app-bg); border: 1px solid var(--app-line); border-radius: 8px; box-shadow: var(--shadow); font-size: 13px; color: var(--app-ink); opacity: 0; pointer-events: none; z-index: 8; }
+.file-menu span { display: block; padding: 5px 11px; border-radius: 5px; }
+.file-menu .sep { height: 1px; padding: 0; margin: 4px 6px; background: var(--app-line); }
+.is-menu-open .file-menu { opacity: 1; }
+.is-export-hover .export-row { background: var(--accent); color: var(--on-accent); }
+.desktop-file { position: absolute; left: 846px; top: 80px; width: 96px; text-align: center; }
+.stage.compact .desktop-file { left: 690px; top: 64px; }
+.file-paper { width: 60px; height: 60px; margin: 0 auto 4px; display: block; border-radius: 10px; padding: 2px; }
+.file-paper img { width: 56px; height: 56px; filter: drop-shadow(0 3px 5px rgba(0,0,0,.22)); }
+.pdf-paper { width: 46px; height: 58px; margin: 2px auto 8px; border-radius: 4px 13px 4px 4px; background: var(--app-bg); border: 1px solid var(--app-line); display: grid; place-items: end center; padding-bottom: 9px; font-size: 11px; font-weight: 700; color: #c94b51; box-shadow: 0 3px 5px rgba(0,0,0,.18); }
+.exported-file { position: absolute; left: 846px; top: 196px; width: 96px; text-align: center; opacity: 0; }
+.stage.compact .exported-file { left: 690px; top: 174px; }
+.file-name { display: inline-block; max-width: 96px; padding: 1px 6px; border-radius: 4px; font-size: 12px; line-height: 1.5; color: var(--app-ink); text-shadow: 0 0 3px var(--bg); }
+.is-file-selected .file-name { color: #fff; background: var(--accent); text-shadow: none; }
+.is-file-selected .file-paper { background: var(--selection); }
+
+.window { position: absolute; left: 130px; top: 34px; width: 700px; height: 535px; border-radius: 11px; background: var(--app-bg); box-shadow: var(--shadow); overflow: hidden; opacity: 0; transform-origin: 50% 100%; }
+.titlebar { position: relative; height: 28px; display: flex; align-items: center; justify-content: center; gap: 6px; background: var(--app-bg); font-size: 12.5px; font-weight: 600; color: var(--tool); }
+.titlebar img { width: 14px; height: 14px; }
+.lights { position: absolute; left: 11px; top: 9px; display: flex; gap: 7px; }
+.lights i { width: 10px; height: 10px; border-radius: 50%; background: #ff5f57; }
+.lights i:nth-child(2) { background: #febc2e; }
+.lights i:nth-child(3) { background: #28c840; }
+.frames { position: relative; width: 700px; height: 507px; background: var(--app-bg); overflow: hidden; }
+.frames > img { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; }
+.comp-side { position: absolute; left: 0; top: 0; width: 25%; height: 100%; }
+.comp-side img { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; }
+.comp-side img.on { opacity: 1; }
+.comp-long { position: absolute; left: 25%; top: 0; width: 75%; overflow: hidden; height: 100%; }
+.comp-long img { display: block; width: 100%; height: auto; will-change: transform; }
+.demo-progress { position: absolute; left: 0; top: 0; height: 2px; width: 0; background: var(--accent); z-index: 6; }
+.export-dialog { position: absolute; left: 290px; top: 96px; width: 380px; padding: 20px 22px 16px; background: var(--app-bg); border: 1px solid var(--app-line); border-radius: 14px; box-shadow: var(--shadow); color: var(--app-ink); font-size: 13px; z-index: 9; opacity: 0; pointer-events: none; }
+.export-dialog .ed-title { font-size: 15px; font-weight: 600; margin-bottom: 14px; text-align: center; }
+.export-dialog .ed-row { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+.export-dialog .ed-row > span:first-child { width: 48px; text-align: right; color: var(--muted); }
+.ed-field { flex: 1; padding: 4px 9px; border: 1px solid var(--app-line); border-radius: 6px; background: var(--bg); }
+.ed-popup { flex: 1; padding: 4px 9px; border: 1px solid var(--app-line); border-radius: 6px; background: var(--bg); display: flex; justify-content: space-between; }
+.ed-popup::after { content: '⌃'; font-size: 10px; color: var(--muted); transform: rotate(180deg); }
+.fmt-list { position: absolute; left: 80px; top: 94px; width: 262px; padding: 5px; border: 1px solid var(--app-line); border-radius: 8px; background: var(--app-bg); box-shadow: var(--shadow); opacity: 0; z-index: 2; }
+.fmt-list span { display: block; padding: 4px 10px; border-radius: 5px; }
+.fmt-list span.hi { background: var(--accent); color: var(--on-accent); }
+.ed-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
+.ed-buttons span { padding: 4px 16px; border-radius: 6px; border: 1px solid var(--app-line); background: var(--bg); }
+.ed-buttons .ed-ok { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.is-compact-hide { opacity: 0 !important; }
+.dock { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); height: 56px; padding: 6px 10px; display: flex; align-items: flex-end; gap: 10px; border-radius: 18px; background: var(--dock); border: 1px solid var(--dock-line); -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px); }
+.dock-item { position: relative; width: 42px; height: 42px; border-radius: 10px; flex: none; }
+.dock-item.generic { background: linear-gradient(160deg,#c9d3e3,#9fb0cc); opacity: .85; }
+.dock-item.generic:nth-child(2) { background: linear-gradient(160deg,#e5d6e8,#b79cc2); }
+.dock-item.generic:nth-child(3) { background: linear-gradient(160deg,#d6e8de,#8fbfa6); }
+.dock-item.generic:nth-child(4) { background: linear-gradient(160deg,#f2e3d1,#d3a778); }
+.dock-item.app img { width: 42px; height: 42px; }
+.dock-item.app::after { content: ''; position: absolute; left: 50%; bottom: -5px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: var(--app-ink); opacity: 0; }
+.has-window .dock-item.app::after { opacity: .7; }
+.demo-cursor { position: absolute; left: 0; top: 0; width: 22px; height: 28px; z-index: 30; pointer-events: none; filter: drop-shadow(0 1px 2px rgba(0,0,0,.35)); }
+.demo-cursor svg { width: 22px; height: 28px; fill: #111; stroke: #fff; stroke-width: 1.4; }
+.click-ring { position: absolute; left: 0; top: 0; width: 34px; height: 34px; border: 2px solid var(--accent); border-radius: 50%; opacity: 0; z-index: 29; pointer-events: none; }
+.demo-footer { display: flex; justify-content: space-between; align-items: baseline; gap: 20px; margin: 14px auto 0; width: 100%; max-width: calc((100svh - 292px) * 1.5); color: var(--muted); font-size: 12.5px; }
+.demo-tag { color: var(--muted); opacity: .8; margin-left: 6px; }
+.motion-btn { flex: none; border: 0; background: none; color: var(--muted); padding: 2px 0; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
+.motion-btn:disabled { display: none; }
+
+/* 干净的窗口：左右并排对比，同一份 Markdown */
+.why { padding: 84px 0 0; }
+.why-intro { max-width: 640px; margin-bottom: 44px; }
+.why h2 { font-size: clamp(38px,4.6vw,56px); line-height: 1.13; margin-bottom: 24px; }
+.calm-copy { color: var(--muted); font-size: 18px; line-height: 1.9; }
+.calm-copy strong { color: var(--ink); font-weight: 500; }
+.scene-context { color: var(--muted); font-size: 14px; max-width: 460px; margin: 22px 0 0; }
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+.compare > figure { min-width: 0; }
+.compare-tag { font-size: 13px; color: var(--muted); margin: 0 0 12px; }
+.compare-tag b { color: var(--ink); font-weight: 500; }
+.cmp-window { position: relative; width: 100%; aspect-ratio: 900/700; border-radius: 11px; background: var(--app-bg); box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column; }
+.cmp-window .titlebar { flex: none; }
+.cmp-body { position: relative; flex: 1; min-height: 0; }
+.cmp-body .comp-side { z-index: 0; }
+.cmp-body .comp-long { z-index: 0; }
+/* 通用编辑器：标准的开发工作环境，塞满面板，显示同一份 Markdown 源码 */
+.ed { font-size: 9.5px; }
+.ed .titlebar { background: var(--titlebar); border-bottom: 1px solid var(--app-line); font-size: 11px; }
+.ed-tabs { flex: none; display: flex; gap: 1px; padding: 5px 6px 0; background: var(--soft); border-bottom: 1px solid var(--app-line); overflow: hidden; white-space: nowrap; }
+.ed-tabs span { padding: 4px 9px; border-radius: 5px 5px 0 0; color: var(--muted); }
+.ed-tabs span.on { background: var(--app-bg); color: var(--app-ink); border: 1px solid var(--app-line); border-bottom: 0; margin-bottom: -1px; }
+.ed-tabs span i { font-style: normal; margin-left: 6px; opacity: .55; }
+.ed-tabs span em { font-style: normal; color: var(--accent); margin-left: 5px; }
+.ed-crumb { flex: none; padding: 3px 10px; color: var(--muted); border-bottom: 1px solid var(--app-line); background: var(--app-bg); white-space: nowrap; overflow: hidden; }
+.ed-main { flex: 1; min-height: 0; display: grid; grid-template-columns: 22px 17% 1fr 31%; grid-template-rows: 1fr 27%; }
+.ed-act { grid-column: 1; grid-row: 1 / 3; background: var(--titlebar); border-right: 1px solid var(--app-line); display: flex; flex-direction: column; align-items: center; gap: 9px; padding-top: 9px; }
+.ed-act i { width: 11px; height: 11px; border: 1.5px solid var(--muted); border-radius: 3px; opacity: .8; }
+.ed-act i:nth-child(1) { border-color: var(--app-ink); }
+.ed-act i:nth-child(3) { border-radius: 50%; }
+.ed-act b { margin-top: auto; margin-bottom: 8px; width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid var(--muted); }
+.ed-tree { grid-column: 2; grid-row: 1 / 3; background: var(--soft); border-right: 1px solid var(--app-line); padding: 8px 8px; color: var(--muted); line-height: 1.85; overflow: hidden; white-space: nowrap; }
+.ed-tree b { font-weight: 600; color: var(--app-ink); display: block; letter-spacing: .04em; font-size: 8.5px; }
+.ed-tree .mod { color: #b08800; }
+.ed-tree .new { color: #2f9e5a; }
+.ed-code { grid-column: 3; grid-row: 1; min-width: 0; position: relative; display: flex; overflow: hidden; background: var(--app-bg); }
+.ed-gutter { flex: none; padding: 8px 6px 8px 8px; text-align: right; color: var(--muted); opacity: .6; font: 9.5px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace; user-select: none; }
+.ed-code pre { margin: 0; padding: 8px 4px; font: 9.5px/1.65 ui-monospace,SFMono-Regular,Menlo,monospace; color: var(--app-ink); white-space: pre; overflow: hidden; }
+.ed-mini { position: absolute; right: 0; top: 0; bottom: 0; width: 26px; background: repeating-linear-gradient(to bottom,color-mix(in srgb,var(--muted) 35%,transparent) 0 2px,transparent 2px 5px); opacity: .55; -webkit-mask: linear-gradient(90deg,transparent 0 12%,#000 12% 88%,transparent 88%); mask: linear-gradient(90deg,transparent 0 12%,#000 12% 88%,transparent 88%); }
+.ed-mini::after { content: ''; position: absolute; left: 0; right: 0; top: 8%; height: 30%; background: color-mix(in srgb,var(--accent) 18%,transparent); }
+.ed-chat { grid-column: 4; grid-row: 1 / 3; display: flex; flex-direction: column; background: var(--app-bg); border-left: 1px solid var(--app-line); min-width: 0; }
+.ed-chat-head { flex: none; display: flex; justify-content: space-between; white-space: nowrap; overflow: hidden; gap: 6px; padding: 6px 9px; border-bottom: 1px solid var(--app-line); font-weight: 600; color: var(--app-ink); background: var(--soft); }
+.ed-chat-head span { font-weight: 400; color: var(--muted); }
+.ed-msgs { flex: 1; min-height: 0; padding: 8px 9px; overflow: hidden; display: flex; flex-direction: column; gap: 7px; color: var(--app-ink); line-height: 1.5; }
+.ed-msg-u { align-self: flex-end; max-width: 88%; padding: 5px 8px; border-radius: 9px 9px 2px 9px; background: color-mix(in srgb,var(--accent) 14%,var(--app-bg)); }
+.ed-msg-a { color: var(--muted); }
+.ed-msg-a b { color: var(--app-ink); font-weight: 600; }
+.ed-diff { border: 1px solid var(--app-line); border-radius: 6px; overflow: hidden; font: 8.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; }
+.ed-diff div { padding: 1px 6px; white-space: nowrap; overflow: hidden; }
+.ed-diff .del { background: rgba(230,70,70,.14); color: #c0392b; }
+.ed-diff .add { background: rgba(50,170,90,.16); color: #1e8449; }
+.ed-act-row { display: flex; gap: 5px; }
+.ed-act-row span { padding: 2px 8px; border-radius: 5px; border: 1px solid var(--app-line); }
+.ed-act-row .go { background: var(--accent); color: var(--on-accent); border-color: transparent; }
+.ed-input { flex: none; margin: 0 8px 8px; padding: 6px 8px; border: 1px solid var(--app-line); border-radius: 7px; color: var(--muted); display: flex; justify-content: space-between; gap: 6px; background: var(--soft); }
+.ed-term { grid-column: 3; grid-row: 2; background: #11151c; color: #7fcf9b; border-top: 1px solid var(--app-line); overflow: hidden; white-space: nowrap; font: 9px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; }
+.ed-term-tabs { display: flex; gap: 10px; padding: 3px 9px; background: #1a1f29; color: #8b95a7; font: 8.5px/1.4 -apple-system,BlinkMacSystemFont,sans-serif; }
+.ed-term-tabs .on { color: #fff; border-bottom: 1px solid var(--accent); }
+.ed-term-tabs .bad { color: #ff8f8f; }
+.ed-term-body { padding: 4px 9px; }
+.ed-term-body .err { color: #ff8f8f; } .ed-term-body .warn { color: #e6c15a; }
+.ed-toast { position: absolute; right: 8px; bottom: 26px; width: 40%; padding: 7px 9px; border: 1px solid var(--app-line); border-radius: 7px; background: var(--app-bg); box-shadow: var(--shadow); color: var(--app-ink); z-index: 3; line-height: 1.45; }
+.ed-toast span { display: inline-block; margin: 5px 5px 0 0; padding: 1px 7px; border: 1px solid var(--app-line); border-radius: 4px; color: var(--accent); }
+.ed-status { flex: none; display: flex; justify-content: space-between; gap: 8px; padding: 3px 9px; background: var(--accent); color: var(--on-accent); font-size: 9px; white-space: nowrap; overflow: hidden; }
+.ed-status span { display: flex; gap: 9px; }
+.cmp-cap { margin-top: 14px; font-size: 12.5px; color: var(--muted); }
+
+.support-reasons { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; border-top: 1px solid var(--line); margin-top: 56px; padding: 26px 0 100px; }
+.reason h3 { font-size: 18px; margin-bottom: 8px; }
+.reason p { color: var(--muted); font-size: 14px; max-width: 420px; }
+
+/* 可以亲手试的编辑区 */
+.editing-section { padding: 84px 0 70px; background: var(--soft); border-block: 1px solid var(--line); }
+.editing-head { display: grid; grid-template-columns: 1.2fr 1fr; gap: 64px; align-items: center; }
+.editing-head .sub { font-size: 16px; color: var(--muted); white-space: pre-line; }
+.editing-figure { margin-top: 36px; }
+.try-window { max-width: 860px; margin: 0 auto; border-radius: 11px; background: var(--app-bg); box-shadow: var(--shadow); overflow: hidden; }
+.try-bar { display: flex; align-items: center; gap: 2px; height: 42px; padding: 0 12px; overflow-x: auto; scrollbar-width: none; color: var(--tool); background: var(--app-bg); border-bottom: 1px solid var(--app-line); white-space: nowrap; font-size: 14px; line-height: 1; }
+.try-bar::-webkit-scrollbar { display: none; }
+.edit-tool { height: 30px; min-width: 32px; padding: 0 6px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 0; border-radius: 6px; background: none; color: inherit; flex: none; }
+.edit-tool:hover { background: color-mix(in srgb,var(--tool) 10%,transparent); }
+.edit-tool.on { background: var(--selection); color: var(--accent); }
+.edit-tool.text { padding: 0 10px; }
+.edit-sep { width: 1px; height: 18px; background: var(--app-line); margin: 0 8px; flex: none; }
+.edit-icon { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.15px; stroke-linecap: round; stroke-linejoin: round; }
+.try-spacer { flex: 1; }
+.try-body { position: relative; height: 380px; overflow: auto; }
+.try-doc { padding: 38px 56px 40px; font-size: 19px; line-height: 1.8; color: var(--app-ink); outline: none; min-height: 100%; }
+.try-doc h1 { font-size: 36px; line-height: 1.3; letter-spacing: -.03em; margin: 0 0 18px; }
+.try-doc h2 { font-size: 26px; line-height: 1.35; letter-spacing: -.025em; margin: 26px 0 10px; }
+.try-doc p { margin: 0 0 14px; }
+.try-doc ul,.try-doc ol { margin: 0 0 14px; padding-left: 26px; }
+.try-doc blockquote { margin: 0 0 14px; padding: 2px 0 2px 18px; border-left: 3px solid var(--app-line); color: var(--muted); }
+.try-doc code { font: .86em ui-monospace,SFMono-Regular,Menlo,monospace; background: color-mix(in srgb,var(--tool) 12%,transparent); padding: 1px 6px; border-radius: 4px; }
+.try-doc ::selection { background: var(--selection); }
+.try-src { margin: 0; padding: 38px 56px; font: 16px/1.85 ui-monospace,SFMono-Regular,Menlo,monospace; color: var(--app-ink); white-space: pre-wrap; word-break: break-word; }
+.try-src .mk { color: var(--accent); }
+.try-hint { max-width: 860px; margin: 14px auto 0; font-size: 13px; color: var(--muted); display: flex; justify-content: space-between; gap: 16px; }
+.try-hint .note { opacity: .75; text-align: right; }
+.export-note { color: var(--muted); text-align: center; font-size: 14px; margin-top: 28px; }
+
+/* 安装 */
+.install { padding: 96px 0 80px; }
+.install-head { display: flex; align-items: baseline; justify-content: space-between; gap: 28px; margin-bottom: 36px; }
+.install-head p { font-size: 15px; color: var(--muted); max-width: 290px; }
+.install-grid { display: grid; grid-template-columns: 1.5fr .8fr; gap: 60px; align-items: center; }
+.agent-card { padding: 30px; border: 1px solid var(--line); border-radius: 12px; background: var(--blue-wash); min-width: 0; scroll-margin-top: 80px; }
+.agent-heading h3 { font-size: 24px; }
+.agent-card .intro { color: var(--muted); font-size: 14px; line-height: 1.85; margin: 12px 0 20px; }
+.prompt-box { padding: 17px 19px; background: var(--bg); border: 1px solid var(--line); border-radius: 9px; line-height: 1.85; font-size: 13px; overflow-wrap: anywhere; white-space: pre-wrap; user-select: text; }
+.copy-row { display: flex; align-items: center; gap: 14px; margin-top: 18px; flex-wrap: wrap; }
+.copy-row .btn { padding: 10px 18px; }
+.copy-status { font-size: 12px; color: var(--muted); }
+.copy-row .copy-status { flex: 1; min-width: 135px; }
+.manual-copy { display: block; width: 100%; margin-top: 14px; border: 1px solid var(--line); border-radius: 7px; padding: 12px; background: var(--bg); color: var(--ink); font-size: 12px; line-height: 1.65; resize: vertical; }
+.manual-install h3 { font-size: 21px; margin-bottom: 14px; }
+.manual-install p { color: var(--muted); font-size: 14px; margin: 16px 0; }
+.manual-install .fine { font-size: 12px; }
+.manual-install .fine a { text-decoration: underline; text-underline-offset: 3px; }
+.cli-line { text-align: center; margin-top: 32px; font-size: 13px; color: var(--muted); }
+.cli-button { background: none; border: 0; padding: 3px 0; color: var(--accent); font-size: inherit; text-decoration: underline; text-underline-offset: 3px; }
+.cli-feedback { max-width: 700px; margin: 0 auto; text-align: center; }
+.cli-feedback .manual-copy { text-align: left; overflow-wrap: anywhere; }
+.noscript-copy { font-size: 12px; color: var(--muted); margin-top: 12px; }
+.faq { padding: 77px 0 90px; border-top: 1px solid var(--line); }
+.faq-grid { display: grid; grid-template-columns: .75fr 1.4fr; gap: 72px; }
+.faq h2 { font-size: 31px; }
+.faq-list details { border-bottom: 1px solid var(--line); padding: 19px 0; }
+.faq-list details:first-child { padding-top: 0; }
+.faq-list summary { cursor: pointer; font-size: 16px; font-weight: 500; }
+.faq-list p { margin: 13px 0 0; color: var(--muted); font-size: 14px; line-height: 1.9; }
+
+/* 收尾 */
+.closing { padding: 110px 0 120px; text-align: center; background: var(--soft); border-top: 1px solid var(--line); }
+.closing img { width: 96px; height: 96px; margin: 0 auto 28px; filter: drop-shadow(0 14px 18px rgba(20,40,80,.22)); }
+.closing h2 { font-size: clamp(32px,4.6vw,56px); line-height: 1.2; letter-spacing: -.045em; max-width: 780px; margin: 0 auto 30px; }
+.closing .cta { justify-content: center; }
+footer { padding: 27px 0 36px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+footer .wrap,.footer-links { display: flex; justify-content: space-between; gap: 25px; }
+footer a { color: var(--muted); }
+
+@media (max-width: 900px) {
+  .hero-copy { grid-template-columns: 1fr; gap: 18px; }
+  .compare { grid-template-columns: 1fr; gap: 32px; }
+  .editing-head { grid-template-columns: 1fr; gap: 17px; }
+}
+@media (max-width: 760px) {
+  .wrap { padding: 0 23px; }
+  .top { height: 56px; }
+  .hero { padding-top: 32px; }
+  .hero .lead { font-size: 15px; max-width: 460px; margin: 0 0 20px; }
+  .cta { gap: 16px; }
+  .cta .btn { padding: 12px 16px; }
+  .text-link { font-size: 13px; }
+  .stage { width: 100%; min-width: 0; border-radius: 10px; }
+  .demo-footer { max-width: none; gap: 13px; align-items: start; font-size: 11.5px; }
+  .demo-tag { display: block; margin-left: 0; font-size: 10.5px; margin-top: 3px; }
+  .why { padding-top: 60px; }
+  .why h2 { font-size: 40px; margin-bottom: 18px; }
+  .calm-copy { font-size: 17px; }
+  .support-reasons { grid-template-columns: 1fr; gap: 25px; padding-bottom: 70px; }
+  .editing-section { padding: 65px 0; }
+  .try-doc,.try-src { padding: 26px 22px; }
+  .try-doc { font-size: 17px; }
+  .try-body { height: 340px; }
+  .try-hint { flex-direction: column; gap: 4px; }
+  .try-hint .note { text-align: left; }
+  .export-note { text-align: left; font-size: 13px; margin-top: 23px; }
+  .install { padding: 74px 0 66px; }
+  .install-head { display: block; margin-bottom: 28px; }
+  .install-head p { font-size: 15px; margin-top: 13px; }
+  .install-grid { grid-template-columns: 1fr; gap: 32px; }
+  .agent-card { padding: 24px 22px; }
+  .cli-line,.cli-feedback { text-align: left; }
+  .faq { padding: 62px 0; }
+  .faq-grid { grid-template-columns: 1fr; gap: 30px; }
+  .closing { padding: 80px 0 90px; }
+  footer .wrap { flex-direction: column; gap: 12px; }
+  footer .wrap,.footer-links { justify-content: start; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+</style>
 </head>
 <body>
-<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
-<symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
-<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
-<symbol id="i-pencil" viewBox="0 0 24 24"><path d="m4 20 1-4L16 5l3 3L8 19z"/><path d="m14 7 3 3"/></symbol>
-<symbol id="i-pdf" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 13h6M9 17h4"/></symbol>
-<symbol id="i-word" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4M9 12l1.500 6L12 13l1.500 5L15 12"/></symbol>
-<symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3.500 3.500 3.500 14.500 0 18M12 3c-3.500 3.500-3.500 14.500 0 18"/></symbol>
-<symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v11a1 1 0 0 0 1 1h3"/></symbol>
-<symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.500"/><path d="m3 17 5-5 4 4 3-3 6 6"/></symbol>
-<symbol id="i-term" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 10 3 2-3 2M12 15h5"/></symbol>
-<symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
-</defs></svg>
-<a class="skip" href="#main">Skip to content</a>
-<nav class="top"><div class="wrap"><a class="brand" href="#">mdPreview</a><div class="links"><a class="hide" href="#why">Why</a><a class="hide" href="#reading">Reading</a><a class="hide" href="#editing">Editing</a><a class="hide" href="#sharing">Sharing</a><a class="optional" href="zh.html" hreflang="zh-Hans" lang="zh-Hans">中文</a><a class="optional" href="https://github.com/tahoeliu/mdPreview">GitHub</a><a class="get" href="#install">Download</a></div></div></nav>
-
+<a class="skip" href="#main" data-zh="跳到正文" data-en="Skip to content">跳到正文</a>
+<nav class="top" aria-label="主导航">
+  <div class="wrap">
+    <a class="brand" href="#"><img src="images/icon-64.png" alt="" width="26" height="26">mdPreview</a>
+    <div class="top-links">
+      <button class="lang-switch" id="language" type="button" disabled aria-label="Switch to English">English</button>
+      <a href="https://github.com/tahoeliu/mdPreview">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
 <main id="main">
-<header class="hero"><div class="wrap">
-  <p class="eyebrow">Free Markdown reader for Mac</p>
-  <h1>Read long AI answers.<br>Actually finish them.</h1>
-  <p class="lead">ChatGPT and Claude reply in Markdown. mdPreview turns it into a calm page you can read, fix up like a Word document, and send to anyone. It opens in half a second.</p>
-  <div class="cta"><a class="btn primary" href="https://github.com/tahoeliu/mdPreview/releases/latest">Download for Mac</a><a class="btn ghost" href="#install">Install with Terminal</a></div>
-  <p class="fine">Requires macOS 13 or later · Free and open source (MIT)</p>
-  <figure class="win"><div class="win-bar"><i></i><i></i><i></i><span>rag-evaluation.md</span></div>
-    <picture><source media="(prefers-color-scheme: dark)" srcset="images/hero-reading-dark.webp" type="image/webp"><img src="images/hero-reading.webp" alt="mdPreview showing a long document with an outline on the left, a progress bar on top and “3 min left” in the corner" width="2400" height="1500" fetchpriority="high"></picture>
-  </figure>
-</div></header>
+<header class="hero">
+  <div class="wrap">
+    <div class="hero-copy">
+      <div><p class="eyebrow" data-zh="mdPreview · 为 Mac 上的 .md 文件" data-en="mdPreview · A home for .md on Mac">mdPreview · 为 Mac 上的 .md 文件</p><h1><span data-zh="打开，看清。" data-en="Open. Read.">打开，看清。</span><span data-zh="改好，发出去。" data-en="Edit. Share.">改好，发出去。</span></h1></div>
+      <div><p class="lead" data-zh="AI 交来的 Markdown，双击就能好好读。像 Word 一样直接改，离线可用，无需账号。" data-en="Markdown from your AI, one double-click away. Edit like Word. Offline. No account.">AI 交来的 Markdown，双击就能好好读。像 Word 一样直接改，离线可用，无需账号。</p>
+        <div class="cta">
+          <a class="btn primary" id="ai-cta" href="#ai-install" data-zh="让 AI 帮你安装" data-en="Install with your AI">让 AI 帮你安装</a>
+          <a class="text-link" href="https://github.com/tahoeliu/mdPreview/releases/latest" data-zh="下载 Mac 版" data-en="Download for Mac">下载 Mac 版</a>
+        </div>
+      </div>
+    </div>
+    <figure class="hero-figure">
+      <div class="stage" id="hero-stage" role="img" aria-label="演示：AI 存下一份文件，双击打开，选中一句话加粗，再从文件菜单导出。" data-label-zh="演示：AI 存下一份文件，双击打开，选中一句话加粗，再从文件菜单导出。" data-label-en="Demo: an AI saves a file. Double-click to open it, select and bold a sentence, then export from the File menu.">
+        <div class="canvas" aria-hidden="true">
+          <div class="menubar"><b id="app-name">Finder</b><span class="menu-label file" id="menu-file" data-zh="文件" data-en="File">文件</span><span data-zh="编辑" data-en="Edit">编辑</span><span data-zh="视图" data-en="View">视图</span><span data-zh="窗口" data-en="Window">窗口</span><span data-zh="帮助" data-en="Help">帮助</span><span class="menu-right" data-zh="我的 Mac" data-en="My Mac">我的 Mac</span></div>
+          <div class="file-menu"><span data-zh="打开…" data-en="Open…">打开…</span><span data-zh="保存" data-en="Save">保存</span><span data-zh="另存为…" data-en="Save As…">另存为…</span><span class="sep"></span><span class="export-row" id="export-row" data-zh="导出为…" data-en="Export As…">导出为…</span></div>
+          <div class="desktop-file" id="desktop-file"><div class="file-paper"><img src="images/doc-icon.webp" alt="" width="56" height="56"></div><span class="file-name" data-zh="检索评估报告.md" data-en="rag-evaluation.md">检索评估报告.md</span></div>
+          <div class="window" id="demo-window">
+            <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div><img src="images/doc-icon.webp" alt="" width="14" height="14"><span data-zh="检索评估报告.md" data-en="rag-evaluation.md">检索评估报告.md</span></div>
+            <div class="frames">
+              <div class="demo-progress" id="demo-progress"></div>
+              <div class="comp-side" id="hero-side"></div>
+              <div class="comp-long"><img data-frame="long" id="hero-long" alt=""></div>
+              <img data-frame="edit" alt="" width="1800" height="1304">
+              <img data-frame="select" alt="" width="1800" height="1304">
+              <img data-frame="bold" alt="" width="1800" height="1304">
+            </div>
+          </div>
+          <div class="exported-file" id="exported-file"><div class="pdf-paper">PDF</div><span class="file-name" data-zh="检索评估报告.pdf" data-en="rag-evaluation.pdf">检索评估报告.pdf</span></div>
+          <div class="export-dialog" id="export-dialog">
+            <p class="ed-title" data-zh="导出为" data-en="Export As">导出为</p>
+            <div class="ed-row"><span data-zh="名称：" data-en="Name:">名称：</span><span class="ed-field" data-zh="检索评估报告" data-en="rag-evaluation">检索评估报告</span></div>
+            <div class="ed-row"><span data-zh="格式：" data-en="Format:">格式：</span><div class="ed-popup" id="fmt-popup"><span id="fmt-label">Markdown</span></div></div>
+            <div class="fmt-list" id="fmt-list"><span>Markdown</span><span data-zh="网页" data-en="Web page">网页</span><span class="pdf-item" id="fmt-pdf">PDF</span><span data-zh="纯文本" data-en="Plain text">纯文本</span><span>Word</span><span data-zh="图片" data-en="Image">图片</span></div>
+            <div class="ed-buttons"><span data-zh="取消" data-en="Cancel">取消</span><span class="ed-ok" id="ed-ok" data-zh="导出" data-en="Export">导出</span></div>
+          </div>
+          <div class="dock" id="dock"><span class="dock-item generic"></span><span class="dock-item generic"></span><span class="dock-item generic"></span><span class="dock-item generic"></span><span class="dock-item app" id="dock-app"><img src="images/icon-160.webp" alt="" width="42" height="42"></span></div>
+          <div class="demo-cursor" id="cursor"><svg viewBox="0 0 24 30"><path d="M3 2v23l6-6 4 9 4-2-4-9h8z"/></svg></div>
+          <span class="click-ring" id="ring"></span>
+        </div>
+      </div>
+      <figcaption class="demo-footer"><span><span id="hero-caption" data-zh="AI 存下了一份 .md 文件。" data-en="Your AI saved a .md file.">AI 存下了一份 .md 文件。</span><span class="demo-tag" data-zh="· 演示动画，界面取自真实 app 并做了简化" data-en="· Animated demo. The window is taken from the real app, simplified.">· 演示动画，界面取自真实 app 并做了简化</span></span><button class="motion-btn" type="button" id="motion" disabled>暂停演示</button></figcaption>
+    </figure>
+  </div>
+</header>
 
-<div class="trust"><ul><li>Free, MIT licensed</li><li>Works fully offline</li><li>No account</li><li>No tracking or telemetry</li><li>Your documents never leave your Mac</li></ul></div>
+<section class="why" id="why">
+  <div class="wrap">
+    <div class="why-intro">
+      <h2 data-zh="一个干净的窗口。" data-en="One calm window.">一个干净的窗口。</h2>
+      <p class="calm-copy"><strong data-zh="不是代码编辑器。不是知识库。" data-en="Not a code editor. Not a knowledge base.">不是代码编辑器。不是知识库。</strong><br><span data-zh="没有项目、导入、工作区。" data-en="No projects, imports or workspaces.">没有项目、导入、工作区。</span><br><span data-zh="只有你要看的那份文件。" data-en="Just the document you came to read.">只有你要看的那份文件。</span></p>
+      <p class="scene-context" data-zh="AI 存下来的报告，常常是一份 .md。同一份文件，在通用编辑器里是这样，在 mdPreview 里是那样。" data-en="A report your AI saved is often a .md file. Same file: here is a general-purpose editor, and there is mdPreview.">AI 存下来的报告，常常是一份 .md。同一份文件，在通用编辑器里是这样，在 mdPreview 里是那样。</p>
+    </div>
+    <div class="compare">
+      <figure>
+        <p class="compare-tag" data-zh="在通用编辑器里" data-en="In a general-purpose editor">在通用编辑器里</p>
+        <div class="cmp-window ed" role="img" aria-label="示意：标准的开发工作环境，满是标签、文件树、AI 对话、终端、问题面板和通知，并显示同一份 Markdown 源码。" data-label-zh="示意：标准的开发工作环境，满是标签、文件树、AI 对话、终端、问题面板和通知，并显示同一份 Markdown 源码。" data-label-en="Illustration: a typical development workspace full of tabs, a file tree, an AI chat, a terminal, problems and notifications, showing the same Markdown source.">
+          <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div><span>rag-evaluation.md — project — main</span></div>
+          <div class="ed-tabs"><span class="on">rag-evaluation.md<em>●</em><i>×</i></span><span>notes.md<i>×</i></span><span>todo.md<em>M</em></span><span>eval.py<i>×</i></span><span>config.json</span><span>…</span></div>
+          <div class="ed-crumb">docs › rag-evaluation.md › # Evaluating a RAG system › ## 1. Define</div>
+          <div class="ed-main">
+            <div class="ed-act"><i></i><i></i><i></i><i></i><b></b></div>
+            <div class="ed-tree"><b>EXPLORER</b>▾ project<br>&nbsp;▾ docs<br>&nbsp;&nbsp;&nbsp;<span class="mod">rag-evaluation.md</span><br>&nbsp;&nbsp;&nbsp;notes.md<br>&nbsp;&nbsp;&nbsp;<span class="new">todo.md</span><br>&nbsp;▾ src<br>&nbsp;&nbsp;&nbsp;eval.py<br>&nbsp;&nbsp;&nbsp;judge.py<br>&nbsp;&nbsp;&nbsp;utils.py<br>&nbsp;▸ tests<br>&nbsp;▸ node_modules<br>&nbsp;&nbsp;config.json<br>&nbsp;&nbsp;README.md<br>&nbsp;&nbsp;.gitignore</div>
+            <div class="ed-code"><div class="ed-gutter">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16<br>17<br>18<br>19<br>20<br>21<br>22<br>23</div><pre data-zh="# 评估一个检索增强系统\n\n从原型到上线的实用清单，**大多数团队会跳过前两步**，之后再付出代价。[^1]\n\n> [!TIP]\n> 数据集小到一个下午能读完。\n\n## 1. 先定义什么叫“好”\n\n- [x] 收集五十个真实问题\n- [x] 写出专家答案\n\n## 2. 单独衡量检索\n\n| 指标 | 说明什么 |\n|---|---|\n| Recall@5 | 证据是否在前五条里 |" data-en="# Evaluating a RAG system\n\nA practical checklist, **from first prototype to production**. Most teams skip the first two steps and pay for it later.[^1]\n\n> [!TIP]\n> Keep the set small enough to read in an afternoon.\n\n## 1. Define what “good” means\n\n- [x] Collect fifty real questions\n- [x] Write the expert answers\n\n## 2. Measure retrieval separately\n\n| Metric | What it tells you |\n|---|---|\n| Recall@5 | Is the evidence in the top five? |"># 评估一个检索增强系统
 
-<section id="why"><div class="wrap">
-  <h2>AI writes in Markdown. You shouldn’t have to read it that way.</h2>
-  <p class="sub">The same answer, before and after. On the left is the file you receive; on the right, what mdPreview shows when you double-click it.</p>
-  <div class="compare">
-    <div class="pane"><p class="tag">The .md file, as received</p>
-<pre class="src" aria-label="Raw Markdown source"><span class="h"># </span><span class="b">Evaluating a RAG system</span>
+从原型到上线的实用清单，**大多数团队会跳过前两步**，之后再付出代价。[^1]
 
-A practical checklist, <span class="m">**</span>from first prototype to production<span class="m">**</span>. Most teams skip the first two steps.
+> [!TIP]
+> 数据集小到一个下午能读完。
 
-<span class="h">## </span><span class="b">1. Define what “good” means</span>
+## 1. 先定义什么叫“好”
 
-<span class="m">&gt; [!TIP]
-&gt; </span>Keep the set small enough to read in an afternoon.
+- [x] 收集五十个真实问题
+- [x] 写出专家答案
 
-<span class="m">| </span>Metric <span class="m">| </span>Healthy range <span class="m">|
+## 2. 单独衡量检索
+
+| 指标 | 说明什么 |
 |---|---|
-| </span>Recall@5 <span class="m">| </span>above 0.85 <span class="m">|
-| </span>MRR <span class="m">| </span>above 0.6 <span class="m">|</span>
-
-<span class="m">- </span>Collect fifty real questions
-<span class="m">- </span>Write the answer an expert would accept</pre></div>
-    <div class="arrow" aria-hidden="true"><svg class="i"><use href="#i-arrow"/></svg></div>
-    <div class="pane"><p class="tag">In mdPreview</p>
-      <figure class="win"><div class="win-bar"><i></i><i></i><i></i><span>rag-evaluation.md</span></div>
-        <picture><source media="(prefers-color-scheme: dark)" srcset="images/after-dark.webp" type="image/webp"><img src="images/after.webp" alt="The same text rendered as a clean page with a heading, a tip box, a table and a list" width="1360" height="1440" loading="lazy"></picture>
-      </figure></div>
+| Recall@5 | 证据是否在前五条里 |</pre><div class="ed-mini"></div></div>
+            <div class="ed-chat">
+              <div class="ed-chat-head">AI ASSISTANT<span>gpt ▾ · New chat ＋</span></div>
+              <div class="ed-msgs">
+                <div class="ed-msg-u">Tidy this report and fix the table</div>
+                <div class="ed-msg-a"><b>Plan</b><br>1. Read rag-evaluation.md<br>2. Normalize headings<br>3. Align the table<br>4. Run the formatter</div>
+                <div class="ed-diff"><div class="del">- | Metric | What it tells you |</div><div class="add">+ | Metric   | What it tells you |</div><div class="del">- |---|---|</div><div class="add">+ |----------|-------------------|</div></div>
+                <div class="ed-act-row"><span class="go">Apply</span><span>Reject</span><span>Run ▸</span></div>
+                <div class="ed-msg-a">Tip: 3 files changed. Review the diff before committing.</div>
+              </div>
+              <div class="ed-input"><span>Ask, or type / for commands</span><span>@ ⏎</span></div>
+            </div>
+            <div class="ed-term">
+              <div class="ed-term-tabs"><span class="on">TERMINAL</span><span class="bad">PROBLEMS 3</span><span>OUTPUT</span><span>DEBUG CONSOLE</span></div>
+              <div class="ed-term-body">$ python src/eval.py --set fifty<br>recall@5 0.88&nbsp;&nbsp;mrr 0.62<br><span class="warn">warning: 2 deprecated calls</span><br><span class="err">error: judge.py:41 timeout</span><br>$ git status</div>
+            </div>
+            <div class="ed-toast">Update available. Restart to apply 14 changes.<br><span>Restart</span><span>Later</span></div>
+          </div>
+          <div class="ed-status"><span><span>⎇ main*</span><span>↻ 0↓ 2↑</span><span>⊗ 3 ⚠ 2</span></span><span><span>Ln 12, Col 8</span><span>Spaces: 2</span><span>UTF-8</span><span>LF</span><span>Markdown</span><span>AI ✓</span><span>🔔</span></span></div>
+        </div>
+      </figure>
+      <figure>
+        <p class="compare-tag"><b>mdPreview</b></p>
+        <div class="cmp-window" role="img" aria-label="同一份文件在 mdPreview 里：只有一个干净的文档窗口。" data-label-zh="同一份文件在 mdPreview 里：只有一个干净的文档窗口。" data-label-en="The same file in mdPreview: just one calm document window.">
+          <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div><img src="images/doc-icon.webp" alt="" width="14" height="14"><span data-zh="检索评估报告.md" data-en="rag-evaluation.md">检索评估报告.md</span></div>
+          <div class="cmp-body"><div class="comp-side" id="strip-side"></div><div class="comp-long"><img data-frame="long" alt=""></div></div>
+        </div>
+      </figure>
+    </div>
+    <p class="cmp-cap" data-zh="示意：左侧为通用编辑器界面，不指向任何具体软件。" data-en="Illustration: the left side is a generic editor, not any specific product.">示意：左侧为通用编辑器界面，不指向任何具体软件。</p>
+    <div class="support-reasons">
+      <div class="reason"><h3 data-zh="双击就开。" data-en="Double-click. You are in.">双击就开。</h3><p data-zh="设为默认打开方式，双击就是排好版的正文。不必先启动软件，再找一遍文件。" data-en="Set mdPreview as the default and double-click into a typeset page. No need to launch another tool and find the file again.">设为默认打开方式，双击就是排好版的正文。不必先启动软件，再找一遍文件。</p></div>
+      <div class="reason"><h3 data-zh="不联网，也能用。" data-en="Offline feels right at home.">不联网，也能用。</h3><p data-zh="不用账号，阅读和编辑都在本地完成。文档留在你的电脑里，不必先上传到哪里。" data-en="No account. Reading and editing happen on your Mac. Your documents stay on your computer, with nothing to upload first.">不用账号，阅读和编辑都在本地完成。文档留在你的电脑里，不必先上传到哪里。</p></div>
+    </div>
   </div>
-  <div class="pillars">
-    <div class="pillar"><svg class="i" aria-hidden="true"><use href="#i-bolt"/></svg><h3>Instant and light</h3><p>Starts in about half a second. Double-click a file and it is already typeset. Nothing runs in the background.</p></div>
-    <div class="pillar"><svg class="i" aria-hidden="true"><use href="#i-clock"/></svg><h3>Built to be finished</h3><p>A hairline progress bar, “N min left”, section folding and Go to Heading keep a 5,000-word answer from feeling endless.</p></div>
-    <div class="pillar"><svg class="i" aria-hidden="true"><use href="#i-pencil"/></svg><h3>Edit like a document</h3><p>Click anywhere and a formatting bar appears. Bold, headings, lists, links and tables, never a <code>**</code> in sight.</p></div>
+</section>
+
+<section class="editing-section" id="editing">
+  <div class="wrap">
+    <div class="editing-head"><h2 data-zh="改一句，不换工具。" data-en="A small edit. Right here.">改一句，不换工具。</h2><p class="sub" data-zh="点正文，用工具条直接改。\n想看源码？⌘E，随时切换。" data-en="Click the text. Edit with familiar tools.\nWant the source? Switch with ⌘E.">点正文，用工具条直接改。<br>想看源码？⌘E，随时切换。</p></div>
+    <figure class="editing-figure">
+      <div class="try-window" id="try">
+        <div class="try-bar" id="try-bar" role="toolbar" aria-label="格式" data-label-zh="格式" data-label-en="Format"></div>
+        <div class="try-body"><div class="try-doc" id="try-doc" contenteditable="true" spellcheck="false" role="textbox" aria-multiline="true" aria-label="可以试着编辑的文档" data-label-zh="可以试着编辑的文档" data-label-en="A document you can try editing"></div><pre class="try-src" id="try-src" hidden></pre></div>
+      </div>
+      <figcaption class="try-hint"><span id="try-hint" data-zh="试一试：选中一句话，点工具条上的加粗。" data-en="Try it: select a sentence and press Bold.">试一试：选中一句话，点工具条上的加粗。</span><span class="note" data-zh="网页里的小体验，与真实 app 略有不同。" data-en="A small taste in the browser. The real app differs slightly.">网页里的小体验，与真实 app 略有不同。</span></figcaption>
+    </figure>
+    <p class="export-note" data-zh="改完，从 macOS「文件」菜单导出 PDF、Word 或网页文件，发给别人。" data-en="When you are done, use the macOS File menu to export a PDF, Word document or web page file to share.">改完，从 macOS「文件」菜单导出 PDF、Word 或网页文件，发给别人。</p>
   </div>
-</div></section>
+</section>
 
-<section class="alt" id="reading"><div class="wrap split">
-  <div class="text"><h2>Made for long answers</h2><p class="sub">Restrained typography, and a few aids that appear only when a document is long enough to need them.</p>
-    <ul><li>Progress bar and “N min left”, only in long documents</li><li>Collapse any section from the arrow in the margin</li><li><code>⌘J</code> jumps to any heading as you type a few letters</li><li>Long code blocks and tables show a head; one click shows all</li><li>Tables, math, Mermaid diagrams, footnotes and alerts render correctly</li><li>Reloads automatically when an AI agent changes the file</li></ul></div>
-  <figure class="win"><div class="win-bar"><i></i><i></i><i></i><span>rag-evaluation.md</span></div>
-    <picture><source media="(prefers-color-scheme: dark)" srcset="images/hero-goto-dark.webp" type="image/webp"><img src="images/hero-goto.webp" alt="The Go to Heading palette open over a long document" width="2400" height="1500" loading="lazy"></picture>
-  </figure>
-</div></section>
-
-<section id="editing"><div class="wrap split flip">
-  <div class="text"><h2>Click, then type</h2><p class="sub">Documents open for reading. Put the cursor anywhere and a slim toolbar slides in; press <code>Esc</code> and it is gone.</p>
-    <ul><li>Bold, italic, headings, lists, quotes and links from the bar</li><li>Insert a table, add or remove rows and columns</li><li>Paste from the web or a chat and get clean text (<code>⇧⌘V</code>)</li><li>Drop in images; they are saved next to the document</li><li>Prefer plain text? <code>⌘E</code> switches to the source</li></ul></div>
-  <figure class="win"><div class="win-bar"><i></i><i></i><i></i><span>rag-evaluation.md</span></div>
-    <picture><source media="(prefers-color-scheme: dark)" srcset="images/edit-bar-dark.webp" type="image/webp"><img src="images/edit-bar.webp" alt="A formatting bar above a document with a sentence selected" width="2400" height="1500" loading="lazy"></picture>
-  </figure>
-</div></section>
-
-<section class="alt" id="sharing"><div class="wrap">
-  <h2>Hand it to anyone</h2>
-  <p class="sub">Send people something they can open, not a <code>.md</code> file.</p>
-  <div class="grid3">
-    <div class="cell"><svg class="i" aria-hidden="true"><use href="#i-pdf"/></svg><h3>PDF</h3><p>Real pagination, page numbers, bookmarks, searchable Chinese text.</p></div>
-    <div class="cell"><svg class="i" aria-hidden="true"><use href="#i-word"/></svg><h3>Word (.docx)</h3><p>Native heading styles, tables, images and footnotes.</p></div>
-    <div class="cell"><svg class="i" aria-hidden="true"><use href="#i-globe"/></svg><h3>Share page</h3><p>One self-contained web page with an outline and dark mode. Opens anywhere.</p></div>
-    <div class="cell"><svg class="i" aria-hidden="true"><use href="#i-copy"/></svg><h3>Rich text</h3><p><code>⇧⌘C</code> copies formatted text for Mail, Notes, Word or chat.</p></div>
-    <div class="cell"><svg class="i" aria-hidden="true"><use href="#i-image"/></svg><h3>Image &amp; plain text</h3><p>A long picture, or true plain text without <code>##</code>.</p></div>
-    <div class="cell"><svg class="i" aria-hidden="true"><use href="#i-term"/></svg><h3>Command line</h3><p><code>mdpreview export notes.md --to pdf</code></p></div>
+<section class="install" id="install">
+  <div class="wrap">
+    <div class="install-head"><h2 data-zh="把 mdPreview 放进 Mac。" data-en="Make room for mdPreview.">把 mdPreview 放进 Mac。</h2><p data-zh="交给 AI，或者自己下载。" data-en="Let your AI install it. Or download it yourself.">交给 AI，或者自己下载。</p></div>
+    <div class="install-grid">
+      <div class="agent-card" id="ai-install">
+        <span id="agent-install"></span>
+        <div class="agent-heading"><h3 data-zh="让 AI 帮你安装。" data-en="Let your AI install it.">让 AI 帮你安装。</h3></div>
+        <p class="intro" data-zh="粘给能操作这台 Mac 的 AI，如 Claude Code 或 Codex。" data-en="Paste into an AI that can work on your Mac, such as Claude Code or Codex.">粘给能操作这台 Mac 的 AI，如 Claude Code 或 Codex。</p>
+        <div class="prompt-box" id="install-prompt" tabindex="0" role="region" aria-label="AI 安装提示词">请帮我在本机上安装并打开最新版 mdPreview，按这里的说明操作：https://raw.githubusercontent.com/tahoeliu/mdPreview/main/docs/install.md 。最后用一两句话告诉我结果。</div>
+        <div class="copy-row"><button class="btn primary" id="copy-prompt" type="button" disabled data-zh="复制安装提示词" data-en="Copy install prompt">复制安装提示词</button><span class="copy-status" id="copy-status" role="status" aria-live="polite"></span></div>
+        <textarea class="manual-copy" id="prompt-fallback" hidden readonly rows="5" aria-label="手动复制提示词" data-label-zh="手动复制提示词" data-label-en="Manually copy the prompt"></textarea>
+        <noscript><p class="noscript-copy">脚本未启用，可直接选中上方提示词复制。JavaScript is off; select the prompt above to copy.</p></noscript>
+      </div>
+      <div class="manual-install">
+        <h3 data-zh="自己装，也很简单。" data-en="Doing it yourself? Just as simple.">自己装，也很简单。</h3>
+        <a class="btn secondary" href="https://github.com/tahoeliu/mdPreview/releases/latest" data-zh="下载 Mac 版" data-en="Download for Mac">下载 Mac 版</a>
+        <p data-zh="从发布页下载适合这台 Mac 的安装包，打开后拖进「应用程序」。" data-en="Choose the package for your Mac on the release page, open it, and drag mdPreview into Applications.">从发布页下载适合这台 Mac 的安装包，打开后拖进「应用程序」。</p>
+        <p class="fine"><span data-zh="需要 macOS 13 或更新版本。首次打开提醒见" data-en="Requires macOS 13 or later. For first-open warnings, see the">需要 macOS 13 或更新版本。首次打开提醒见</span> <a href="#manual-install-faq" data-zh="安装 FAQ" data-en="installation FAQ">安装 FAQ</a><span data-zh="。" data-en=".">。</span></p>
+      </div>
+    </div>
+    <p class="cli-line"><span data-zh="更习惯命令行？" data-en="Prefer the command line?">更习惯命令行？</span> <button class="cli-button" id="copy-cli" type="button" disabled data-zh="点击复制 CLI 命令。" data-en="Click to copy CLI command.">点击复制 CLI 命令。</button></p>
+    <div class="cli-feedback"><span class="copy-status" id="cli-status" role="status" aria-live="polite"></span><textarea class="manual-copy" id="cli-fallback" hidden readonly rows="3" aria-label="手动复制 CLI 命令" data-label-zh="手动复制 CLI 命令" data-label-en="Manually copy the CLI command"></textarea></div>
   </div>
-</div></section>
+</section>
 
-<section class="install" id="install"><div class="wrap">
-  <h2 class="center">Get mdPreview</h2>
-  <p class="sub center">Free for Mac. Pick whichever is easier.</p>
-  <div class="cols">
-    <div class="card"><h3>Download the app</h3><p>Open the disk image and drag mdPreview into Applications.</p>
-      <a class="btn primary" href="https://github.com/tahoeliu/mdPreview/releases/latest">Download for Mac</a>
-      <ol class="steps"><li>Open the downloaded file and drag the app into Applications.</li><li>The first time, macOS may say it can’t check the app. Open <em>System Settings → Privacy &amp; Security</em> and click <em>Open Anyway</em> once.</li></ol></div>
-    <div class="card"><h3>Or one line in Terminal</h3><p>Checks a signature and checksum first, and macOS shows no warning at all.</p>
-      <div class="cmdrow"><pre class="cmd" id="cmd">curl -fsSL https://raw.githubusercontent.com/tahoeliu/mdPreview/main/scripts/get.sh | bash</pre><button class="copy" type="button" data-copy="cmd" data-done="Copied">Copy</button></div>
-      <p style="margin:18px 0 0;font-size:14px">Prefer Homebrew? <code style="background:none;border:0;padding:0;color:#eef1f7">brew install --cask --no-quarantine tahoeliu/tap/mdpreview</code></p></div>
+<section class="faq" id="faq">
+  <div class="wrap faq-grid">
+    <h2 data-zh="你可能还想问。" data-en="A few good questions.">你可能还想问。</h2>
+    <div class="faq-list">
+      <details><summary data-zh="需要懂 Markdown 吗？" data-en="Do I need to know Markdown?">需要懂 Markdown 吗？</summary><p data-zh="不需要。打开就能读，点击正文可以编辑，用工具条加粗、设标题、加列表。复杂内容也可以切到源码模式处理，但日常阅读和简单修改不用学习语法。" data-en="No. Open a file to read it, click the body to edit, and use the toolbar for bold, headings and lists. Source mode is available for complex content, but everyday reading and simple edits do not require syntax.">不需要。打开就能读，点击正文可以编辑，用工具条加粗、设标题、加列表。复杂内容也可以切到源码模式处理，但日常阅读和简单修改不用学习语法。</p></details>
+      <details><summary data-zh="免费吗？" data-en="Is it free?">免费吗？</summary><p data-zh="免费，也开源，采用 MIT 许可证。没有账号、订阅或广告。你可以在 GitHub 查看源码。" data-en="Yes. Free and open source under the MIT license. No account, subscription or ads. The source is available on GitHub.">免费，也开源，采用 MIT 许可证。没有账号、订阅或广告。你可以在 GitHub 查看源码。</p></details>
+      <details><summary data-zh="会上传我的文档吗？" data-en="Does it upload my documents?">会上传我的文档吗？</summary><p data-zh="不会自动上传文档，也没有云同步或遥测。阅读、编辑和导出在本地完成。自动更新会联网检查并下载新版本，可以在设置中关闭；远程图片默认不加载，由你决定是否联网加载。主动分享或打开带远程图片的导出网页，是另外的操作。" data-en="It does not automatically upload documents, and has no cloud sync or telemetry. Reading, editing and export happen locally. Automatic updates check for and download new versions online; you can turn them off. Remote images are blocked until you allow them. Sharing files or opening an exported page with remote images is a separate action.">不会自动上传文档，也没有云同步或遥测。阅读、编辑和导出在本地完成。自动更新会联网检查并下载新版本，可以在设置中关闭；远程图片默认不加载，由你决定是否联网加载。主动分享或打开带远程图片的导出网页，是另外的操作。</p></details>
+      <details id="manual-install-faq"><summary data-zh="为什么 macOS 会提醒我？" data-en="Why does macOS show a warning?">为什么 macOS 会提醒我？</summary><p data-zh="目前发布配置不要求 Apple 公证，浏览器下载的安装包可能触发 macOS 的首次打开保护。确认来自本项目发布页后，可在「系统设置 → 隐私与安全性」中选择「仍要打开」。官方脚本保留签名与校验和验证；如果校验失败、设备管理策略或系统阻止安装，请停止，不要绕过限制。AI 安装也不能保证系统放行，网页不会控制你的 AI。" data-en="The current release setup does not require Apple notarization, so browser downloads may trigger first-open protection. After verifying the source, use System Settings → Privacy & Security → Open Anyway. The official script keeps signature and checksum verification. Stop if verification fails or device or system policy blocks installation; do not bypass restrictions. Installing through an AI cannot guarantee system approval, and this page does not control your AI.">目前软件没有付费完成Apple的开发者认证，浏览器下载的安装包可能触发 macOS 的首次打开保护。确认来自本项目发布页后，可在「系统设置 → 隐私与安全性」中选择「仍要打开」。官方脚本保留签名与校验和验证；如果校验失败、设备管理策略或系统阻止安装，请停止，不要绕过限制。AI 安装也不能保证系统放行，网页不会控制你的 AI。</p></details>
+      <details><summary data-zh="在 Finder 里，按空格能预览吗？" data-en="Can I preview with the spacebar in Finder?">在 Finder 里，按空格能预览吗？</summary><p data-zh="应用包含 Quick Look 扩展。在 Finder 中选中文件，按空格即可尝试预览。如果没有生效，可到「系统设置 → 通用 → 登录项与扩展 → 快速查看」检查 mdPreview 扩展是否启用。不同 macOS 版本的入口和兼容性可能不同，请以发布说明为准。" data-en="The app includes a Quick Look extension. Select a file in Finder and press Space to try it. If it does not appear, check mdPreview under System Settings → General → Login Items & Extensions → Quick Look. Settings and compatibility vary with macOS; check the release notes.">应用包含 Quick Look 扩展。在 Finder 中选中文件，按空格即可尝试预览。如果没有生效，可到「系统设置 → 通用 → 登录项与扩展 → 快速查看」检查 mdPreview 扩展是否启用。不同 macOS 版本的入口和兼容性可能不同，请以发布说明为准。</p></details>
+    </div>
   </div>
-  <p class="fine">Why the extra step? mdPreview is free software and doesn’t carry a paid Apple certificate. Requires macOS 13 or later.</p>
-</div></section>
+</section>
 
-<section><div class="wrap narrow">
-  <h2>Questions</h2>
-  <details><summary>Do I need to know Markdown?</summary><p>No. Read it, click to edit with the toolbar, export. Source mode is there if you want it.</p></details>
-  <details><summary>Is it really free?</summary><p>Yes. MIT licensed, no account, no ads, no telemetry. A GitHub star helps others find it.</p></details>
-  <details><summary>Does it send my documents anywhere?</summary><p>Never. The only network request is an optional update check you can switch off. Remote images are not loaded until you allow them.</p></details>
-  <details><summary>Why does macOS warn me the first time?</summary><p>mdPreview is free and not signed with a paid Apple certificate, so a copy downloaded in a browser needs one confirmation: System Settings → Privacy &amp; Security → Open Anyway. The Terminal install above avoids the prompt altogether.</p></details>
-  <details><summary>Is it a Typora or VS Code replacement?</summary><p>No. It is a focused reader with convenient editing and good sharing, not a writing studio or an IDE.</p></details>
-  <details><summary>Spacebar preview in Finder?</summary><p>Bundled with the app. If it does not appear, enable <em>mdPreview Quick Look</em> in System Settings → General → Login Items &amp; Extensions → Quick Look.</p></details>
-</div></section>
+<section class="closing">
+  <div class="wrap">
+    <img src="images/icon-160.webp" alt="" width="96" height="96">
+    <h2 data-zh="双击一个 .md，看看它本该有的样子。" data-en="Double-click a .md. See how it was meant to look.">双击一个 .md，看看它本该有的样子。</h2>
+    <div class="cta"><a class="btn primary" id="ai-cta-2" href="#ai-install" data-zh="让 AI 帮你安装" data-en="Install with your AI">让 AI 帮你安装</a><a class="text-link" href="https://github.com/tahoeliu/mdPreview/releases/latest" data-zh="下载 Mac 版" data-en="Download for Mac">下载 Mac 版</a></div>
+  </div>
+</section>
 </main>
+<footer><div class="wrap"><span>mdPreview · MIT © Tahoe Liu</span><div class="footer-links"><a href="https://github.com/tahoeliu/mdPreview">GitHub</a><a href="https://github.com/tahoeliu/mdPreview/releases" data-zh="版本发布" data-en="Releases">版本发布</a><a href="https://github.com/tahoeliu/mdPreview/blob/main/SECURITY.md" data-zh="安全说明" data-en="Security">安全说明</a></div></div></footer>
 
-<footer><div class="wrap"><a href="https://github.com/tahoeliu/mdPreview">GitHub</a> · <a href="https://github.com/tahoeliu/mdPreview/releases">Releases</a> · <a href="https://github.com/tahoeliu/mdPreview/blob/main/CHANGELOG.md">Changelog</a> · <a href="https://github.com/tahoeliu/mdPreview/blob/main/SECURITY.md">Security</a> · MIT © Tahoe Liu</div></footer>
 <script>
-document.querySelectorAll('button.copy').forEach(function(b){b.addEventListener('click',function(){
-  var el=document.getElementById(b.dataset.copy),old=b.textContent;
-  try{navigator.clipboard.writeText(el.textContent.trim()).then(function(){b.textContent=b.dataset.done;setTimeout(function(){b.textContent=old},1600)})}catch(e){}
-})});
+(function () {
+  'use strict';
+  const param = new URLSearchParams(location.search).get('lang');
+  let lang = param === 'en' ? 'en' : param === 'zh' ? 'zh' : 'en';
+  const tr = (zh, en) => lang === 'zh' ? zh : en;
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  const dark = matchMedia('(prefers-color-scheme: dark)');
+  const clamp = n => Math.max(0, Math.min(1, n));
+  const seg = (t, a, b) => clamp((t - a) / (b - a));
+  const ease = p => p * p * (3 - 2 * p);
+
+  // ── 真实界面帧：由真实前端代码截图生成（tests/e2e/site-demo-frames.spec.js） ──
+  function frameSrc(name) { return 'images/demo-' + name + (lang === 'zh' ? '-zh' : '') + (dark.matches ? '-dark' : '') + '.webp'; }
+  const SIDES = 7;
+  function setFrames() {
+    $$('img[data-frame]').forEach(img => { const s = frameSrc(img.dataset.frame); if (img.getAttribute('src') !== s) img.src = s; });
+    ['hero-side', 'strip-side'].forEach(id => {
+      const box = $('#' + id); if (!box) return;
+      if (!box.children.length) for (let i = 0; i < SIDES; i++) { const im = document.createElement('img'); im.alt = ''; im.dataset.side = i; box.append(im); }
+      [...box.children].forEach(im => { const s = frameSrc('side-' + im.dataset.side); if (im.getAttribute('src') !== s) im.src = s; });
+      box.children[0].classList.add('on');
+    });
+  }
+
+  // ── 来自真实 format-toolbar.js 的图标路径（子集） ──
+  const icons = {
+    bold: '<path d="M7 4.5h6a3.4 3.4 0 0 1 0 6.8H7zM7 11.3h7.2a3.6 3.6 0 0 1 0 7.2H7z"/>',
+    italic: '<path d="M10 5h7M7 19h7M14 5 10 19"/>',
+    strike: '<path d="M16.8 7.4C16.3 5.6 14.6 4.5 12.2 4.5 9.6 4.5 7.8 5.8 7.8 7.7c0 1.5 1 2.4 2.7 3M13.8 13.2c1.8.6 2.8 1.6 2.8 3.2 0 2-2 3.3-4.6 3.3-2.5 0-4.3-1.1-4.9-3M3.5 12h17"/>',
+    code: '<path d="m8 8-4 4 4 4M16 8l4 4-4 4M13.6 6.5l-3.2 11"/>',
+    ul: '<path d="M9.5 7h10.5M9.5 12h10.5M9.5 17h10.5"/><circle cx="5" cy="7" r=".9" fill="currentColor" stroke="none"/><circle cx="5" cy="12" r=".9" fill="currentColor" stroke="none"/><circle cx="5" cy="17" r=".9" fill="currentColor" stroke="none"/>',
+    ol: '<path d="M10 7h10M10 12h10M10 17h10M4.5 5.6 6 5v4M4.4 13.8c0-.8.6-1.2 1.3-1.2s1.2.5 1.2 1.1c0 .5-.3.8-.7 1.1L4.4 16.3H7M4.4 18.3h2.4l-1.1 1.1c.7 0 1.3.4 1.3 1.1s-.6 1.1-1.4 1.1c-.6 0-1-.2-1.3-.6"/>',
+    quote: '<path d="M4.5 11V8.4c0-1.4.9-2.5 2.3-2.9M4.5 11h3v3.5h-3zM10.5 11V8.4c0-1.4.9-2.5 2.3-2.9M10.5 11h3v3.5h-3zM17 8h3M16 11.5h4M4.5 19h15.5"/>',
+    undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10a5.5 5.5 0 0 1 0 11h-3.5"/>',
+    redo: '<path d="m15 14 5-5-5-5"/><path d="M20 9H10a5.5 5.5 0 0 0 0 11h3.5"/>'
+  };
+  const icon = n => '<svg class="edit-icon" viewBox="0 0 24 24" aria-hidden="true">' + icons[n] + '</svg>';
+
+  // ── 可以亲手试的编辑区 ──
+  const doc = $('#try-doc'), src = $('#try-src'), bar = $('#try-bar'), hint = $('#try-hint');
+  const sample = {
+    zh: '<h1>周末，慢一点。</h1><p>一本书，一杯咖啡。从一顿好好吃的早餐开始。</p><h2>周六 · 出门走走</h2><ul><li>逛书店，沿河散步</li><li>傍晚带一本新书回家</li></ul><p>把时间留给真正喜欢的事。</p>',
+    en: '<h1>A slower weekend.</h1><p>A book. A coffee. Start with a proper breakfast.</p><h2>Saturday · Step outside</h2><ul><li>Browse a bookshop, walk by the river</li><li>Head home with a new book</li></ul><p>Make time for what you love.</p>'
+  };
+  const actions = {
+    bold: () => document.execCommand('bold'), italic: () => document.execCommand('italic'), strike: () => document.execCommand('strikeThrough'),
+    ul: () => document.execCommand('insertUnorderedList'), ol: () => document.execCommand('insertOrderedList'),
+    undo: () => document.execCommand('undo'), redo: () => document.execCommand('redo'),
+    code: () => {
+      const sel = getSelection(); if (!sel.rangeCount) return;
+      const inCode = sel.anchorNode && (sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement).closest('code');
+      if (inCode) { inCode.replaceWith(document.createTextNode(inCode.textContent)); return; }
+      const text = sel.toString(); if (!text) return;
+      document.execCommand('insertHTML', false, '<code>' + text.replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]) + '</code>');
+    },
+    quote: () => { const b = block(); document.execCommand('formatBlock', false, b && b.tagName === 'BLOCKQUOTE' ? 'p' : 'blockquote'); },
+    heading: () => { const b = block(); document.execCommand('formatBlock', false, b && b.tagName === 'H2' ? 'p' : 'h2'); }
+  };
+  const states = { bold: 'bold', italic: 'italic', strike: 'strikeThrough', ul: 'insertUnorderedList', ol: 'insertOrderedList' };
+  function block() {
+    const sel = getSelection(); if (!sel.rangeCount) return null;
+    const n = sel.anchorNode; const el = n && (n.nodeType === 1 ? n : n.parentElement);
+    return el && el.closest('h1,h2,p,li,blockquote') && doc.contains(el) ? el.closest('h1,h2,p,li,blockquote') : null;
+  }
+  function inDoc() { const sel = getSelection(); return sel.rangeCount && doc.contains(sel.anchorNode); }
+  function buildBar() {
+    const t = (name, label) => '<button class="edit-tool" type="button" data-act="' + name + '" aria-label="' + label + '" title="' + label + '">' + icon(name) + '</button>';
+    const sep = '<span class="edit-sep"></span>';
+    bar.innerHTML = t('undo', tr('撤销', 'Undo')) + t('redo', tr('重做', 'Redo')) + sep
+      + '<button class="edit-tool text" type="button" data-act="heading" aria-label="' + tr('标题', 'Heading') + '">' + tr('标题', 'Heading') + '</button>' + sep
+      + t('bold', tr('加粗', 'Bold')) + t('italic', tr('斜体', 'Italic')) + t('strike', tr('删除线', 'Strikethrough')) + t('code', tr('代码', 'Code')) + sep
+      + t('ul', tr('无序列表', 'Bulleted list')) + t('ol', tr('有序列表', 'Numbered list')) + t('quote', tr('引用', 'Quote'))
+      + '<span class="try-spacer"></span><button class="edit-tool text" type="button" data-act="source" aria-pressed="false">' + tr('源码 ⌘E', 'Source ⌘E') + '</button>';
+  }
+  function refreshBar() {
+    $$('[data-act]', bar).forEach(b => {
+      const a = b.dataset.act; let on = false;
+      if (states[a]) { try { on = inDoc() && document.queryCommandState(states[a]); } catch (e) {} }
+      if (a === 'heading') { const bl = block(); on = !!bl && bl.tagName === 'H2'; }
+      if (a === 'quote') { const bl = block(); on = !!bl && bl.tagName === 'BLOCKQUOTE'; }
+      if (a === 'code') { const sel = getSelection(); on = sel.rangeCount && doc.contains(sel.anchorNode) && !!(sel.anchorNode.nodeType === 1 ? sel.anchorNode : sel.anchorNode.parentElement).closest('code'); }
+      if (a === 'source') on = !src.hidden;
+      b.classList.toggle('on', !!on);
+      if (a === 'source') b.setAttribute('aria-pressed', String(!src.hidden));
+    });
+  }
+  function toMarkdown() {
+    const inline = node => [...node.childNodes].map(n => {
+      if (n.nodeType === 3) return n.nodeValue;
+      const tag = n.tagName.toLowerCase(), inner = inline(n);
+      if (tag === 'b' || tag === 'strong') return inner.trim() ? '**' + inner + '**' : inner;
+      if (tag === 'i' || tag === 'em') return inner.trim() ? '*' + inner + '*' : inner;
+      if (tag === 's' || tag === 'strike' || tag === 'del') return inner.trim() ? '~~' + inner + '~~' : inner;
+      if (tag === 'code') return '`' + inner + '`';
+      if (tag === 'br') return '';
+      return inner;
+    }).join('');
+    const out = [];
+    [...doc.children].forEach(el => {
+      const tag = el.tagName.toLowerCase();
+      if (tag === 'h1') out.push('# ' + inline(el));
+      else if (tag === 'h2') out.push('## ' + inline(el));
+      else if (tag === 'ul') out.push([...el.children].map(li => '- ' + inline(li)).join('\n'));
+      else if (tag === 'ol') out.push([...el.children].map((li, i) => (i + 1) + '. ' + inline(li)).join('\n'));
+      else if (tag === 'blockquote') out.push('> ' + inline(el));
+      else { const s = inline(el); if (s.trim()) out.push(s); }
+    });
+    return out.join('\n\n');
+  }
+  function renderSource() {
+    const esc = toMarkdown().replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    src.innerHTML = esc.replace(/(\*\*|~~|`|^#{1,2} |^&gt; |^- |^\d+\. )/gm, '<span class="mk">$1</span>');
+  }
+  function toggleSource(force) {
+    const show = typeof force === 'boolean' ? force : src.hidden;
+    if (show) renderSource();
+    src.hidden = !show; doc.hidden = show; refreshBar();
+    if (!show) doc.focus({ preventScroll: true });
+  }
+  bar.addEventListener('mousedown', e => { if (e.target.closest('[data-act]')) e.preventDefault(); });
+  bar.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]'); if (!b) return;
+    const a = b.dataset.act;
+    if (a === 'source') { toggleSource(); return; }
+    if (!src.hidden) toggleSource(false);
+    if (!inDoc()) { doc.focus({ preventScroll: true }); hint.style.color = 'var(--accent)'; setTimeout(() => { hint.style.color = ''; }, 900); if (a !== 'undo' && a !== 'redo') return; }
+    actions[a](); refreshBar();
+  });
+  document.addEventListener('selectionchange', () => { if (inDoc()) refreshBar(); });
+  doc.addEventListener('input', refreshBar);
+  $('#try').addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'e') { e.preventDefault(); toggleSource(); } });
+
+  // ── 首屏演示：time → DOM，不依赖 CSS 动画 ──
+  const stage = $('#hero-stage'), canvas = $('.canvas', stage), win = $('#demo-window'), cursor = $('#cursor'), ring = $('#ring');
+  const fEdit = $('[data-frame="edit"]', win), fSelect = $('[data-frame="select"]', win), fBold = $('[data-frame="bold"]', win);
+  const heroLong = $('#hero-long'), heroSide = $('#hero-side'), exported = $('#exported-file'), dockApp = $('#dock-app'), caption = $('#hero-caption'), motionBtn = $('#motion');
+  const DUR = 20600;
+  // 位置来自 tests/e2e/site-demo-frames.spec.js 生成的真实界面（单位：窗口内容区的点）
+  const coords = {
+    en: { end: 1620, max: 1821, stops: [0, 293, 561, 870, 1290, 1524, 1620], text: [325, 313.5], bold: [387.7, 20.5] },
+    zh: { end: 1494, max: 1667, stops: [0, 235, 474, 784, 1174, 1428, 1494], text: [290, 314.3], bold: [383.9, 20.5] }
+  };
+  const K = 700 / 900, OX = 130, OY = 34 + 28;
+  const toCanvas = ([x, y]) => [OX + x * K, OY + y * K];
+  const center = el => { let x = 0, y = 0, n = el; while (n && n !== canvas) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; } return [x + el.offsetWidth / 2, y + el.offsetHeight / 2]; };
+  let keys = [], clicks = [], scene = { time: 0, last: null, visible: false, paused: false, raf: 0 };
+  function buildKeys() {
+    const c = coords[lang], file = center($('#desktop-file')), text = toCanvas(c.text), bold = toCanvas(c.bold);
+    const menu = center($('#menu-file')), row = center($('#export-row')), popup = center($('#fmt-popup')), pdfItem = center($('#fmt-pdf')), ok = center($('#ed-ok'));
+    const compact = stage.classList.contains('compact'), mid = [OX + 380, OY + 230];
+    keys = [
+      { t: 0, p: [720, 520] }, { t: 1100, p: [720, 520] }, { t: 1900, p: [file[0] - 4, file[1] - 8] }, { t: 2700, p: [file[0] - 4, file[1] - 8] },
+      { t: 3500, p: mid }, { t: 9400, p: mid },
+      { t: 10300, p: text }, { t: 11500, p: text },
+      { t: 12300, p: bold }, { t: 13200, p: bold },
+      { t: 14000, p: compact ? bold : menu }, { t: 14500, p: compact ? bold : menu },
+      { t: 15300, p: compact ? bold : row }, { t: 16000, p: compact ? bold : row },
+      { t: 16900, p: popup }, { t: 17050, p: popup }, { t: 17700, p: pdfItem }, { t: 17900, p: pdfItem }, { t: 18400, p: ok }, { t: 18600, p: ok }, { t: 19400, p: [720, 560] }, { t: DUR, p: [720, 560] }
+    ];
+    clicks = [1900, 2400, 10500, 11300, 11480, 13200, 17050, 17900, 18600].concat(compact ? [] : [14500, 16000]);
+  }
+  function cursorAt(t) {
+    let i = 0; while (i < keys.length - 2 && t >= keys[i + 1].t) i++;
+    const a = keys[i], b = keys[i + 1], k = ease(seg(t, a.t, b.t));
+    return [a.p[0] + (b.p[0] - a.p[0]) * k, a.p[1] + (b.p[1] - a.p[1]) * k];
+  }
+  const captions = [[0, 'AI 存下了一份长文档，双击它。', 'Your AI saved a long document. Double-click it.'], [2300, '立刻打开：目录、表格、公式、代码、流程图，都排好了。', 'It opens at once: outline, tables, math, code and diagrams, all typeset.'], [9600, '点一下正文，就能改。', 'Click the text to edit it.'], [12000, '选中一段，点加粗，和在 Word 里一样。', 'Select, press Bold, just like in Word.'], [13800, '改完，从“文件”菜单导出。', 'When you are done, export from the File menu.'], [16200, '选择格式：PDF。', 'Choose a format: PDF.'], [18800, '新文件就在桌面上。', 'The new file lands on your desktop.']];
+  let lastSide = -1;
+  function render(t) {
+    const compact = stage.classList.contains('compact'), c = coords[lang];
+    const open = seg(t, 2700, 3200), openE = ease(open);
+    const bounce = t > 2400 && t < 3500 ? -Math.abs(Math.sin((t - 2400) / 1100 * Math.PI * 2)) * 18 * (1 - (t - 2400) / 1100) : 0;
+    stage.classList.toggle('is-file-selected', t >= 1900 && t < 18800);
+    stage.classList.toggle('has-window', t >= 2700);
+    stage.classList.toggle('is-menu-open', !compact && t >= 14500 && t < 16050);
+    stage.classList.toggle('is-export-hover', !compact && t >= 15400 && t < 16050);
+    $('#app-name').textContent = t >= 2700 ? 'mdPreview' : 'Finder';
+    dockApp.style.transform = 'translateY(' + bounce.toFixed(1) + 'px)';
+    // 窗口打开；手机裁切时，导出后窗口收起，露出桌面上的新文件
+    const hide = compact ? ease(seg(t, 18800, 19200)) : 0;
+    win.style.opacity = String(openE * (1 - hide));
+    win.style.transform = 'scale(' + (.9 + .1 * openE).toFixed(4) + ') translateY(' + ((1 - openE) * 26).toFixed(1) + 'px)';
+    win.style.visibility = open > 0 && hide < 1 ? 'visible' : 'hidden';
+    // 滚动长文：竖向长图平移，大纲随之切换
+    const sc = c.end * ease(seg(t, 3600, 9300));
+    heroLong.style.transform = 'translateY(' + (-sc * K).toFixed(2) + 'px)';
+    let idx = 0; c.stops.forEach((v, i) => { if (sc >= v - 1) idx = i; });
+    if (idx !== lastSide) { [...heroSide.children].forEach((im, i) => im.classList.toggle('on', i === idx)); lastSide = idx; }
+    $('#demo-progress').style.width = (sc / c.max * 100).toFixed(2) + '%';
+    const dlg = ease(seg(t, 16150, 16450)) * (1 - ease(seg(t, 18650, 18850)));
+    const dialog = $('#export-dialog');
+    dialog.style.opacity = String(dlg); dialog.style.transform = 'translateY(' + ((1 - dlg) * -16).toFixed(1) + 'px)';
+    $('#fmt-list').style.opacity = t >= 17050 && t < 17950 ? '1' : '0';
+    $('#fmt-pdf').classList.toggle('hi', t >= 17600 && t < 17950);
+    $('#fmt-label').textContent = t >= 17900 ? 'PDF' : 'Markdown';
+    const e = ease(seg(t, 10500, 10950));
+    fEdit.style.opacity = t >= 10500 ? '1' : '0';
+    fEdit.style.clipPath = e >= 1 ? 'none' : 'inset(0 0 ' + (100 - e * 7.4).toFixed(2) + '% 0)';
+    fSelect.style.opacity = String(seg(t, 11480, 11620));
+    fBold.style.opacity = String(seg(t, 13200, 13360));
+    // 导出：桌面上出现一个新的 PDF 文件
+    const ex = ease(seg(t, 18800, 19300));
+    exported.style.opacity = String(ex);
+    exported.style.transform = 'translateY(' + ((1 - ex) * -14).toFixed(1) + 'px) scale(' + (.85 + .15 * ex).toFixed(3) + ')';
+    const pos = cursorAt(t);
+    cursor.style.transform = 'translate(' + (pos[0] - 3) + 'px,' + (pos[1] - 2) + 'px)';
+    const hit = clicks.filter(h => t >= h && t < h + 380).pop();
+    if (hit === undefined) ring.style.opacity = '0';
+    else { const p = (t - hit) / 380; ring.style.opacity = String(.7 * (1 - p)); ring.style.transform = 'translate(' + (pos[0] - 17) + 'px,' + (pos[1] - 17) + 'px) scale(' + (.35 + p * .9) + ')'; }
+    canvas.style.opacity = String(Math.min(seg(t, 0, 350), 1 - seg(t, DUR - 500, DUR)));
+    const cp = captions.filter(x => t >= x[0]).pop(); const text = lang === 'zh' ? cp[1] : cp[2];
+    if (caption.textContent !== text) caption.textContent = text;
+  }
+  const STATIC_T = 13600; // 动效关闭或不可用时的静止画面：长文已滚动到位，句子已加粗
+  const active = () => scene.visible && !document.hidden && !scene.paused && !reduce.matches;
+  function tick(now) {
+    scene.raf = 0;
+    if (!active()) { scene.last = null; return; }
+    if (scene.last !== null) scene.time = (scene.time + now - scene.last) % DUR;
+    scene.last = now; render(scene.time); scene.raf = requestAnimationFrame(tick);
+  }
+  function sync() { if (active()) { if (!scene.raf) scene.raf = requestAnimationFrame(tick); } else { cancelAnimationFrame(scene.raf); scene.raf = 0; scene.last = null; if (reduce.matches) render(STATIC_T); } stage.dataset.playback = active() ? 'running' : 'frozen'; motionBtn.disabled = reduce.matches; }
+  function measure() {
+    const compact = stage.parentElement.clientWidth < 600;
+    stage.classList.toggle('compact', compact);
+    stage.style.setProperty('--scale', String(stage.clientWidth / (compact ? 760 : 960)));
+    lastSide = -1; buildKeys(); render(reduce.matches ? STATIC_T : scene.time);
+  }
+  function buttonText() { motionBtn.textContent = scene.paused ? tr('继续演示', 'Play demo') : tr('暂停演示', 'Pause demo'); }
+  motionBtn.addEventListener('click', () => { scene.paused = !scene.paused; scene.last = null; buttonText(); sync(); });
+
+  // ── 复制安装提示词 / 命令 ──
+  const promptBox = $('#install-prompt');
+  const prompts = { zh: promptBox.textContent, en: 'Please install and open the latest mdPreview on this Mac, following the instructions here: https://raw.githubusercontent.com/tahoeliu/mdPreview/main/docs/install.md . ' };
+  const cliCommand = 'curl -fsSL https://raw.githubusercontent.com/tahoeliu/mdPreview/main/scripts/get.sh | bash';
+  const copies = [
+    { button: $('#copy-prompt'), status: $('#copy-status'), fallback: $('#prompt-fallback'), value: () => prompts[lang], kind: 'prompt', token: 0 },
+    { button: $('#copy-cli'), status: $('#cli-status'), fallback: $('#cli-fallback'), value: () => cliCommand, kind: 'cli', token: 0 }
+  ];
+  function resetCopies() { copies.forEach(c => { c.token++; c.button.disabled = false; c.status.textContent = ''; c.fallback.hidden = true; c.fallback.value = ''; }); }
+  copies.forEach(c => c.button.addEventListener('click', async () => {
+    const token = ++c.token, value = c.value();
+    c.button.disabled = true; c.fallback.hidden = true; c.status.textContent = tr('正在复制…', 'Copying…');
+    let timer, copied = false;
+    try {
+      if (!navigator.clipboard || !window.isSecureContext) throw new Error('Clipboard unavailable');
+      await Promise.race([navigator.clipboard.writeText(value), new Promise((_, rej) => { timer = setTimeout(() => rej(new Error('timeout')), 1600); })]);
+      copied = true;
+    } catch (_) { /* 拒绝、不可用或超时：提供可选择文本，不把回退当作成功 */ } finally { clearTimeout(timer); }
+    if (token !== c.token) return;
+    c.button.disabled = false;
+    if (copied) c.status.textContent = c.kind === 'prompt' ? tr('已复制，粘给你的 AI。', 'Copied. Paste into your AI.') : tr('CLI 命令已复制。', 'CLI command copied.');
+    else { c.fallback.value = value; c.fallback.hidden = false; c.fallback.focus({ preventScroll: true }); c.fallback.select(); c.status.textContent = c.kind === 'prompt' ? tr('未能自动复制。提示词已选中，请按 ⌘C。', 'Could not copy. Prompt selected; press ⌘C.') : tr('未能自动复制。CLI 命令已选中，请按 ⌘C。', 'Could not copy. CLI command selected; press ⌘C.'); }
+  }));
+
+  // ── 语言 ──
+  function setLanguage() {
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    $$('[data-zh]').forEach(el => { el.textContent = el.dataset[lang].replace(/\\n/g, '\n'); });
+    $$('[data-label-zh]').forEach(el => el.setAttribute('aria-label', lang === 'zh' ? el.dataset.labelZh : el.dataset.labelEn));
+    $('nav').setAttribute('aria-label', tr('主导航', 'Main navigation'));
+    promptBox.setAttribute('aria-label', tr('AI 安装提示词', 'AI install prompt'));
+    promptBox.textContent = prompts[lang];
+    document.title = tr('mdPreview — 打开，就能好好读。', 'mdPreview — Open it. Settle into reading.');
+    $('meta[name="description"]').content = tr('mdPreview，一个轻巧的 Mac 小 app。双击 Markdown 文件，安静阅读，需要时像 Word 一样编辑，再导出 PDF、Word 或网页。不用账号，文档留在本地。', 'mdPreview, a little Mac app. Double-click Markdown files, enjoy a calm read, edit like Word, and export PDF, Word or web pages. No account. Your files stay local.');
+    $('#language').textContent = tr('English', '中文');
+    $('#language').setAttribute('aria-label', tr('Switch to English', '切换为中文'));
+    doc.innerHTML = sample[lang]; src.hidden = true; doc.hidden = false;
+    buildBar(); refreshBar(); resetCopies(); setFrames(); buttonText();
+    scene.time = 0; scene.last = null; measure(); sync();
+  }
+  setLanguage();
+  $('#language').disabled = false;
+  $('#language').addEventListener('click', () => { lang = lang === 'zh' ? 'en' : 'zh'; setLanguage(); });
+  new ResizeObserver(measure).observe(stage.parentElement);
+  new IntersectionObserver(es => { scene.visible = es.some(e => e.isIntersecting); scene.last = null; sync(); }, { threshold: [0, .15] }).observe(stage);
+  document.addEventListener('visibilitychange', sync);
+  reduce.addEventListener('change', () => { measure(); sync(); });
+  dark.addEventListener('change', setFrames);
+  [$('#ai-cta'), $('#ai-cta-2')].forEach(a => a.addEventListener('click', e => {
+    e.preventDefault();
+    $('#ai-install').scrollIntoView({ behavior: reduce.matches ? 'auto' : 'smooth', block: 'center' });
+    $('#copy-prompt').focus({ preventScroll: true });
+  }));
+  $('a[href="#manual-install-faq"]').addEventListener('click', () => { $('#manual-install-faq').open = true; });
+})();
 </script>
 </body>
 </html>
