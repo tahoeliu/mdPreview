@@ -36,7 +36,7 @@ jobs:
         run: |
           python -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install -r requirements-lock.txt
+          .venv/bin/python -m pip install -r requirements/lock.txt
           npm ci --ignore-scripts
           npx playwright install chromium webkit
 
@@ -63,7 +63,7 @@ jobs:
           --grep-invert "原生冷启动"
 
       - name: Build the application
-        run: ./build.sh
+        run: scripts/build.sh
 
       - name: Native acceptance on the built app
         run: |

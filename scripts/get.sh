@@ -22,7 +22,7 @@ DOWNLOAD_BASE="https://github.com/${REPO}/releases/download"
 CURL_PROTO='=https'
 EXPECTED_BUNDLE_ID='tahoeliu.mdpreview'
 
-# Release signing key (ECDSA P-256, SPKI). Its SHA-256 fingerprint is published in SECURITY.md.
+# Release signing key (ECDSA P-256, SPKI). Its SHA-256 fingerprint is published in .github/SECURITY.md.
 read -r -d '' PUBLIC_KEY_PEM <<'PEM' || true
 -----BEGIN PUBLIC KEY-----
 MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEDwgWgKGguwYf2m4CYnHLdojtIvVg

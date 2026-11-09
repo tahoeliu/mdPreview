@@ -4749,7 +4749,11 @@ _pending_install_plan = None
 
 
 def _publisher_team_id():
-    with open(get_resource_path('release-policy.json')) as stream:
+    # Bundled apps carry the policy at the bundle root; the source tree keeps it in packaging/.
+    path = get_resource_path('release-policy.json')
+    if not os.path.exists(path):
+        path = get_resource_path(os.path.join('packaging', 'release-policy.json'))
+    with open(path) as stream:
         return json.load(stream).get('teamId')
 
 

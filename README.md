@@ -9,9 +9,9 @@
 </p>
 
 <p align="center">
-  <img src="images/screenshot-reading.png" alt="mdPreview on Mac showing a Markdown document with a section outline on the left" width="49%">
+  <img src="docs/images/readme/screenshot-reading.png" alt="mdPreview on Mac showing a Markdown document with a section outline on the left" width="49%">
   &nbsp;
-  <img src="images/screenshot-mermaid.png" alt="mdPreview on Mac rendering diagrams and maths from Markdown" width="49%">
+  <img src="docs/images/readme/screenshot-mermaid.png" alt="mdPreview on Mac rendering diagrams and maths from Markdown" width="49%">
 </p>
 
 ---
@@ -106,20 +106,20 @@ Already have an older version? mdPreview updates itself: it checks for new versi
 - **Official website:** [tahoeliu.github.io/mdPreview](https://tahoeliu.github.io/mdPreview/) — screenshots, a tour of features, and the install guide.
 - **What's new:** [CHANGELOG.md](CHANGELOG.md).
 - **Help and feedback:** use **Help → Report an Issue…** in the app, or open an [issue on GitHub](https://github.com/tahoeliu/mdPreview/issues).
-- **Contribute:** see [CONTRIBUTING.md](CONTRIBUTING.md). Security reports go through [SECURITY.md](SECURITY.md).
+- **Contribute:** see [CONTRIBUTING.md](.github/CONTRIBUTING.md). Security reports go through [SECURITY.md](.github/SECURITY.md).
 
 <details>
 <summary>For developers: building from source</summary>
 
 ```bash
 python3.13 -m venv .venv
-.venv/bin/python -m pip install -r requirements-lock.txt
+.venv/bin/python -m pip install -r requirements/lock.txt
 npm ci --ignore-scripts && npm run vendor
 npm test && .venv/bin/python scripts/test-python.py
-./build.sh            # → WorkSpace/dist/release-<version>/mdPreview.app
+scripts/build.sh      # → WorkSpace/dist/release-<version>/mdPreview.app
 ```
 
-Project layout is in [CONTRIBUTING.md](CONTRIBUTING.md) and the release process is in [RELEASE.md](RELEASE.md). Update verification is described in [SECURITY.md](SECURITY.md) and third-party code is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Project layout is in [CONTRIBUTING.md](.github/CONTRIBUTING.md) and the release process is in [RELEASE.md](dev/RELEASE.md). Update verification is described in [SECURITY.md](.github/SECURITY.md) and third-party code is listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 </details>
 

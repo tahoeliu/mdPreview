@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION="$(cat "$ROOT/VERSION")"
 APP_PATH="${1:-$ROOT/WorkSpace/dist/release-$VERSION/mdPreview.app}"
 DEST_PATH="${MDPREVIEW_INSTALL_PATH:-/Applications/mdPreview.app}"

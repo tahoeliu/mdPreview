@@ -8,7 +8,7 @@ You need macOS 13+, Python 3.13 and Node 22+.
 
 ```bash
 python3.13 -m venv .venv
-.venv/bin/python -m pip install -r requirements-lock.txt -r requirements-dev.txt
+.venv/bin/python -m pip install -r requirements/lock.txt -r requirements/dev.txt
 npm ci --ignore-scripts
 npm run vendor        # regenerates vendor/ from the locked npm packages
 npx playwright install chromium webkit
@@ -20,7 +20,7 @@ npx playwright install chromium webkit
 npm test                              # JavaScript unit suites (jsdom)
 .venv/bin/python scripts/test-python.py   # Python suites + coverage gate (core modules ≥ 90%)
 npm run test:e2e                      # Playwright, Chromium + WebKit
-./build.sh                            # build mdPreview.app into WorkSpace/dist
+scripts/build.sh                     # build mdPreview.app into WorkSpace/dist
 .venv/bin/python scripts/verify-headless.py --app WorkSpace/dist/release-$(cat VERSION)/mdPreview.app
 ```
 

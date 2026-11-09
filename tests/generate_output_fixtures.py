@@ -33,7 +33,7 @@ $$
 \]
 '''
 fixtures['footnotes.md'] = '# 脚注与链接\n\n正文引用[^one]，再次引用[^one]，以及另一条[^two]。\n\n[^one]: 第一条中文脚注。\n[^two]: 含有 **粗体** 和 [项目源码](https://github.com/tahoeliu/mdPreview) 的脚注。\n'
-fixtures['images.md'] = '# 本地与远程图片\n\n![合成彩条](assets/color-bars.png)\n\n![远程源码图片，探针禁止联网](https://github.com/tahoeliu/mdPreview/raw/main/images/screenshot.png)\n'
+fixtures['images.md'] = '# 本地与远程图片\n\n![合成彩条](assets/color-bars.png)\n\n![远程源码图片，探针禁止联网](https://github.com/tahoeliu/mdPreview/raw/main/docs/images/readme/screenshot.png)\n'
 fixtures['frontmatter.md'] = '---\ntitle: 合成排版样本\nauthor: 测试机器人\nlang: zh-CN\ntags: [排版, 回归]\n---\n\n# 元数据与正文\n\n元数据不是正文标题，须分别记录打印行为。\n'
 fixtures['alerts.md'] = '# 提示块\n\n' + '\n\n'.join(f'> [!{kind}]\n> 这是合成的 {kind} 提示内容。' for kind in ['NOTE', 'TIP', 'IMPORTANT', 'WARNING', 'CAUTION']) + '\n'
 for name in ['chatgpt', 'claude']:

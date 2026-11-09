@@ -46,7 +46,7 @@ jobs:
         run: |
           python -m venv .venv
           .venv/bin/python -m pip install --upgrade pip
-          .venv/bin/python -m pip install -r requirements-lock.txt
+          .venv/bin/python -m pip install -r requirements/lock.txt
           npm ci --ignore-scripts
           npx playwright install chromium webkit
 
@@ -58,7 +58,7 @@ jobs:
           npm run test:e2e
 
       - name: Build app and disk image
-        run: ./build_dmg.sh
+        run: scripts/build_dmg.sh
 
       - name: Build must be a single native architecture
         run: |

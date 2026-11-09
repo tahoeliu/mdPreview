@@ -1,6 +1,6 @@
 # Releasing mdPreview
 
-Distribution is GitHub Releases with an **ad-hoc code signature** (no Apple Developer ID, no notarization) plus our own **ECDSA release signature** over `SHA256SUMS`. The pinned public key (`mdpreview_core/release_sig.py`, also `scripts/get.sh` and `scripts/release-pubkey.pem`) is what protects the install and update path; its fingerprint is published in [SECURITY.md](SECURITY.md).
+Distribution is GitHub Releases with an **ad-hoc code signature** (no Apple Developer ID, no notarization) plus our own **ECDSA release signature** over `SHA256SUMS`. The pinned public key (`mdpreview_core/release_sig.py`, also `scripts/get.sh` and `scripts/release-pubkey.pem`) is what protects the install and update path; its fingerprint is published in [SECURITY.md](../.github/SECURITY.md).
 
 ## One-time setup
 
@@ -16,8 +16,8 @@ Distribution is GitHub Releases with an **ad-hoc code signature** (no Apple Deve
 1. Bump the version in `VERSION`, `Info.plist` (both keys) and `package.json`/`package-lock.json`; write the section `## [X.Y.Z] - date` in `CHANGELOG.md` (the release notes are extracted from it).
 2. Build and verify locally on an Apple Silicon Mac:
    ```bash
-   ./build_dmg.sh
-   MDPREVIEW_VERIFY_APP="$PWD/WorkSpace/dist/release-$(cat VERSION)/mdPreview.app" MDPREVIEW_VERIFY_ARCH=arm64 ./verify-all.sh
+   scripts/build_dmg.sh
+   MDPREVIEW_VERIFY_APP="$PWD/WorkSpace/dist/release-$(cat VERSION)/mdPreview.app" MDPREVIEW_VERIFY_ARCH=arm64 scripts/verify-all.sh
    ```
    It runs the static and supply-chain checks, every test suite, the native acceptance scripts (headless export of all formats, native self-test, the signed-update pipeline on the real bundle), the cold-start measurement, and the performance and accessibility budgets. It never installs or publishes.
 3. Commit, then tag with exactly `v` + the contents of `VERSION` and push the tag:

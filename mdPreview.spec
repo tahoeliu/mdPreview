@@ -31,10 +31,10 @@ a = Analysis(
         ('VERSION', '.'),
         ('CHANGELOG.md', '.'),
         ('THIRD_PARTY_NOTICES.md', '.'),
-        ('release-policy.json', '.'),
+        ('packaging/release-policy.json', '.'),
         ('vendor', 'vendor'),
-        ('app_icon.icns', '.'),
-        ('doc_icon.icns', '.'),
+        ('packaging/icons/app_icon.icns', '.'),
+        ('packaging/icons/doc_icon.icns', '.'),
         # Shown in the standard macOS About panel (bottom "Credits" area).
         # Contains a clickable "GitHub" hyperlink + "©tahoeliu".
         ('vendor/Credits.rtf', '.'),
@@ -113,7 +113,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
-    icon='app_icon.icns',
+    icon='packaging/icons/app_icon.icns',
 )
 
 coll = COLLECT(
@@ -130,7 +130,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name='mdPreview.app',
-    icon='app_icon.icns',
+    icon='packaging/icons/app_icon.icns',
     bundle_identifier='tahoeliu.mdpreview',
     codesign_identity=CODESIGN_IDENTITY,
     entitlements_file=ENTITLEMENTS_FILE,

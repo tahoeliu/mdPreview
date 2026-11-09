@@ -1,10 +1,10 @@
 #!/bin/bash
 # 发布前的完整本地验收（不会安装、不会发布）：
-#   MDPREVIEW_VERIFY_APP=path/to/mdPreview.app MDPREVIEW_VERIFY_ARCH=arm64 ./verify-all.sh
+#   MDPREVIEW_VERIFY_APP=path/to/mdPreview.app MDPREVIEW_VERIFY_ARCH=arm64 scripts/verify-all.sh
 # 可选：MDPREVIEW_COMPAT_MATRIX=path/to/matrix.json —— 在 Word/WPS/微信等真实软件里人工验证导出文件的证据。
 # 提供了就必须通过校验；没提供则明确提示“跨软件兼容性未独立验证”，README 也不会声称它。
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")" && pwd)"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 : "${MDPREVIEW_VERIFY_APP:?必须指定待验收应用，不会自动安装}"
 : "${MDPREVIEW_VERIFY_ARCH:?必须明确 arm64 或 x86_64}"

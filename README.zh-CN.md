@@ -9,9 +9,9 @@
 </p>
 
 <p align="center">
-  <img src="images/screenshot-reading.png" alt="Mac 上的 mdPreview，左侧是文档大纲，右侧是排版好的 Markdown 文档" width="49%">
+  <img src="docs/images/readme/screenshot-reading.png" alt="Mac 上的 mdPreview，左侧是文档大纲，右侧是排版好的 Markdown 文档" width="49%">
   &nbsp;
-  <img src="images/screenshot-mermaid.png" alt="Mac 上的 mdPreview 渲染 Markdown 中的图表和公式" width="49%">
+  <img src="docs/images/readme/screenshot-mermaid.png" alt="Mac 上的 mdPreview 渲染 Markdown 中的图表和公式" width="49%">
 </p>
 
 ---
@@ -106,20 +106,20 @@ curl -fsSL https://raw.githubusercontent.com/tahoeliu/mdPreview/main/scripts/get
 - **官网（中文）：** [tahoeliu.github.io/mdPreview/zh.html](https://tahoeliu.github.io/mdPreview/zh.html)，包括截图、功能导览和安装指南。
 - **更新内容：** [CHANGELOG.md](CHANGELOG.md)。
 - **反馈问题：** 在 App 中使用“**帮助 → 报告问题…**”，或到 [GitHub 提交 issue](https://github.com/tahoeliu/mdPreview/issues)。
-- **参与贡献：** 见 [CONTRIBUTING.md](CONTRIBUTING.md)。安全问题请通过 [SECURITY.md](SECURITY.md) 报告。
+- **参与贡献：** 见 [CONTRIBUTING.md](.github/CONTRIBUTING.md)。安全问题请通过 [SECURITY.md](.github/SECURITY.md) 报告。
 
 <details>
 <summary>给开发者：从源码构建</summary>
 
 ```bash
 python3.13 -m venv .venv
-.venv/bin/python -m pip install -r requirements-lock.txt
+.venv/bin/python -m pip install -r requirements/lock.txt
 npm ci --ignore-scripts && npm run vendor
 npm test && .venv/bin/python scripts/test-python.py
-./build.sh            # → WorkSpace/dist/release-<version>/mdPreview.app
+scripts/build.sh      # → WorkSpace/dist/release-<version>/mdPreview.app
 ```
 
-项目结构见 [CONTRIBUTING.md](CONTRIBUTING.md)，发布流程见 [RELEASE.md](RELEASE.md)。更新校验方式见 [SECURITY.md](SECURITY.md)，第三方代码清单见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+项目结构见 [CONTRIBUTING.md](.github/CONTRIBUTING.md)，发布流程见 [RELEASE.md](dev/RELEASE.md)。更新校验方式见 [SECURITY.md](.github/SECURITY.md)，第三方代码清单见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
 
 </details>
 
