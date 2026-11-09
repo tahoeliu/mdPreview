@@ -2,6 +2,11 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- Notes, tips, important notes, warnings and cautions (`> [!NOTE]` and friends) are now softer on screen: muted colours, a lightly tinted rounded card with a thin accent bar, the title in the type colour, and even spacing above and below. Exports and print are unchanged.
+
 ## [2.0.0] - 2026-11-07
 
 A rebuild of everything that happens when you *share* a document, plus a more reliable, more private and much faster core.

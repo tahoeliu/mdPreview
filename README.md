@@ -60,7 +60,7 @@ To paste into Mail, Notes, Word or a chat app, use **Copy as Rich Text** (`‚áß‚å
 - Fold away sections you have finished with.
 - Light or dark appearance, adjustable text size and reading width, and a choice of reading font.
 - Remembers where you stopped, and refreshes itself when the file changes on disk.
-- Renders tables, task lists, footnotes, maths (KaTeX), Mermaid diagrams and GitHub-style alerts.
+- Renders tables, task lists, footnotes, maths (KaTeX), Mermaid diagrams and GitHub-style alerts (note, tip, important, warning, caution) shown as soft, colour-tinted cards.
 
 **Editing, without learning Markdown**
 - Click into the page and a simple toolbar appears, like a word processor's: bold, italic, lists, links, quotes and tables.
