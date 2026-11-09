@@ -137,6 +137,7 @@ test('long document renders its tail and source outline navigates',async({page},
   const measurements=await page.evaluate(async()=>{
     const text=Array.from({length:800},(_,i)=>'# Section '+i+'\n\n'+('Reading text 中文. '.repeat(10))).join('\n\n');
     const start=performance.now();await loadContent('/tmp/long.md',text,720,false,false);const render=performance.now()-start;
+    await window.__mdRenderComplete();
     const last=document.querySelector('#content h1:last-of-type')?.textContent;await toggleView();const source=performance.now()-start-render;
     return {renderMs:render,sourceMs:source,last,chars:text.length};
   });

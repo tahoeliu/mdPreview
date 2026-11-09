@@ -365,5 +365,6 @@
   "link text": "Linktext",
   "Decrease indent": "Einzug verkleinern",
   "Paragraph spacing is automatic — no need for extra blank lines.": "Der Absatzabstand ergibt sich automatisch – zusätzliche Leerzeilen sind nicht nötig.",
-  "Loading the rest…": "Rest wird geladen …"
+  "Loading the rest…": "Rest wird geladen …",
+  "Image could not be displayed": "Bild konnte nicht angezeigt werden"
 }

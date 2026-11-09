@@ -4,6 +4,7 @@
   "Could not open dropped document": "無法開啟拖入的文件",
   "Drop failed": "拖入檔案失敗",
   "Close": "關閉",
+  "Image could not be displayed": "圖片無法顯示",
   "Could not read the file: ": "無法讀取檔案：",
   "The original file changed after this draft. Saving will ask how to resolve it.": "原檔案在草稿之後發生變化，儲存時將詢問如何處理。",
   "Unsaved changes from a previous session have been restored.": "已恢復上次未儲存的修改。",
@@ -288,6 +289,7 @@
   "Load remote images for output? The remote server will learn about this visit.": "輸出包含未載入的遠端圖片。是否載入？對方伺服器將獲知此次訪問。",
   "Paragraph spacing is automatic — no need for extra blank lines.": "段落之間的間距是自動的，不需要多按回車。",
   "Collapse": "折疊",
+  "Loading the rest…": "正在載入後續內容…",
   "Expand": "展開",
   "Do you want to save the changes you made to {name}?": "是否儲存對 {name} 所做的更改？",
   "Your changes will be lost if you do not save them.": "若不儲存，更改將丟失。",
@@ -364,6 +366,5 @@
   "export.failed": "匯出失敗：",
   "settings.title": "設定",
   "help.title": "幫助",
-  "onboarding.example": "開啟範例文件",
-  "Loading the rest…": "正在載入後續內容…"
+  "onboarding.example": "開啟範例文件"
 }

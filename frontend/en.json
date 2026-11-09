@@ -4,6 +4,7 @@
   "Could not open dropped document": "Could not open dropped document",
   "Drop failed": "Drop failed",
   "Close": "Close",
+  "Image could not be displayed": "Image could not be displayed",
   "Could not read the file: ": "Could not read the file: ",
   "The original file changed after this draft. Saving will ask how to resolve it.": "The original file changed after this draft. Saving will ask how to resolve it.",
   "Unsaved changes from a previous session have been restored.": "Unsaved changes from a previous session have been restored.",
@@ -288,6 +289,7 @@
   "Load remote images for output? The remote server will learn about this visit.": "Load remote images for output? The remote server will learn about this visit.",
   "Paragraph spacing is automatic — no need for extra blank lines.": "Paragraph spacing is automatic — no need for extra blank lines.",
   "Collapse": "Collapse",
+  "Loading the rest…": "Loading the rest…",
   "Expand": "Expand",
   "Do you want to save the changes you made to {name}?": "Do you want to save the changes you made to {name}?",
   "Your changes will be lost if you do not save them.": "Your changes will be lost if you do not save them.",
@@ -364,6 +366,5 @@
   "export.failed": "Export failed: ",
   "settings.title": "Settings",
   "help.title": "Help",
-  "onboarding.example": "Open Example",
-  "Loading the rest…": "Loading the rest…"
+  "onboarding.example": "Open Example"
 }

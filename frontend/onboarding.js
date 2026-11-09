@@ -28,7 +28,7 @@ window.Onboarding=(()=>{
  }
  async function initialize(){if(!Bridge.ready()||!window.pywebview.api.get_onboarding)return;
   try{const state=await Bridge.call('get_onboarding');first=state.first;const overlay=document.getElementById('welcomeOverlay');if(overlay)decorate(overlay);
-   if(state.updated){let button=document.getElementById('releaseNotesNotice');if(!button){button=document.createElement('button');button.id='releaseNotesNotice';button.className='release-notes-notice';button.addEventListener('click',notes);document.body.append(button);}button.textContent=t('Updated to','已更新到')+' '+state.version+' · '+t('See changes','查看新功能');}
+   if(state.updated){let button=document.getElementById('releaseNotesNotice');if(!button){button=document.createElement('button');button.id='releaseNotesNotice';button.className='release-notes-notice';button.addEventListener('click',notes);document.body.append(button);}button.textContent=t('Updated to','已更新到')+' '+state.version+' · '+t('See changes','查看新功能');clearTimeout(button._hideTimer);button.classList.remove('is-leaving');button._hideTimer=setTimeout(()=>{acknowledge().catch(()=>{});button.classList.add('is-leaving');setTimeout(()=>button.remove(),400);},10000);}
    else if(!first)await acknowledge();
   }catch(error){showStatus(t('Could not load welcome state','无法加载欢迎状态'),true);}
  }
