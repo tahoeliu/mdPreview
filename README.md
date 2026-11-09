@@ -1,145 +1,113 @@
-# mdPreview — A Minimal Markdown Viewer & Editor for macOS
+# mdPreview
 
-[简体中文](README.zh-CN.md) · [Changelog](CHANGELOG.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
+A calm, simple app for reading and editing Markdown files on your Mac.
 
-<div align="center">
-
-**Open, read, edit and share Markdown files on Mac — in a clean, distraction-free window.**
-
-[Download for macOS](https://github.com/tahoeliu/mdPreview/releases/latest) · Free · Open source (MIT) · Works offline
-
-</div>
+[简体中文](README.zh-CN.md) · [What's new](CHANGELOG.md) · [Website](https://tahoeliu.github.io/mdPreview/) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
 <p align="center">
-  <img src="images/screenshot-reading.png" alt="Clean reading view with outline" width="49%">
+  <img src="images/screenshot-reading.png" alt="A Markdown document open in mdPreview, with its outline on the left" width="49%">
   &nbsp;
-  <img src="images/screenshot-mermaid.png" alt="Mermaid diagrams and math rendering" width="49%">
+  <img src="images/screenshot-mermaid.png" alt="Diagrams and maths drawn neatly in mdPreview" width="49%">
 </p>
 
 ---
 
-## Why mdPreview?
+## What is Markdown?
 
-Markdown files are everywhere: AI chat exports, README files, meeting notes, research notes, personal knowledge bases. But opening a `.md` file still feels technical.
+Markdown is a simple way to write documents using plain text. You will see it in notes, README files, and most answers from AI chat tools like ChatGPT or Claude. Often it shows up as a messy wall of `#` and `**` signs.
 
-**Double-click a Markdown file and read it like a normal document** — no browser, no account, no heavy editor. When you need to share it, export a properly typeset PDF or Word file, or copy it as rich text into Mail, Notes, Word or a chat app.
+**mdPreview turns that mess into a clean page.** Double-click a `.md` file and it opens like any other document: headings, tables, pictures and maths, all neatly laid out. No account, no sign-up, and it works without the internet.
 
-| You want to… | mdPreview |
-|---|---|
-| Read AI-generated answers (ChatGPT, Claude, Gemini…) | Renders tables, code, math, Mermaid diagrams and footnotes correctly |
-| Read a long document | Outline sidebar, remembers where you stopped, reloads when the file changes |
-| Hand it to someone who doesn't use Markdown | PDF, Word, HTML, PNG, plain text — or **Copy as Rich Text** |
-| Print it | Compact 10.5 pt typography, real pagination, page numbers |
-| Fix a typo or two | Switch to source mode (`⌘E`) or edit the preview directly |
-| Keep things private | No account, no telemetry, no cloud, works offline |
+## Who it's for
 
-## Install
+- **Anyone who receives AI answers** and wants to read them comfortably.
+- **Anyone who writes notes** and wants to tidy them up without learning anything new.
+- **Anyone who needs to share a document** with someone who has never seen Markdown.
 
-**Option A — one line, no security prompt (recommended).** Open Terminal and run:
+## What you can do
+
+**Read**
+- Open any `.md` file with a double-click, or drag it onto the window.
+- See a list of section titles on the side, and jump to any part of a long document.
+- Fold away sections you have finished with.
+- Pick a reading font, a text size and a light or dark look.
+- It notices when the file changes and refreshes itself.
+
+**Edit, without the code**
+- Click into the page and a simple toolbar appears at the top, like the one in a word processor. Make text bold, add a list, insert a table, and more.
+- Press `Esc` (or click outside the text) to go back to reading.
+- If you prefer, switch to the plain text view with `⌘E` to see the Markdown itself.
+
+**Share**
+- **Save as PDF** for a tidy document that prints well.
+- **Save as Word (.docx)** for someone who uses Microsoft Word or Pages.
+- **Save as a web page (HTML)** that opens in any browser.
+- **Copy as Rich Text** and paste straight into an email, a note or a chat. The headings and tables come with it.
+- **Share…** sends the document through the standard macOS sharing menu.
+
+## Install it
+
+**The easiest way:** open the **Terminal** app (press `⌘ Space`, type *Terminal*, press Return), paste the line below, and press Return.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/tahoeliu/mdPreview/main/scripts/get.sh | bash
 ```
 
-The script is short and worth reading first. It downloads the latest release for your Mac (Apple Silicon or Intel), verifies an ECDSA signature over the checksum list and the archive checksum, checks the app's identity, and installs it into `/Applications`. Files fetched with `curl` are not quarantined by macOS, so no Gatekeeper dialog appears. It never uses `sudo` and never touches quarantine attributes.
+The script downloads the newest version, checks that it is genuine, and puts it in your Applications folder. Because it arrives this way, macOS doesn't show any security warnings. It is a short script, and you are welcome to read it first.
 
-**Option B — Homebrew:**
+**Prefer clicking?** Download the file for your Mac from the [Releases page](https://github.com/tahoeliu/mdPreview/releases/latest):
+- Apple chip Macs (most Macs from 2020 on): `mdPreview-…-arm64.dmg`
+- Intel Macs: `mdPreview-…-x86_64.dmg`
 
-```bash
-brew install --cask --no-quarantine tahoeliu/tap/mdpreview
-```
+Open the file and drag mdPreview into **Applications**. The first time you open it, macOS may say it can't verify the app. This is normal for free, open-source software. Go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to mdPreview. You only need to do this once.
 
-**Option C — disk image:** download `mdPreview-<version>-arm64.dmg` (Apple Silicon) or `-x86_64.dmg` (Intel) from [Releases](https://github.com/tahoeliu/mdPreview/releases/latest) and drag the app into Applications.
+**Let your AI do it:** you can also ask an AI assistant to install mdPreview for you. Give it this page: [docs/install.md](docs/install.md).
 
-> **Why does macOS warn me about the disk image?** mdPreview is free open-source software signed with an *ad-hoc* signature rather than a paid Apple Developer certificate, so it is not notarized. A browser-downloaded copy is therefore blocked on first launch. Open **System Settings → Privacy & Security** and click **Open Anyway** next to mdPreview (macOS 15 and later; on 13–14 you can also Control-click → Open). You only need to do this once. Options A and B avoid the prompt.
+mdPreview needs macOS 13 or later and is available in English, 简体中文, 繁體中文, 日本語, 한국어, Deutsch, Français and Español.
 
-The release signing key fingerprint (SHA-256 of the public key) is published in [SECURITY.md](SECURITY.md).
+**Make it your default:** right-click any `.md` file in Finder, choose **Get Info**, open **Open with**, pick **mdPreview**, and click **Change All…**.
 
-Requires macOS 13 or later. Available in English, 简体中文, 繁體中文, 日本語, 한국어, Deutsch, Français and Español. Apple Silicon builds are verified by the maintainer; Intel builds are produced and smoke-tested by CI on an Intel runner.
+## A few handy shortcuts
 
-### Make it the default for `.md` files
-
-Select any `.md` file in Finder → **File → Get Info → Open with → mdPreview → Change All…**
-
-## What it can do
-
-### Reading
-- Outline sidebar, dark mode, adjustable text size (`⌘=` / `⌘-`, reset `⌘0`) and reading width (`⌥⌘=` / `⌥⌘-`)
-- Remembers your window position, text size and reading position per document
-- Reloads automatically when another program (or an AI agent) changes the file
-- **Made for long AI answers:** reading-time left and progress (only in long documents), **fold any section**, long code blocks and tables fold to a head, **Go to Heading** (`⌘J`), **New from Clipboard** (`⌥⌘N`)
-- Find (`⌘F`), multiple windows, open linked `.md` files with a click, drag a `.md` file onto the window
-- Tables, task lists (click to tick), footnotes, front matter, syntax-highlighted code with a copy button
-- **Math** with KaTeX (`$…$`, `$$…$$`, `\(…\)`, `\[…\]`), **Mermaid** diagrams, GitHub-style alerts (`> [!NOTE]`)
-- Chinese typography done properly (language-aware fonts, spacing)
-
-### Editing
-- Click into the rendered page and a slim word-processor-style bar appears at the top — text style, bold, italic, lists, task lists, links, quote, tables (add/remove rows and columns), undo and redo — so no Markdown syntax is needed. `Esc` returns to reading; *View → Always Show Formatting Bar* (`⌥⌘T`) pins it. Or switch to source (`⌘E`) with `⌘B` / `⌘I` / `⌘K`, list continuation and Tab indenting
-- **Paste as Markdown** (`⇧⌘V`): paste formatted text from web pages, docs and AI chats and get clean Markdown
-- Paste or drop images: they are saved next to the document in `assets/` and linked with relative paths
-- Drafts are autosaved; saving never overwrites changes you made while the disk write was pending
-
-### Sharing
-Export with **File → Export As…** or print with `⌘P`:
-
-| Format | Notes |
+| Keys | What it does |
 |---|---|
-| **PDF** | Real pagination on A4 or Letter, compact 10.5 pt body independent of on-screen zoom, page numbers, bookmarks from headings, searchable and copyable Chinese text, links kept |
-| **Word (.docx)** | Native Word document: real Heading styles, tables with repeating header rows, images, footnotes; formulas and diagrams as images |
-| **HTML** | A shareable single page: images embedded, outline sidebar on wide screens, reading time, dark mode, print styles |
-| **PNG** | One long, light-themed image |
-| **Plain text / Markdown** | Real plain text (no `##` or `**`), or the Markdown source |
-| **Copy as Rich Text** (`⇧⌘C`) | Puts HTML, RTF and plain text on the clipboard, so headings, tables and code keep their formatting when pasted into apps such as Mail, Notes, Word or chat tools |
+| `⌘O` | Open a file |
+| `⌘F` | Find text |
+| `⌘E` | Switch between reading and plain text view |
+| `⌘J` | Jump to a heading |
+| `⌘=` / `⌘-` | Make text bigger or smaller |
+| `⇧⌘C` | Copy as rich text (for email and notes) |
+| `⌘P` | Print |
+| `⌘,` | Settings |
 
-Export options (paper, margins, font size, page numbers, front matter…) are in **Settings** (`⌘,`) and remembered.
+The **Help** menu has the full list, along with a sample document to try.
 
-### Command line
-**mdPreview → Install Command Line Tool…** adds `mdpreview`:
+## Your privacy
 
-```bash
-mdpreview notes.md                                  # open in the app
-mdpreview export notes.md --to pdf -o notes.pdf     # headless export: pdf, html, docx, txt, png
-```
+- No account, no ads, no tracking, no cloud storage.
+- Your documents never leave your Mac.
+- The app does check once in a while whether a newer version exists. You can turn this off in Settings.
+- Pictures from the internet are not loaded automatically. A bar asks whether you want them, because loading a picture tells its website that you opened the document.
 
-## Keyboard shortcuts
+## Questions people often ask
 
-| Shortcut | Action | Shortcut | Action |
-|---|---|---|---|
-| `⌘N` | New | `⌘F` / `⌘G` / `⇧⌘G` | Find / next / previous |
-| `⌘O` | Open | `⌘=` / `⌘-` / `⌘0` | Bigger / smaller / reset text |
-| `⌘S` / `⇧⌘S` | Save / Save As | `⌥⌘=` / `⌥⌘-` / `⌥⌘0` | Wider / narrower / reset width |
-| `⌘P` | Print | `⌥⌘O` | Show / hide outline |
-| `⌘E` | Preview ⇄ Source | `⌃⌘F` | Full screen |
-| `⇧⌘V` | Paste as Markdown | `⇧⌘C` / `⌥⌘C` | Copy as Rich Text / as Markdown |
-| `⌘,` | Settings | `⌘I` | Properties |
-| `⌘J` | Go to Heading | `⌥⌘N` | New from Clipboard |
+**Do I need to know Markdown?** No. Just read. Switch to the plain text view only if you want to.
 
-The Help menu has the full list, a sample document, **Report an Issue…** (pre-fills only version and OS) and **Export Diagnostics…**.
+**Is it really free?** Yes. It is free and open source under the MIT licence. If it helps you, a star on GitHub helps others find it.
 
-## Privacy
+**Does it work offline?** Yes. The only thing that needs the internet is the optional check for updates.
 
-- No account, no ads, no telemetry, no cloud sync, no document upload.
-- **Remote images are not loaded by default** — a bar offers *Load* / *Always load*, because loading an image tells its server that you opened the file. Mermaid, math and everything else render locally.
-- The only network access is an optional **update check**: one request to GitHub's releases API, on by default, switch it off in Settings. Updates are verified against the release signing key before anything is installed.
-- Diagnostic archives contain allow-listed settings and structured events only — never document text or paths. Inspect them before sharing.
+**Can I see it in Finder without opening it?** Yes. Select a `.md` file in Finder and press the Space bar to preview it. If it doesn't show up, see the [Quick Look notes](quicklook/README.md).
 
-## Safety
+**Is it a replacement for Word or VS Code?** No. It is a focused reader with simple editing and easy sharing. It is not a full writing studio or a coding tool.
 
-Markdown can contain HTML. All rendered content goes through DOMPurify with URL filtering, and the page runs under a strict Content-Security-Policy (no inline scripts, no `eval`). Third-party libraries are vendored, checksummed and listed with their licenses in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+## Found a problem, or want to help?
 
-## FAQ
+- Use **Help → Report an Issue…** in the app, or open an issue on [GitHub](https://github.com/tahoeliu/mdPreview/issues).
+- Contributions are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**Do I need to know Markdown?** No. Use it as a reader; switch to source only when you want to.
-
-**Is it really free?** Yes, MIT-licensed. If it saves you time, a GitHub star helps others find it.
-
-**Does it work offline?** Yes. Nothing is needed from the network except the optional update check.
-
-**Does it support Finder's spacebar preview (Quick Look)?** Yes — the extension is bundled and registered on first launch. If macOS does not show it, enable *mdPreview Quick Look* in System Settings → General → Login Items & Extensions → Quick Look. See [`quicklook/`](quicklook/README.md) for what is verified.
-
-**Is it a replacement for Typora / VS Code?** No — it is a focused reader with convenient editing and best-in-class sharing, not a writing studio or an IDE.
-
-## Build from source
+<details>
+<summary>For developers: building from source</summary>
 
 ```bash
 python3.13 -m venv .venv
@@ -149,12 +117,10 @@ npm test && .venv/bin/python scripts/test-python.py
 ./build.sh            # → WorkSpace/dist/release-<version>/mdPreview.app
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the project layout and rules, and [RELEASE.md](RELEASE.md) for how releases are cut and verified.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the project layout and [RELEASE.md](RELEASE.md) for how releases are made and checked. Security details, including how updates are verified, are in [SECURITY.md](SECURITY.md) and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
-## License
-
-MIT — see [LICENSE](LICENSE). Made by [Tahoe Liu](https://github.com/tahoeliu).
+</details>
 
 ---
 
-**Keywords:** macOS Markdown viewer, Markdown reader for Mac, open .md files on Mac, Markdown to PDF, Markdown to Word, AI Markdown viewer, ChatGPT Markdown, Claude Markdown export, Typora alternative, MacDown alternative, open source Markdown viewer, Mermaid, KaTeX
+Made by [Tahoe Liu](https://github.com/tahoeliu). Released under the [MIT licence](LICENSE).
