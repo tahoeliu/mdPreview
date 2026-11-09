@@ -1,5 +1,5 @@
 :root {
-  --alert-note:#0969da; --alert-tip:#1a7f37; --alert-important:#8250df; --alert-warning:#9a6700; --alert-caution:#cf222e;
+  --alert-note:#5b84b1; --alert-tip:#5a9970; --alert-important:#8a76b8; --alert-warning:#a98a45; --alert-caution:#b86a6a;
   --fg: #333;
   --fg-strong: #1d1d1f;
   --fg-muted: #666;
@@ -41,7 +41,7 @@
   :root:not([data-output]) {
     --link: #4da2ff;
     --color-23: #9a9a9a;
-    --alert-note:#79c0ff; --alert-tip:#7ee787; --alert-important:#d2a8ff; --alert-warning:#e3b341; --alert-caution:#ff7b72;
+    --alert-note:#7fa6cf; --alert-tip:#7fb592; --alert-important:#b3a2d6; --alert-warning:#c9a95e; --alert-caution:#d18585;
     --bg: #1e1e1f;
     --app-fg: #f2f2f2;
     --dark-1: #e8e8e8;
