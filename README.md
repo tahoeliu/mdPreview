@@ -4,27 +4,17 @@
 
 # mdPreview
 
-### The free Markdown viewer and editor for Mac.
-**Double-click a `.md` file. Read it as a clean page. Edit it like Word. Share it as PDF, Word or a web page.**
+### A minimal, local Markdown viewer and editor for Mac.
+**Double-click a `.md` file. Read it as a clean page. Edit it like Word. Share it as PDF, Word or a web page.** Nothing to set up, and your files never leave your Mac.
 
-[![Download for Mac](https://img.shields.io/badge/Download%20for%20Mac-free-0a64d8?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/tahoeliu/mdPreview/releases/latest)
-[![Website](https://img.shields.io/badge/Website-tour%20%26%20screenshots-555?style=for-the-badge)](https://tahoeliu.github.io/mdPreview/)
-
-[![Latest release](https://img.shields.io/github/v/release/tahoeliu/mdPreview?label=release&color=0a64d8)](https://github.com/tahoeliu/mdPreview/releases/latest)
-[![Downloads](https://img.shields.io/github/downloads/tahoeliu/mdPreview/total?label=downloads&color=2ea44f)](https://github.com/tahoeliu/mdPreview/releases)
-[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)](#install)
-[![Apple silicon and Intel](https://img.shields.io/badge/Apple%20silicon%20%2B%20Intel-supported-lightgrey)](#install)
-[![MIT licence](https://img.shields.io/github/license/tahoeliu/mdPreview?color=blue)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/tahoeliu/mdPreview?style=flat&color=e3b341)](https://github.com/tahoeliu/mdPreview/stargazers)
-
-**English** · [简体中文](README.zh-CN.md) · [Website](https://tahoeliu.github.io/mdPreview/) · [Install](#install) · [FAQ](#frequently-asked-questions)
+**[Download for Mac](https://github.com/tahoeliu/mdPreview/releases/latest)** · [Website](https://tahoeliu.github.io/mdPreview/) · [Install](#install) · [FAQ](#frequently-asked-questions) · [简体中文](README.zh-CN.md)
 
 <br>
 
 <a href="https://tahoeliu.github.io/mdPreview/">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-reading-dark.webp">
-  <img src="docs/images/hero-reading.webp" alt="mdPreview on Mac showing a long Markdown document as a clean page, with a section outline on the left, a tip box, a table, and a reading-time indicator" width="860">
+  <img src="docs/images/hero-reading.webp" alt="The mdPreview window on a Mac: a long Markdown document shown as a clean page, with a section outline on the left, a tip box and a table" width="860">
 </picture>
 </a>
 
@@ -41,7 +31,7 @@ You have a `.md` file. Maybe it is an answer from ChatGPT or Claude, a note, a R
 | 📖 **Reading that feels calm** | Proper headings, tables, task lists, maths, diagrams and callout boxes. A side outline, folding sections, and a quiet "3 min left" indicator for long documents. |
 | ✏️ **Edit without learning Markdown** | Click into the page and a slim toolbar appears, like a word processor's. Bold, lists, links, tables. Your file stays clean Markdown underneath. |
 | 📤 **Share in the format people expect** | PDF with real page numbers, Word with real heading styles, one-file web pages, or rich text you can paste straight into Mail. |
-| 🔒 **Private, offline, free** | No account, no ads, no tracking. Your documents never leave your Mac. Open source under the MIT licence. |
+| 🔒 **Private and offline** | No account, no ads, no tracking. Your documents never leave your Mac. Open source under the MIT licence. |
 | 👀 **Press Space in Finder** | Preview any `.md` file without opening it (Quick Look is built in). |
 | 🌍 **Speaks your language** | English, 简体中文, 繁體中文, 日本語, 한국어, Deutsch, Français and Español. |
 
@@ -249,6 +239,8 @@ Project layout is in [CONTRIBUTING.md](.github/CONTRIBUTING.md) and the release 
 If mdPreview saves you a little time, a ⭐ helps other people find it.
 
 Made by [Tahoe Liu](https://github.com/tahoeliu) · [MIT licence](LICENSE)
+
+[![Latest release](https://img.shields.io/github/v/release/tahoeliu/mdPreview?label=release&color=0a64d8)](https://github.com/tahoeliu/mdPreview/releases/latest) [![Downloads](https://img.shields.io/github/downloads/tahoeliu/mdPreview/total?label=downloads&color=2ea44f)](https://github.com/tahoeliu/mdPreview/releases) [![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)](#install) [![Apple silicon and Intel](https://img.shields.io/badge/Apple%20silicon%20%2B%20Intel-supported-lightgrey)](#install) [![MIT licence](https://img.shields.io/github/license/tahoeliu/mdPreview?color=blue)](LICENSE) [![Stars](https://img.shields.io/github/stars/tahoeliu/mdPreview?style=flat&color=e3b341)](https://github.com/tahoeliu/mdPreview/stargazers)
 
 <sub>Markdown viewer for Mac · Markdown editor for macOS · open .md files on Mac · read ChatGPT and Claude answers · Markdown to PDF, Word and HTML · Typora and MacDown alternative · Mermaid and KaTeX · offline, open source</sub>
 

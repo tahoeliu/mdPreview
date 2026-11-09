@@ -2,10 +2,14 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [2.0.1] - 2026-11-09
+
+A small polish release: calmer note blocks, a better README and steadier automated checks. No change to how files are read, edited or exported.
 
 ### Changed
 - Notes, tips, important notes, warnings and cautions (`> [!NOTE]` and friends) are now softer on screen: muted colours, a lightly tinted rounded card with a thin accent bar, the title in the type colour, and even spacing above and below. Exports and print are unchanged.
+- The README and project website show the whole app window instead of a cropped page, and the README is rewritten in plain language, with `llms.txt` and `sitemap.xml` so the project is easier to find.
+- Automated checks are steadier on shared build machines (accessibility scan, speed budgets, retries); the window-based native check stays a local pre-release step.
 
 ## [2.0.0] - 2026-11-07
 

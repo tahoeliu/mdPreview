@@ -4,27 +4,17 @@
 
 # mdPreview
 
-### Mac 上免费的 Markdown 阅读与编辑工具
-**双击 `.md` 文件，就是一页干净易读的文档。像 Word 一样直接修改，一键分享为 PDF、Word 或网页。**
+### Mac 上极简、纯本地的 Markdown 阅读与编辑工具
+**双击 `.md` 文件，就是一页干净易读的文档。像 Word 一样直接修改，一键分享为 PDF、Word 或网页。** 无需设置，文件始终留在你的 Mac 上。
 
-[![下载 Mac 版](https://img.shields.io/badge/下载%20Mac%20版-免费-0a64d8?style=for-the-badge&logo=apple&logoColor=white)](https://github.com/tahoeliu/mdPreview/releases/latest)
-[![官网](https://img.shields.io/badge/官网-导览与截图-555?style=for-the-badge)](https://tahoeliu.github.io/mdPreview/zh.html)
-
-[![最新版本](https://img.shields.io/github/v/release/tahoeliu/mdPreview?label=版本&color=0a64d8)](https://github.com/tahoeliu/mdPreview/releases/latest)
-[![下载量](https://img.shields.io/github/downloads/tahoeliu/mdPreview/total?label=下载&color=2ea44f)](https://github.com/tahoeliu/mdPreview/releases)
-[![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)](#安装)
-[![Apple 芯片和 Intel](https://img.shields.io/badge/Apple%20芯片%20%2B%20Intel-支持-lightgrey)](#安装)
-[![MIT 许可证](https://img.shields.io/github/license/tahoeliu/mdPreview?color=blue)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/tahoeliu/mdPreview?style=flat&color=e3b341)](https://github.com/tahoeliu/mdPreview/stargazers)
-
-[English](README.md) · **简体中文** · [官网](https://tahoeliu.github.io/mdPreview/zh.html) · [安装](#安装) · [常见问题](#常见问题)
+**[下载 Mac 版](https://github.com/tahoeliu/mdPreview/releases/latest)** · [官网](https://tahoeliu.github.io/mdPreview/zh.html) · [安装](#安装) · [常见问题](#常见问题) · [English](README.md)
 
 <br>
 
 <a href="https://tahoeliu.github.io/mdPreview/zh.html">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-reading-zh-dark.webp">
-  <img src="docs/images/hero-reading-zh.webp" alt="Mac 上的 mdPreview：左侧是文档大纲，右侧是排版好的长文档，含提示框、表格和剩余阅读时间" width="860">
+  <img src="docs/images/hero-reading-zh.webp" alt="Mac 上的 mdPreview 窗口：左侧是文档大纲，右侧是排版好的长文档，含提示框和表格" width="860">
 </picture>
 </a>
 
@@ -41,7 +31,7 @@
 | 📖 **读起来安静舒服** | 标题、表格、任务列表、公式、图表和提示框各归其位。有侧边大纲、可折叠章节，长文还会轻声告诉你“还剩 3 分钟”。 |
 | ✏️ **不懂 Markdown 也能改** | 在页面里点一下，顶部出现像文字处理软件一样的工具条：加粗、列表、链接、表格。文件底层仍是干净的 Markdown。 |
 | 📤 **按对方习惯的格式分享** | 带页码的 PDF、带真正标题样式的 Word、单文件网页，或可直接粘贴进邮件的富文本。 |
-| 🔒 **私密、离线、免费** | 无需账号，没有广告，不追踪。文档不会离开你的 Mac。MIT 开源。 |
+| 🔒 **私密、离线** | 无需账号，没有广告，不追踪。文档不会离开你的 Mac。MIT 开源。 |
 | 👀 **在访达里按空格预览** | 不用打开就能预览 `.md` 文件（已内置 Quick Look）。 |
 | 🌍 **说你的语言** | 简体中文、繁體中文、English、日本語、한국어、Deutsch、Français、Español。 |
 
@@ -249,6 +239,8 @@ scripts/build.sh      # → WorkSpace/dist/release-<version>/mdPreview.app
 如果 mdPreview 帮你省了点时间，点个 ⭐ 能让更多人找到它。
 
 由 [Tahoe Liu](https://github.com/tahoeliu) 制作 · [MIT 许可证](LICENSE)
+
+[![最新版本](https://img.shields.io/github/v/release/tahoeliu/mdPreview?label=版本&color=0a64d8)](https://github.com/tahoeliu/mdPreview/releases/latest) [![下载量](https://img.shields.io/github/downloads/tahoeliu/mdPreview/total?label=下载&color=2ea44f)](https://github.com/tahoeliu/mdPreview/releases) [![macOS 13+](https://img.shields.io/badge/macOS-13%2B-black?logo=apple)](#安装) [![Apple 芯片和 Intel](https://img.shields.io/badge/Apple%20芯片%20%2B%20Intel-支持-lightgrey)](#安装) [![MIT 许可证](https://img.shields.io/github/license/tahoeliu/mdPreview?color=blue)](LICENSE) [![Stars](https://img.shields.io/github/stars/tahoeliu/mdPreview?style=flat&color=e3b341)](https://github.com/tahoeliu/mdPreview/stargazers)
 
 <sub>Mac Markdown 阅读器 · macOS Markdown 编辑器 · Mac 打开 md 文件 · 阅读 ChatGPT 和 Claude 回答 · Markdown 转 PDF、Word、网页 · Typora、MacDown 替代 · Mermaid 与 KaTeX · 离线开源</sub>
 
