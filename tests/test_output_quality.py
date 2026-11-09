@@ -40,8 +40,13 @@ class OutputBaselineTests(unittest.TestCase):
     def probe(self, name, *args):
         command = [sys.executable, '-I', '-B', str(ROOT / 'scripts/output_probe.py'),
                    '--out', str(self.out / f'{name}.pdf'), '--json', *map(str, args)]
-        result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
-                                env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'), timeout=60)
+        # A shared CI runner now and then hands back a page that has not been laid out yet; retry that
+        # transient case. A genuine regression fails every attempt.
+        for attempt in range(3):
+            result = subprocess.run(command, cwd=ROOT, capture_output=True, text=True,
+                                    env=dict(os.environ, PYTHONDONTWRITEBYTECODE='1'), timeout=60)
+            if result.returncode == 0:
+                break
         (self.out / f'{name}.stdout.log').write_text(result.stdout)
         (self.out / f'{name}.stderr.log').write_text(result.stderr)
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)

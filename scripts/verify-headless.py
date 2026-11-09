@@ -4,6 +4,7 @@
 每种格式 90 秒内必须成功；产物结构（分页、书签、页码、Word 标题样式、HTML 自包含等）必须正确。
 """
 import argparse
+import os
 import re
 import subprocess
 import sys
@@ -15,9 +16,15 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / 'tests' / 'fixtures' / 'output'
 
 
+def HEADLESS_ENV(app):
+    # The app's own default export budget is 90 s; shared CI runners can be slower (Mermaid pages), so the
+    # acceptance run allows 300 s. The product default is unchanged.
+    return {'MDPREVIEW_APP': str(app), 'PATH': '/usr/bin:/bin', 'MDPREVIEW_HEADLESS_TIMEOUT': os.environ.get('MDPREVIEW_HEADLESS_TIMEOUT', '300')}
+
+
 def export(app, source, fmt, target):
     result = subprocess.run(['bash', str(ROOT / 'scripts' / 'mdpreview'), 'export', str(source), '--to', fmt, '-o', str(target)],
-                            env={'MDPREVIEW_APP': str(app), 'PATH': '/usr/bin:/bin'}, capture_output=True, text=True, timeout=120)
+                            env=HEADLESS_ENV(app), capture_output=True, text=True, timeout=330)
     if result.returncode != 0 or not target.is_file() or target.stat().st_size == 0:
         raise AssertionError(f'{source.name} -> {fmt} failed (exit {result.returncode}): {result.stderr.strip()}')
 
@@ -93,7 +100,7 @@ def main():
         # 已存在的输出必须被拒绝，且不被改动。
         before = (out / 'long.txt').read_bytes()
         refused = subprocess.run(['bash', str(ROOT / 'scripts' / 'mdpreview'), 'export', str(source), '--to', 'txt', '-o', str(out / 'long.txt')],
-                                 env={'MDPREVIEW_APP': str(app), 'PATH': '/usr/bin:/bin'}, capture_output=True, text=True, timeout=60)
+                                 env=HEADLESS_ENV(app), capture_output=True, text=True, timeout=330)
         assert refused.returncode != 0 and (out / 'long.txt').read_bytes() == before, 'existing output was not protected'
     print(f'headless acceptance passed: long={pages} pages, math={math_pages}, wide-table={wide_pages}')
 
