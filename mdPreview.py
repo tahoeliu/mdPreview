@@ -4119,6 +4119,68 @@ def main():
     os._exit(0)
 
 
+_UI_READY_TIMEOUT = float(os.environ.get('MDPREVIEW_UI_READY_TIMEOUT') or 120)
+
+
+def _write_ui_timeout_report(main_window, timeout):
+    """Test mode only: record what the window and page look like when the page never reports ready."""
+    report = {'timeout_s': timeout}
+    finished = threading.Lock()
+
+    def finish():
+        if not finished.acquire(blocking=False):
+            return
+        try:
+            _safe_write_text(os.path.join(APP_SUPPORT_DIR, 'ui-timeout.json'),
+                             json.dumps(report, ensure_ascii=False, indent=1))
+        except Exception as exc:
+            logging.error('ui-timeout report not written: %r', exc)
+        done.set()
+
+    def on_main_thread():
+        try:
+            from AppKit import NSApplication
+            app = NSApplication.sharedApplication()
+            report['appActive'] = bool(app.isActive())
+            report['windows'] = [{'title': str(w.title()), 'visible': bool(w.isVisible()),
+                                  'key': bool(w.isKeyWindow()), 'occlusionState': int(w.occlusionState())}
+                                 for w in app.windows()]
+        except Exception as exc:
+            report['appError'] = repr(exc)
+        try:
+            from webview.platforms.cocoa import BrowserView
+            browser = BrowserView.instances.get(main_window.uid)
+            view = browser.webview
+            url = view.URL()
+            report['url'] = str(url) if url else None
+            report['loading'] = bool(view.isLoading())
+            report['progress'] = float(view.estimatedProgress())
+            probe = ("JSON.stringify({readyState: document.readyState, href: location.href, "
+                     "hasBridge: typeof Bridge !== 'undefined', "
+                     "body: document.body ? document.body.innerText.slice(0, 300) : null})")
+
+            def on_probe(result, error):
+                report['probe'] = None if result is None else str(result)
+                report['probeError'] = None if error is None else str(error)
+                finish()
+
+            view.evaluateJavaScript_completionHandler_(probe, on_probe)
+            return
+        except Exception as exc:
+            report['webError'] = repr(exc)
+        finish()
+
+    done = threading.Event()
+    try:
+        from PyObjCTools import AppHelper
+        AppHelper.callAfter(on_main_thread)
+    except Exception as exc:
+        report['dispatchError'] = repr(exc)
+        finish()
+    done.wait(15)
+    finish()
+
+
 def _maybe_run_selftest(main_window):
     """Hidden self-test flags to verify the quit path end-to-end.
 
@@ -4148,7 +4210,8 @@ def _maybe_run_selftest(main_window):
 
     if '--selftest-integrity' in sys.argv:
         def run_integrity():
-            if not _UI_READY.wait(120):
+            if not _UI_READY.wait(_UI_READY_TIMEOUT):
+                _write_ui_timeout_report(main_window, _UI_READY_TIMEOUT)
                 os._exit(5)
             with open(get_resource_path('tests/native-check.js')) as stream:
                 script = stream.read()
