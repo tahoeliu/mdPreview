@@ -364,5 +364,6 @@
   "Export…": "내보내기…",
   "link text": "링크 텍스트",
   "Decrease indent": "들여쓰기 줄이기",
-  "Paragraph spacing is automatic — no need for extra blank lines.": "문단 간격은 자동으로 유지됩니다. 빈 줄을 더 넣을 필요가 없습니다."
+  "Paragraph spacing is automatic — no need for extra blank lines.": "문단 간격은 자동으로 유지됩니다. 빈 줄을 더 넣을 필요가 없습니다.",
+  "Loading the rest…": "나머지를 불러오는 중…"
 }

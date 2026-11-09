@@ -646,6 +646,8 @@ var {
   document.querySelector('.update-bubble-body').tabIndex=0;
   document.querySelector('.update-bubble-body').addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();installUpdate();}else if(event.key==='Escape'){dismissUpdateBubble(event);document.getElementById(isSource?'textarea':'content').focus();}});
   document.querySelector('.update-bubble-close').addEventListener('click',event=>dismissUpdateBubble(event));
+  // While the rest of a long document is still being drawn, the page is read-only so nothing can be saved half-finished.
+  ['beforeinput','paste','cut','drop'].forEach(type=>document.getElementById('content').addEventListener(type,event=>{if(window.__mdPartialRender)event.preventDefault();},true));
   document.getElementById('content').addEventListener('error',event=>{const img=event.target;if(!img||img.tagName!=='IMG'||!img.hasAttribute('data-md-image')||img.classList.contains('img-broken'))return;img.classList.add('img-broken');const box=document.createElement('span');box.className='img-fallback';box.contentEditable='false';box.textContent=img.getAttribute('alt')||t('Image could not be displayed','图片无法显示');img.after(box);},true);
   document.getElementById('content').addEventListener('load',event=>{const img=event.target;if(img&&img.tagName==='IMG'&&img.classList.contains('img-broken')){img.classList.remove('img-broken');if(img.nextElementSibling?.classList.contains('img-fallback'))img.nextElementSibling.remove();}},true);
   document.getElementById('content').addEventListener('click',event=>{const button=event.target.closest('.frontmatter-toggle');if(button){event.preventDefault();toggleFrontmatter(button);}});
@@ -783,7 +785,7 @@ var {
       isZh = zh;
       applyStaticUiLanguage();
     }
-    await renderMarkdown(content, document.getElementById('content'));
+    await renderMarkdown(content, document.getElementById('content'), { progressive: !meta.hash && !meta.readingPosition && !meta.readError });
     if (loadEpoch !== documentSession.epoch) return;
     syncHighlight();
     isDirty = !!draftRecovered || documentSession.revision > loadRevision;

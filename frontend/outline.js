@@ -268,8 +268,7 @@ window.DocumentOutline = {
         .replace(/^-|-$/g, '') || 'heading';
     }
 
-    function applyHeadingAnchors(container) {
-      const used = new Map();
+    function applyHeadingAnchors(container, used = new Map()) {
       container.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((heading) => {
         let id = heading.getAttribute('id') || slugifyHeading(heading.textContent);
         const count = used.get(id) || 0;

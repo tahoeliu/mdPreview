@@ -393,3 +393,9 @@ body.has-edit-bar .toc-toggle { top: calc(52px + var(--titlebar-h, 0px)); }
 
 /* 更新提示、草稿恢复条同样让到标题栏下面 */
 .update-bubble { top: calc(16px + var(--titlebar-h, 0px)); }
+
+/* Quiet progress note while the rest of a long document is drawn */
+.render-progress { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: var(--code-bg, #f5f5f7); color: var(--fg-muted, #666); font-size: 12px; box-shadow: 0 1px 6px rgba(0,0,0,.08); pointer-events: none; }
+.render-progress-ring { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid currentColor; border-right-color: transparent; opacity: .7; animation: render-progress-spin .9s linear infinite; }
+@keyframes render-progress-spin { to { transform: rotate(360deg); } }
+@media print { .render-progress { display: none; } }

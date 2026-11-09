@@ -10,6 +10,7 @@ window.DocumentOutput = {
     }
 
     async function buildHtml() {
+      await window.__mdRenderComplete?.();
       const title = currentDocTitle();
       const mathCSS = await deps.MathRenderer.exportCSS(document.getElementById('content'));
       const clone = document.getElementById('content').cloneNode(true);

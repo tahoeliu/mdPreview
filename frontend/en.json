@@ -364,5 +364,6 @@
   "export.failed": "Export failed: ",
   "settings.title": "Settings",
   "help.title": "Help",
-  "onboarding.example": "Open Example"
+  "onboarding.example": "Open Example",
+  "Loading the rest…": "Loading the rest…"
 }

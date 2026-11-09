@@ -5,3 +5,19 @@ html, body { margin: 0; background: var(--bg, #fff); font-family: var(--font-san
 .markdown img { cursor: default; }
 .blocked-image { color: var(--fg-muted, #666); font-style: italic; border-bottom: 1px dotted currentColor; }
 .markdown a { cursor: default; }
+
+/* Finder's preview pane and gallery are small: size the type for a glance, not for reading a whole page.
+   Smaller body text, calmer headings and tighter margins show more of the document. */
+:root { --content-font-size: 14px; }
+.markdown { font-size: var(--content-font-size); line-height: 1.65; }
+.page { padding: 20px 22px 40px; }
+.markdown h1 { font-size: calc(var(--content-font-size) * 1.5); margin-bottom: 14px; }
+.markdown h2 { font-size: calc(var(--content-font-size) * 1.25); margin-top: 1.5em; }
+html:not([data-output]) .markdown h3 { font-size: calc(var(--content-font-size) * 1.1); margin-top: 1.3em; }
+@media (max-width: 480px) {
+  :root { --content-font-size: 12px; }
+  .page { padding: 14px 14px 28px; }
+  .markdown blockquote { padding-left: 12px; padding-right: 8px; }
+  .markdown ul, .markdown ol { padding-left: 20px; }
+  .markdown h1 { font-size: calc(var(--content-font-size) * 1.4); }
+}

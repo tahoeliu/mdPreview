@@ -364,5 +364,6 @@
   "export.failed": "匯出失敗：",
   "settings.title": "設定",
   "help.title": "幫助",
-  "onboarding.example": "開啟範例文件"
+  "onboarding.example": "開啟範例文件",
+  "Loading the rest…": "正在載入後續內容…"
 }

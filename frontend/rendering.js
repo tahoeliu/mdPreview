@@ -44,8 +44,8 @@ window.MarkdownRendering = {
       while (work.firstChild) container.appendChild(work.firstChild);
     }
 
-    function finalizeRenderedMarkdown(container, content) {
-      applyHeadingAnchors(container);
+    function finalizeRenderedMarkdown(container, content, options = {}) {
+      applyHeadingAnchors(container, options.usedAnchors);
       rewriteRelativeImages(container);
       const tables = container.querySelectorAll('table:not(.table-wrap table)');
       for (const table of tables) {
@@ -58,6 +58,8 @@ window.MarkdownRendering = {
       deps.RenderPerformance.sync('highlight',()=>highlightRenderedCodeBlocks(container));
       protectComplexBlocks(container);
       balanceTableColumns(container);
+      // A piece of a progressively rendered document is finished later, as a whole.
+      if (options.piece) return;
       ensureBlockCaretLandingZones(container, content);
       state.lastRenderedHash = content;
     }
@@ -122,13 +124,132 @@ window.MarkdownRendering = {
       return declared ? declared[1] : ((String(text).match(/[㐀-鿿]/g) || []).length / Math.max(1,text.length) > 0.1 ? 'zh-CN' : 'en');
     }
 
-    async function renderMarkdown(content, container) {
+    // ── Progressive rendering of long documents ──
+    // The first screenful is parsed and shown at once; the rest is parsed in slices between
+    // frames and appended below. Pieces always start at a top-level heading, so a list, quote
+    // or code block is never cut in half. Documents with footnotes are rendered in one go.
+    const PROGRESSIVE_MIN_CHARS = 120000, FIRST_PIECE_CHARS = 14000, NEXT_PIECE_CHARS = 90000;
+    function planProgressive(text) {
+      if (text.length < PROGRESSIVE_MIN_CHARS || /^ {0,3}\[\^[^\]\n]+\]:/m.test(text)) return null;
+      const cuts = [0];
+      let fence = '', math = false, previousBlank = true, last = 0, target = FIRST_PIECE_CHARS;
+      const refs = [];
+      let position = 0;
+      while (position < text.length) {
+        let end = text.indexOf('\n', position);
+        if (end < 0) end = text.length;
+        const line = text.slice(position, end);
+        const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+        if (marker) {
+          if (!fence) fence = marker[1][0].repeat(marker[1].length);
+          else if (marker[1][0] === fence[0] && marker[1].length >= fence.length && !/^ {0,3}[`~]{3,}.*[^`~\s]/.test(line)) fence = '';
+        } else if (!fence) {
+          if (/^\s*\$\$/.test(line) && (line.match(/\$\$/g) || []).length % 2 === 1) math = !math;
+          else if (!math) {
+            if (/^ {0,3}\[[^\]\n]+\]:\s*\S/.test(line)) refs.push(line);
+            else if (previousBlank && position - last >= target && /^ {0,3}#{1,6}(?:[ \t]|$)/.test(line)) {
+              cuts.push(position); last = position; target = NEXT_PIECE_CHARS;
+            }
+          }
+        }
+        previousBlank = !line.trim();
+        position = end + 1;
+      }
+      if (cuts.length < 2) return null;
+      cuts.push(text.length);
+      const suffix = refs.length ? '\n\n' + refs.join('\n') + '\n' : '';
+      return { pieces: cuts.slice(0, -1).map((start, index) => text.slice(start, cuts[index + 1]) + (index ? suffix : '')), suffix };
+    }
+
+    let renderProgressNode = null, tailPromise = null;
+    function showRenderProgress(fraction) {
+      if (!renderProgressNode) {
+        renderProgressNode = document.createElement('div');
+        renderProgressNode.className = 'render-progress';
+        renderProgressNode.setAttribute('role', 'status');
+        renderProgressNode.setAttribute('data-render-only', 'true');
+        renderProgressNode.innerHTML = '<span class="render-progress-ring"></span><span class="render-progress-text"></span>';
+        document.body.appendChild(renderProgressNode);
+      }
+      renderProgressNode.lastChild.textContent = t('Loading the rest…', '正在载入后续内容…') + ' ' + Math.min(99, Math.round(fraction * 100)) + '%';
+    }
+    function hideRenderProgress() {
+      if (renderProgressNode) { renderProgressNode.remove(); renderProgressNode = null; }
+    }
+    function nextSlice() {
+      // Let the browser paint between slices; a timer fallback keeps going when frames are paused (hidden window).
+      return new Promise((resolve) => {
+        let settled = false;
+        const go = () => { if (!settled) { settled = true; resolve(); } };
+        if (window.requestAnimationFrame) window.requestAnimationFrame(() => setTimeout(go, 0));
+        setTimeout(go, 60);
+      });
+    }
+    window.__mdRenderComplete = () => tailPromise || Promise.resolve();
+
+    async function finishRender(container, content, jobId) {
+      if (hasRenderableMermaid(container)) {
+        await deps.LazyRender.observe(container.querySelectorAll('code.language-mermaid'),node=>deps.RenderPerformance.async('mermaid',()=>renderMermaidDiagrams(node)));
+        if (jobId !== state.renderJobId || state.closing) return;
+        protectComplexBlocks(container);
+        balanceTableColumns(container);
+      }
+    }
+
+    async function renderProgressive(content, container, plan, jobId) {
+      const { pieces } = plan;
+      const used = new Map();
+      const endRender = deps.RenderPerformance.start('render-first-screen');
+      window.__mdPartialRender = true;
+      container.setAttribute('data-partial', 'true');
+      deps.RenderPerformance.sync('parse-dom',()=>appendParsedMarkdown(pieces[0] + plan.suffix, container, { keepExisting: false }));
+      finalizeRenderedMarkdown(container, content, { piece: true, usedAnchors: used });
+      buildToc(container);
+      await deps.MathRenderer.renderMath(container, { eager: false });
+      endRender();
+      if (jobId !== state.renderJobId || state.closing) return;
+      showRenderProgress(pieces[0].length / content.length);
+      let done = pieces[0].length;
+      tailPromise = (async () => {
+        for (let index = 1; index < pieces.length; index++) {
+          await nextSlice();
+          if (jobId !== state.renderJobId || state.closing) return;
+          const work = document.createElement('div');
+          appendParsedMarkdown(pieces[index], work, { keepExisting: false });
+          finalizeRenderedMarkdown(work, content, { piece: true, usedAnchors: used });
+          await deps.MathRenderer.renderMath(work, { eager: false });
+          if (jobId !== state.renderJobId || state.closing) return;
+          while (work.firstChild) container.appendChild(work.firstChild);
+          done += pieces[index].length;
+          showRenderProgress(done / content.length);
+        }
+        await nextSlice();
+        if (jobId !== state.renderJobId || state.closing) return;
+        deps.RenderPerformance.sync('toc',()=>buildToc(container));
+        ensureBlockCaretLandingZones(container, content);
+        state.lastRenderedHash = content;
+        deps.RenderPerformance.sync('reading',()=>deps.ReadingFeatures.decorate(container,content));
+        await finishRender(container, content, jobId);
+        if (jobId !== state.renderJobId || state.closing) return;
+        container.removeAttribute('data-partial');
+        window.__mdPartialRender = false;
+        hideRenderProgress();
+      })().catch(() => { hideRenderProgress(); window.__mdPartialRender = false; container.removeAttribute('data-partial'); });
+    }
+
+    async function renderMarkdown(content, container, options = {}) {
       document.documentElement.lang = documentLanguage(content);
       const jobId = ++state.renderJobId;
       clearTimeout(state.deferredRenderTimer);
+      window.__mdPartialRender = false;
+      container.removeAttribute('data-partial');
+      hideRenderProgress();
+      tailPromise = null;
       // A complete token stream is required for fences, references and footnotes.
       // No delayed full-document replacement is allowed to overwrite user input.
       deps.LazyRender.reset();
+      const plan = options.progressive ? planProgressive(content) : null;
+      if (plan) return renderProgressive(content, container, plan, jobId);
       const endRender = deps.RenderPerformance.start('render');
       deps.RenderPerformance.sync('parse-dom',()=>appendParsedMarkdown(content, container, { keepExisting: false }));
       deps.RenderPerformance.sync('finalize',()=>finalizeRenderedMarkdown(container, content));
@@ -137,12 +258,7 @@ window.MarkdownRendering = {
       await deps.MathRenderer.renderMath(container,{eager:false});
       endRender();
       if (jobId !== state.renderJobId || state.closing) return;
-      if (hasRenderableMermaid(container)) {
-        await deps.LazyRender.observe(container.querySelectorAll('code.language-mermaid'),node=>deps.RenderPerformance.async('mermaid',()=>renderMermaidDiagrams(node)));
-        if (jobId !== state.renderJobId || state.closing) return;
-        protectComplexBlocks(container);
-        balanceTableColumns(container);
-      }
+      await finishRender(container, content, jobId);
     }
 
     function toggleFrontmatter(btn) {

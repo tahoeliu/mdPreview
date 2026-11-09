@@ -364,5 +364,6 @@
   "export.failed": "导出失败：",
   "settings.title": "设置",
   "help.title": "帮助",
-  "onboarding.example": "打开示例文档"
+  "onboarding.example": "打开示例文档",
+  "Loading the rest…": "正在载入后续内容…"
 }

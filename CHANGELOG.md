@@ -2,6 +2,17 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.2] - 2026-11-09
+
+### Improved
+- **Long documents open faster:** the first screen is drawn immediately and the rest is filled in below while a small "Loading…" note with a spinner shows progress. The page stays read-only until it is complete, so nothing can be saved half-finished.
+- **Finder preview shows more:** smaller body text, calmer headings and tighter margins, with an even more compact layout in a narrow preview pane.
+
+### Fixed
+- Quotes, list items and callouts no longer show a stray gap below their last paragraph.
+- Images that cannot be loaded now show a clear placeholder (a torn-picture icon and the image description) instead of a thin line of text.
+- The "Updated to … · See changes" note now fades away by itself after 10 seconds if you do not click it.
+
 ## [2.0.1] - 2026-11-09
 
 A small polish release: calmer note blocks, a better README and steadier automated checks. No change to how files are read, edited or exported.
