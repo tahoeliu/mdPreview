@@ -26,6 +26,7 @@ for(const [state,prepare] of [
    await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),long);
    await page.evaluate(()=>{document.querySelector('.scroll-wrap').scrollTop=800;});
    await page.waitForSelector('.read-hud.on');
+   await page.waitForFunction(()=>getComputedStyle(document.querySelector('.read-hud')).opacity==='1');
    await page.evaluate(()=>openGoToHeading());await page.waitForSelector('#gotoOverlay');}],
  ['顶部格式工具条',async page=>{
    await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),DOCUMENT);
