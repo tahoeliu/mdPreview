@@ -2,6 +2,12 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.4] - 2026-11-10
+
+### Fixed
+- **Opening a second document from Finder now shows it:** new windows open next to the one you are reading, on the same screen. Before, a new window could appear on another display (where the last window had been left) and look as if nothing had opened.
+- The outline button no longer overlaps the bar at the top of the source view.
+
 ## [2.0.3] - 2026-11-09
 
 ### Changed

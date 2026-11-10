@@ -2805,6 +2805,32 @@ def _save_window_geometry(window):
         pass
 
 
+def _active_window_geometry():
+    """Top-left-origin frame of the frontmost visible window, or None."""
+    if not HAS_COCOA:
+        return None
+    try:
+        import webview.platforms.cocoa as cocoa
+        from AppKit import NSScreen
+        window = _active_window_ref
+        browser = cocoa.BrowserView.instances.get(getattr(window, 'uid', None)) if window else None
+        native = browser.window if browser is not None else None
+        if native is None or not native.isVisible():
+            return None
+        frame = native.frame()
+        screen = native.screen() or NSScreen.mainScreen()
+        vf = screen.visibleFrame()
+        top = NSScreen.mainScreen().frame().size.height
+        x, y = frame.origin.x + 30, frame.origin.y - 30
+        # Keep the cascaded window on the same screen.
+        if x + frame.size.width > vf.origin.x + vf.size.width or y < vf.origin.y:
+            x, y = vf.origin.x + 30, vf.origin.y + vf.size.height - frame.size.height - 30
+        return {'x': int(x), 'y': int(top - y - frame.size.height),
+                'width': int(frame.size.width), 'height': int(frame.size.height)}
+    except Exception:
+        return None
+
+
 def create_window(file_path=None, x=None, y=None):
     if file_path:
         file_path = os.path.abspath(file_path)
@@ -2815,7 +2841,13 @@ def create_window(file_path=None, x=None, y=None):
             _opened_files.add(file_path)
 
     geometry = _saved_window_geometry()
-    if x is None and y is None and geometry:
+    # Open next to the window the user is already looking at (same screen),
+    # not at the last saved frame, which may sit on another display.
+    anchor = _active_window_geometry() if x is None and y is None else None
+    if anchor:
+        geometry = dict(geometry or {}, width=anchor['width'], height=anchor['height'])
+        x, y = anchor['x'], anchor['y']
+    elif x is None and y is None and geometry:
         x, y = geometry['x'], geometry['y']
         offset = (_window_count[0] * WINDOW_OFFSET) % 150
         candidate = load_config().get('window_frame', [])
