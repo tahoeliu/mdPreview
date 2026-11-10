@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How to open a .md file on Mac (and make it readable) — mdPreview</title>
+<meta name="description" content="Three ways to open Markdown (.md) files on a Mac, and how to turn ChatGPT or Claude answers into a clean page, PDF or Word file. Free, offline, open source.">
+<link rel="canonical" href="https://tahoeliu.github.io/mdPreview/open-md-on-mac.html">
+<link rel="stylesheet" href="site.css">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"HowTo","name":"How to open a .md file on Mac","description":"Open and read Markdown files on macOS with a free app.","step":[{"@type":"HowToStep","name":"Install mdPreview","text":"Download mdPreview from the GitHub releases page, or run the installer in Terminal."},{"@type":"HowToStep","name":"Double-click the .md file","text":"mdPreview opens the file as a formatted page."},{"@type":"HowToStep","name":"Export if needed","text":"Use File > Export to save as PDF, Word, HTML or plain text."}]}</script>
+</head>
+<body>
+<main class="wrap" style="max-width:720px;margin:0 auto;padding:48px 16px;line-height:1.6;">
+  <p><a href="index.html">mdPreview</a></p>
+  <h1>How to open a .md file on Mac</h1>
+  <p>A <code>.md</code> file is plain-text Markdown. Macs can open it, but by default you see raw symbols such as <code>#</code>, <code>**</code> and <code>|</code> instead of a formatted page. Here are three ways to fix that.</p>
+
+  <h2>1. Use mdPreview (free, recommended)</h2>
+  <p><a href="https://github.com/tahoeliu/mdPreview/releases/latest">mdPreview</a> is a free, open-source Markdown viewer and editor for macOS 13 or later, on Apple silicon and Intel Macs. Install it, then double-click any <code>.md</code> file. It opens as a clean page with headings, tables, task lists, maths and diagrams. Nothing is uploaded: it works offline, with no account.</p>
+  <p>Prefer Terminal? Run:</p>
+  <pre><code>curl -fsSL https://raw.githubusercontent.com/tahoeliu/mdPreview/main/scripts/get.sh | bash</code></pre>
+  <p>The installer checks a signed checksum before it installs anything.</p>
+
+  <h2>2. Press Space in Finder</h2>
+  <p>Select a <code>.md</code> file in Finder and press Space to preview it. mdPreview includes Quick Look support, so the preview is formatted too.</p>
+
+  <h2>3. Open it in TextEdit or a browser</h2>
+  <p>TextEdit shows the raw text. You can also drag the file into a browser, but most browsers still show plain text unless a viewer extension is installed. Both are workable for a quick look, but neither gives you a readable page or easy export.</p>
+
+  <h2>Turning an AI answer into a PDF or Word file</h2>
+  <p>ChatGPT, Claude and Gemini answers often arrive as Markdown. Save the answer as a <code>.md</code> file, open it in mdPreview, then choose <strong>File &gt; Export</strong> to get a PDF with page numbers, a Word file with real heading styles, or a single-file web page.</p>
+
+  <h2>Frequently asked</h2>
+  <p><strong>Is it free?</strong> Yes. MIT licence, no ads, no tracking.</p>
+  <p><strong>Does it need internet?</strong> No. Your documents never leave your Mac.</p>
+  <p><strong>Is it a Typora or MacDown alternative?</strong> Yes, for reading and simple editing. It is not a note-linking app or a code editor.</p>
+  <p><strong>Will macOS block it?</strong> The app is ad-hoc signed. If macOS warns on first launch, open System Settings &gt; Privacy &amp; Security and choose <em>Open Anyway</em>.</p>
+
+  <p><a href="https://github.com/tahoeliu/mdPreview/releases/latest"><strong>Download mdPreview for Mac</strong></a></p>
+</main>
+</body>
+</html>
