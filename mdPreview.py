@@ -934,6 +934,14 @@ class MarkdownAPI:
             self.baseline_mtime_ns = None
             self.baseline_size = None
 
+    def quit_prompt_started(self, document_id=None):
+        """The window received the quit question; from here on only the person's answer is awaited."""
+        if document_id and document_id != self.document_id:
+            return False
+        if _quit_confirmation_queue and _quit_confirmation_queue[0] is self:
+            _cancel_quit_ack()
+        return True
+
     def finish_quit_document(self, approved, document_id=None):
         if document_id and document_id != self.document_id:
             return False
@@ -2609,6 +2617,47 @@ def _rescue_unseen_windows():
     return _rescue_native_windows(natives, rects, NSScreen.mainScreen().visibleFrame())
 
 
+def _move_stranded_windows(natives, screen_rects, main_visible):
+    """Every window that exists must be where the user can see it.
+
+    Any visible, non-minimised window that does not overlap a screen is moved onto the main screen, stepping
+    down and to the right so several rescued windows do not pile up. Returns how many were moved."""
+    from AppKit import NSMakePoint
+    from mdpreview_core.reading_state import visible_frame
+    moved = 0
+    for native in natives:
+        f = native.frame()
+        if native.isMiniaturized() or not native.isVisible():
+            continue
+        if visible_frame([f.origin.x, f.origin.y, max(f.size.width, 680), max(f.size.height, 400)], screen_rects):
+            continue
+        step = 30 * (moved % 6)
+        native.setFrameTopLeftPoint_(NSMakePoint(main_visible.origin.x + 60 + step,
+                                                 main_visible.origin.y + main_visible.size.height - 60 - step))
+        native.orderFront_(None)
+        moved += 1
+    return moved
+
+
+def _ensure_windows_visible():
+    """Called on start, activation, display changes, Dock click and before quitting."""
+    if not HAS_COCOA:
+        return 0
+    try:
+        import webview.platforms.cocoa as cocoa
+        from AppKit import NSScreen
+        rects = [[r.origin.x, r.origin.y, r.size.width, r.size.height]
+                 for r in (sc.visibleFrame() for sc in NSScreen.screens())]
+        natives = [b.window for b in list(cocoa.BrowserView.instances.values()) if getattr(b, 'window', None) is not None]
+        moved = _move_stranded_windows(natives, rects, NSScreen.mainScreen().visibleFrame())
+        if moved:
+            logging.info('moved %d off-screen window(s) back onto the screen', moved)
+        return moved
+    except Exception:
+        log_exception('ensure windows visible failed')
+        return 0
+
+
 def _reopen_hidden_window():
     """Show the most recently hidden blank window, if any. Returns True on success."""
     if not _hidden_windows:
@@ -3953,12 +4002,19 @@ if HAS_COCOA:
                         # forward. If none can actually be seen (minimised or
                         # stranded off-screen), pull them back onto this screen.
                         _rescue_unseen_windows()
+                        _ensure_windows_visible()
                         return True
                     _create_window_safely(None)
                     return True
                 except Exception:
                     log_exception('handle reopen failed')
                     return True
+
+            def applicationDidBecomeActive_(self, notification):
+                _ensure_windows_visible()
+
+            def applicationDidChangeScreenParameters_(self, notification):
+                _ensure_windows_visible()
 
             def application_openFiles_(self, application, filenames):
                 global _initial_file_handled
@@ -3996,6 +4052,8 @@ if HAS_COCOA:
                 ('application_openFiles_',
                  b'application:openFiles:',
                  application_openFiles_, b'v@:@@'),
+                ('applicationDidBecomeActive_', b'applicationDidBecomeActive:', applicationDidBecomeActive_, b'v@:@'),
+                ('applicationDidChangeScreenParameters_', b'applicationDidChangeScreenParameters:', applicationDidChangeScreenParameters_, b'v@:@'),
             ]
             for py_name, sel_name, func, signature in installs:
                 try:
@@ -4852,20 +4910,59 @@ _quit_confirmation_queue = []
 _quit_confirmation_active = False
 
 
+_QUIT_ACK_SECONDS = 3.0      # how long a window may stay silent before we stop waiting for it
+_quit_ack_timer = None
+
+
+def _cancel_quit_ack():
+    global _quit_ack_timer
+    timer, _quit_ack_timer = _quit_ack_timer, None
+    if timer is not None:
+        timer.cancel()
+
+
 def _begin_quit_confirmation():
     global _quit_confirmation_active
     if _quit_confirmation_active:
         return
     _quit_confirmation_active = True
+    _ensure_windows_visible()
     for api in _window_apis.values():
         _dispatch_js_to(api.window, 'setQuitFrozen(true)')
-    _quit_confirmation_queue[:] = list(_window_apis.values())
+    # Windows with unsaved changes first: they are the ones the person has to answer.
+    queue = list(_window_apis.values())
+    queue.sort(key=lambda api: 0 if api.is_dirty else 1)
+    _quit_confirmation_queue[:] = queue
     _advance_quit_confirmation()
 
 
+def _quit_ack_timeout(api):
+    """A window did not answer in time. Never keep waiting where nobody can see it."""
+    with _state_lock:
+        waiting = bool(_quit_confirmation_queue) and _quit_confirmation_queue[0] is api
+    if not waiting:
+        return
+    if api.is_dirty:
+        # It has unsaved work: stop quitting, show the window and let the person decide.
+        logging.info('quit: a window with unsaved changes did not answer; showing it')
+        AppHelper.callAfter(lambda: _focus_window(api.window))
+        AppHelper.callAfter(_cancel_quit_confirmation)
+    else:
+        logging.info('quit: a clean window did not answer; continuing')
+        _finish_quit_confirmation(api, True)
+
+
 def _advance_quit_confirmation():
+    global _quit_ack_timer
+    _cancel_quit_ack()
     if _quit_confirmation_queue:
         api = _quit_confirmation_queue[0]
+        # Whoever is asked is brought in front first, so a question is never asked in an invisible window.
+        if api.is_dirty:
+            _focus_window(api.window)
+        _quit_ack_timer = threading.Timer(_QUIT_ACK_SECONDS, _quit_ack_timeout, (api,))
+        _quit_ack_timer.daemon = True
+        _quit_ack_timer.start()
         _dispatch_js_to(api.window, 'confirmQuitDocument()')
     else:
         global _pending_install_plan
@@ -4885,6 +4982,7 @@ def _finish_quit_confirmation(api, approved):
     global _quit_confirmation_active, _pending_install_plan
     if not _quit_confirmation_queue or _quit_confirmation_queue[0] is not api:
         return
+    _cancel_quit_ack()
     if not approved:
         _cancel_quit_confirmation()
         return
@@ -4916,6 +5014,7 @@ def _download_and_extract(version, progress_callback=None, keep_dmg=False):
 
 def _cancel_quit_confirmation():
     global _quit_confirmation_active, _pending_install_plan
+    _cancel_quit_ack()
     _quit_confirmation_queue.clear()
     _quit_confirmation_active = False
     _pending_install_plan = None

@@ -2,6 +2,12 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.7] - 2026-11-10
+
+### Fixed
+- **Quitting can no longer get stuck.** Before, one window that did not answer the "can I close?" question made the app wait forever, so Quit and the Dock icon did nothing. Now only windows with unsaved changes are asked, the one being asked is brought to the front first, a window that stays silent is skipped (or, if it has unsaved work, shown to you and the quit is cancelled), and you can always try quitting again.
+- **Every window is always where you can see it.** A window left off-screen (for example after a display change) is moved back onto the screen when you switch to the app, when displays change, when you click the Dock icon, and before quitting.
+
 ## [2.0.6] - 2026-11-10
 
 ### Changed

@@ -1448,6 +1448,7 @@ var {
   }
 
   async function confirmQuitDocument() {
+    Bridge.callSafe('quit_prompt_started', documentSession.id);
     try {
       await ensureTurndown();
       if (!isDirty) return Bridge.call('finish_quit_document', true, documentSession.id);
