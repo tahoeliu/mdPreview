@@ -2578,6 +2578,37 @@ def _hide_last_window(window, api):
         log_exception('hide last window failed')
 
 
+def _rescue_native_windows(natives, screen_rects, main_visible):
+    """If none of these NSWindows can be seen, restore/move them onto the main screen.
+
+    Returns True when something had to be rescued."""
+    from AppKit import NSMakePoint
+    from mdpreview_core.reading_state import visible_frame
+    for native in natives:
+        f = native.frame()
+        if not native.isMiniaturized() and native.isVisible() and visible_frame(
+                [f.origin.x, f.origin.y, max(f.size.width, 680), max(f.size.height, 400)], screen_rects):
+            return False  # something is already on screen
+    for i, native in enumerate(natives):
+        if native.isMiniaturized():
+            native.deminiaturize_(None)
+        native.setFrameTopLeftPoint_(NSMakePoint(main_visible.origin.x + 60 + 30 * i,
+                                                 main_visible.origin.y + main_visible.size.height - 60 - 30 * i))
+        native.makeKeyAndOrderFront_(None)
+    return bool(natives)
+
+
+def _rescue_unseen_windows():
+    """Dock click with no window the user can see: bring the windows back."""
+    import webview.platforms.cocoa as cocoa
+    from AppKit import NSScreen
+    rects = [[r.origin.x, r.origin.y, r.size.width, r.size.height]
+             for r in (sc.visibleFrame() for sc in NSScreen.screens())]
+    natives = [b.window for b in list(cocoa.BrowserView.instances.values())
+               if getattr(b, 'window', None) is not None and (b.window.isVisible() or b.window.isMiniaturized())]
+    return _rescue_native_windows(natives, rects, NSScreen.mainScreen().visibleFrame())
+
+
 def _reopen_hidden_window():
     """Show the most recently hidden blank window, if any. Returns True on success."""
     if not _hidden_windows:
@@ -2805,29 +2836,54 @@ def _save_window_geometry(window):
         pass
 
 
-def _active_window_geometry():
-    """Top-left-origin frame of the frontmost visible window, or None."""
+def _placement_for_new_window(width, height):
+    """Where a new window goes: (pywebview Screen, x, y, width, height) or None.
+
+    pywebview measures x/y from the top-left of the Screen it is given, so we
+    choose the screen first. Preference: beside the window the user is looking
+    at (same screen, cascaded); otherwise the last saved frame if it is still
+    visible; otherwise None (caller falls back to defaults on the main screen).
+    """
     if not HAS_COCOA:
         return None
     try:
         import webview.platforms.cocoa as cocoa
         from AppKit import NSScreen
-        window = _active_window_ref
-        browser = cocoa.BrowserView.instances.get(getattr(window, 'uid', None)) if window else None
+        from mdpreview_core.reading_state import visible_frame
+        ns_screens = list(NSScreen.screens())
+        top_left = None  # Cocoa coordinates: (x, y of the window's top edge)
+        screen = None
+        win = _active_window_ref
+        browser = cocoa.BrowserView.instances.get(getattr(win, 'uid', None)) if win else None
         native = browser.window if browser is not None else None
-        if native is None or not native.isVisible():
+        if native is not None and native.isVisible() and not native.isMiniaturized() and native.screen() is not None:
+            f, screen = native.frame(), native.screen()
+            vf = screen.visibleFrame()
+            width, height = int(f.size.width), int(f.size.height) + 28  # pywebview trims 28pt (title bar)
+            x, y_top = f.origin.x + WINDOW_OFFSET, f.origin.y + f.size.height - WINDOW_OFFSET
+            if x + width > vf.origin.x + vf.size.width or y_top - height < vf.origin.y:
+                step = WINDOW_OFFSET * (1 + _window_count[0] % 5)
+                x, y_top = vf.origin.x + step, vf.origin.y + vf.size.height - step
+            top_left = (x, y_top)
+        else:
+            frame = load_config().get('window_frame')
+            for candidate in ns_screens:
+                vf = candidate.visibleFrame()
+                if visible_frame(frame, [[vf.origin.x, vf.origin.y, vf.size.width, vf.size.height]]):
+                    screen = candidate
+                    top_left = (frame[0], frame[1] + frame[3])
+                    width, height = int(frame[2]), int(frame[3]) + 28
+                    break
+        if screen is None or top_left is None:
             return None
-        frame = native.frame()
-        screen = native.screen() or NSScreen.mainScreen()
-        vf = screen.visibleFrame()
-        top = NSScreen.mainScreen().frame().size.height
-        x, y = frame.origin.x + 30, frame.origin.y - 30
-        # Keep the cascaded window on the same screen.
-        if x + frame.size.width > vf.origin.x + vf.size.width or y < vf.origin.y:
-            x, y = vf.origin.x + 30, vf.origin.y + vf.size.height - frame.size.height - 30
-        return {'x': int(x), 'y': int(top - y - frame.size.height),
-                'width': int(frame.size.width), 'height': int(frame.size.height)}
+        sf = screen.frame()
+        match = next((sc for sc in webview.screens if int(sc.x) == int(sf.origin.x) and int(sc.y) == int(sf.origin.y)
+                      and int(sc.width) == int(sf.size.width)), None)
+        if match is None:
+            return None
+        return match, int(top_left[0] - sf.origin.x), int(sf.origin.y + sf.size.height - top_left[1]), width, height
     except Exception:
+        log_exception('window placement failed')
         return None
 
 
@@ -2840,32 +2896,25 @@ def create_window(file_path=None, x=None, y=None):
         with _state_lock:
             _opened_files.add(file_path)
 
-    geometry = _saved_window_geometry()
-    # Open next to the window the user is already looking at (same screen),
-    # not at the last saved frame, which may sit on another display.
-    anchor = _active_window_geometry() if x is None and y is None else None
-    if anchor:
-        geometry = dict(geometry or {}, width=anchor['width'], height=anchor['height'])
-        x, y = anchor['x'], anchor['y']
-    elif x is None and y is None and geometry:
-        x, y = geometry['x'], geometry['y']
-        offset = (_window_count[0] * WINDOW_OFFSET) % 150
-        candidate = load_config().get('window_frame', [])
-        try:
-            from AppKit import NSScreen
-            from mdpreview_core.reading_state import visible_frame
-            screens = [screen.visibleFrame() for screen in NSScreen.screens()]
-            shifted = [candidate[0]+offset, candidate[1]-offset, candidate[2], candidate[3]]
-            if visible_frame(shifted, [[r.origin.x, r.origin.y, r.size.width, r.size.height] for r in screens]):
-                x += offset; y += offset
-        except Exception:
-            pass
-    # Calculate cascade offset if x,y not specified
-    if x is None or y is None:
+    placement = _placement_for_new_window(900, 680) if x is None and y is None else None
+    screen = None
+    geometry = {}
+    if placement:
+        screen, x, y, width, height = placement
+        geometry = {'width': width, 'height': height}
+    else:
+        # Explicit position (e.g. a tab dragged out), or nothing usable saved:
+        # cascade from the default corner of the main screen.
         count = _window_count[0]
-        offset = count * WINDOW_OFFSET
-        x = WINDOW_BASE_X + (offset % 150)
-        y = WINDOW_BASE_Y + (offset % 150)
+        if x is None or y is None:
+            x = WINDOW_BASE_X + (count * WINDOW_OFFSET % 150)
+            y = WINDOW_BASE_Y + (count * WINDOW_OFFSET % 150)
+        saved = _saved_window_geometry()
+        geometry = {k: saved[k] for k in ('width', 'height') if k in saved}
+        try:
+            screen = webview.screens[0] if HAS_COCOA and webview.screens else None  # primary display
+        except Exception:
+            screen = None
 
     api = MarkdownAPI(file_path)
     html_path = get_resource_path('index.html')
@@ -2883,6 +2932,7 @@ def create_window(file_path=None, x=None, y=None):
             confirm_close=False,
             x=x,
             y=y,
+            screen=screen,
         )
         api.window = win
         with _state_lock:
@@ -3899,8 +3949,10 @@ if HAS_COCOA:
                     if _reopen_hidden_window():
                         return True
                     if _window_apis:
-                        # Windows exist (visible or hidden); app activation
-                        # already brings them forward — do not create a new one.
+                        # Windows exist: normally app activation brings them
+                        # forward. If none can actually be seen (minimised or
+                        # stranded off-screen), pull them back onto this screen.
+                        _rescue_unseen_windows()
                         return True
                     _create_window_safely(None)
                     return True
@@ -4077,14 +4129,15 @@ def main():
     title = os.path.basename(file_path) if file_path else 'Untitled.md'
 
     _start_log('before create_window')
-    geometry = _saved_window_geometry()
+    placement = _placement_for_new_window(900, 680)
+    first_screen, px, py, pw, ph = placement if placement else (None, None, None, 900, 680)
     main_window = webview.create_window(
         title=title,
         url=html_path,
         js_api=main_api,
-        width=geometry.get('width', 900),
-        height=geometry.get('height', 680),
-        x=geometry.get('x'), y=geometry.get('y'),
+        width=pw,
+        height=ph,
+        x=px, y=py, screen=first_screen,
         min_size=(680, 400),
         text_select=True,
         confirm_close=False,

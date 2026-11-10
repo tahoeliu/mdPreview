@@ -3,7 +3,8 @@ import threading
 from contextlib import contextmanager
 
 PAPER = {'a4': (595.28, 841.89), 'letter': (612.0, 792.0)}
-MARGINS_MM = {'narrow': (12, 12, 14, 12), 'normal': (18, 16, 20, 16), 'wide': (25, 25, 25, 25)}
+# top, right, bottom, left (mm)
+MARGINS_MM = {'narrow': (14, 14, 16, 14), 'normal': (22, 22, 24, 22), 'wide': (28, 28, 28, 28)}
 _active = {}
 
 

@@ -9,9 +9,11 @@ window.DocumentFind = {
     function openFindBar() {
       const bar = document.getElementById('findBar');
       const input = document.getElementById('findInput');
+      // ⌘F again (or Edit ▸ Find) while the box is active closes it, like ⎋ does.
+      if (bar.classList.contains('visible') && document.activeElement === input) { closeFindBar(); return; }
       bar.classList.add('visible');
       // Push content down so the bar doesn't overlap
-      document.querySelector('.scroll-wrap').style.top = '40px';
+      document.querySelector('.scroll-wrap').style.top = Math.round(bar.getBoundingClientRect().bottom) + 'px';
       input.focus();
       const sel = window.getSelection().toString();
       if (sel) { input.value = sel; doFind(); }
@@ -79,12 +81,12 @@ window.DocumentFind = {
         }
         findState.currentIdx = idx;
         countEl.textContent = (idx + 1) + '/' + matches.length;
-        scrollToTextareaMatch(idx);
+        scrollToTextareaMatch(idx, true);
       }
       updateFindButtons();
     }
 
-    function scrollToTextareaMatch(idx) {
+    function scrollToTextareaMatch(idx, keepFocus) {
       const textarea = document.getElementById('textarea');
       const start = findState.matches[idx];
       const end = start + findState.query.length;
@@ -93,6 +95,9 @@ window.DocumentFind = {
       // focusing reveals the caret, and a pre-scrolled caret doesn't fight it.
       scrollTextareaToLine(lines - 1, 100);
       textarea.setSelectionRange(start, end);
+      // While the person is still typing the query, focus must stay in the Find box, or the rest of
+      // the query would be typed into the document.
+      if (keepFocus) return;
       try { textarea.focus({ preventScroll: true }); } catch (e) { textarea.focus(); }
     }
 

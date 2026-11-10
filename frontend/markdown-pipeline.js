@@ -77,15 +77,27 @@
   // original source and Marked's delimiter balancing, escaping and code/link
   // masking; never insert whitespace into documents or patch vendor code.
   const cjkStrongBoundary = /([\p{P}])\*\*(?!\*)(?=\p{Script=Han})/gu;
+  // Chinese typography puts full-width / curly punctuation right next to ** with no space, e.g. **定位：**S1
+  // or 这是**“引用”**文字. CommonMark's flanking rule rejects those, so for this punctuation only we treat it as a letter.
+  const CJK_PUNCT = '\\u2014\\u2018\\u2019\\u201c\\u201d\\u2026\\u3000-\\u303f\\uff00-\\uffef';
+  const cjkStrongClose = new RegExp('([' + CJK_PUNCT + '])\\*\\*(?!\\*)(?=[\\p{L}\\p{N}])', 'gu');
+  const cjkStrongOpen = new RegExp('(?<=[\\p{L}\\p{N}])\\*\\*(?!\\*)([' + CJK_PUNCT + '])', 'gu');
+  const asLetters = (run, punctuation) => 'a'.repeat(punctuation.length) + run.slice(punctuation.length);
   function cjkEmStrong(src, maskedSrc, prevChar) {
     if (!src.startsWith('**') || src[2] === '*') return false;
     // maskedSrc may include already-consumed text. Align it before scanning.
     // * and _ stay punctuation-classified so triple/mixed runs are untouched.
     const aligned = maskedSrc.slice(-src.length);
-    const masked = aligned.replace(cjkStrongBoundary, (run, punctuation) =>
-      punctuation === '*' || punctuation === '_' ? run : 'a'.repeat(punctuation.length) + run.slice(punctuation.length));
-    if (masked === aligned) return false;
-    return marked.Tokenizer.prototype.emStrong.call(this, src, masked, prevChar) || false;
+    let masked = aligned.replace(cjkStrongBoundary, (run, punctuation) =>
+      punctuation === '*' || punctuation === '_' ? run : asLetters(run, punctuation));
+    // The character before this ** lives outside `aligned`, so put it in front while matching the opening side.
+    const lead = prevChar || '';
+    masked = (lead + masked.replace(cjkStrongClose, asLetters)).replace(cjkStrongOpen, (run, punctuation) => run.slice(0, run.length - punctuation.length) + 'a'.repeat(punctuation.length)).slice(lead.length);
+    // marked decides whether this ** may open by looking at src and prevChar (not the masked text): when it is
+    // followed by CJK punctuation and sits right after a letter, pretend nothing precedes it.
+    const opensAfterLetter = /[\p{L}\p{N}]/u.test(lead) && new RegExp('^\\*\\*[' + CJK_PUNCT + ']', 'u').test(src);
+    if (masked === aligned && !opensAfterLetter) return false;
+    return marked.Tokenizer.prototype.emStrong.call(this, src, masked, opensAfterLetter ? '' : prevChar) || false;
   }
   // marked 12 的 walkTokens 在循环里反复 values = values.concat(...)，复杂度是 O(n²)：
   // 800KB 文档仅此一项就要约 17 秒。这里提供语义相同的线性实现：同样的遍历顺序，

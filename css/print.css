@@ -18,8 +18,14 @@
   .markdown pre.print-short { break-inside: avoid; }
   .markdown pre code { white-space: pre-wrap !important; overflow: visible !important; }
   .markdown .math-block, .markdown .frontmatter, .mermaid-diagram { overflow: visible !important; white-space: pre-wrap !important; }
-  .markdown table { break-inside: auto; }
-  .markdown tr { break-inside: avoid; }
+  .markdown .table-wrap { overflow: visible !important; }
+  /* Every cell draws its own right and bottom edge and the table its top and left, so no edge can be clipped at the page border or at a page break. */
+  .markdown table { break-inside: auto; border-collapse: separate !important; border-spacing: 0 !important; border-top: 1px solid #c9c9ce; border-left: 1px solid #c9c9ce; width: calc(100% - 1px) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .markdown th, .markdown td { border: 0 !important; border-right: 1px solid #c9c9ce !important; border-bottom: 1px solid #c9c9ce !important; }
+  .markdown tr, .markdown th, .markdown td { break-inside: avoid; page-break-inside: avoid; -webkit-column-break-inside: avoid; }
+  .markdown td > *, .markdown th > * { break-inside: avoid; }
+  .markdown th, .markdown td { position: static !important; }
+  .markdown tbody, .markdown thead { display: table-row-group; } .markdown thead { display: table-header-group; }
   .markdown thead { display: table-header-group; }
   .markdown img, .mermaid-diagram, .math-block { break-inside: avoid; }
   .markdown img { max-height: 240mm; object-fit: contain; }

@@ -828,13 +828,13 @@ var {
 
   function showDraftRecoveredBanner() {
     const banner = document.createElement('div');
-    banner.style.cssText = 'position:fixed;top:var(--titlebar-h,0px);left:0;right:0;z-index:950;background:#fff3cd;border-bottom:1px solid #ffc107;color:#856404;padding:8px 16px;font-size:13px;display:flex;align-items:center;gap:12px;justify-content:center;';
+    banner.className = 'notice-bar';
     const msg = t('Unsaved changes from a previous session have been restored.','已恢复上次未保存的修改。');
     const discardText = t('Discard','放弃');
     const dismissText = t('Dismiss','忽略');
     banner.innerHTML = '<span>' + msg + '</span>' +
-      '<a href="#" id="draftDiscard" style="color:#856404;font-weight:500;text-decoration:underline;">' + discardText + '</a>' +
-      '<a href="#" id="draftDismiss" style="color:#856404;text-decoration:underline;">' + dismissText + '</a>';
+      '<a href="#" id="draftDiscard" class="notice-action">' + discardText + '</a>' +
+      '<a href="#" id="draftDismiss" class="notice-action quiet">' + dismissText + '</a>';
     document.body.appendChild(banner);
     const discard = document.getElementById('draftDiscard');
     const dismiss = document.getElementById('draftDismiss');
@@ -1028,8 +1028,10 @@ var {
   }
   // The browser turns a space next to inline formatting into a non-breaking space while typing; keep it out of the Markdown unless the document already used them.
   function renderedToMarkdown(html, original) {
-    const out = turndownService.turndown(html);
-    return /\u00a0|&nbsp;/.test(original || '') ? out : out.replace(/\u00a0/g, ' ');
+    return BlockMerge.convert(html, original, {
+      turndown: markup => turndownService.turndown(markup), normalize: normalizeRenderedHtmlForTurndown,
+      renderOriginal: text => { const scratch = document.createElement('div'); appendParsedMarkdown(text, scratch, { keepExisting: false }); finalizeRenderedMarkdown(scratch, text); if (window.ReadingFeatures) ReadingFeatures.decorate(scratch, text); return scratch.innerHTML; },
+    });
   }
 
   function markSaved(markdown, snapshot = documentSession.snapshot(markdown)) {

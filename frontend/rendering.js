@@ -70,6 +70,8 @@ window.MarkdownRendering = {
       const blocks = Array.from(container.querySelectorAll(blockSelector));
       for (const block of blocks) {
         if (!block.parentNode || block.closest('.table-wrap table')) continue;
+        // A list nested in a list item already has the item's own text to land the caret on; a spacer there only adds a blank line.
+        if (block.matches('ul, ol') && block.parentNode.closest && block.parentNode.closest('li')) continue;
         let next = block.nextSibling;
         while (next && next.nodeType === Node.TEXT_NODE && !next.textContent.trim()) next = next.nextSibling;
         const hasEditableLanding = next && next.nodeType === Node.ELEMENT_NODE && !next.matches(blockSelector);

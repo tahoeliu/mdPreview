@@ -22,8 +22,8 @@ class PrintTests(unittest.TestCase):
         from mdpreview_core.export.print_engine import make_print_info
         info = make_print_info('a4', 'normal')
         self.assertAlmostEqual(info.paperSize().width, 595.28, delta=0.5)
-        self.assertAlmostEqual(info.leftMargin(), 16*72/25.4)
-        self.assertAlmostEqual(info.topMargin(), 18*72/25.4)
+        self.assertAlmostEqual(info.leftMargin(), 22*72/25.4)
+        self.assertAlmostEqual(info.topMargin(), 22*72/25.4)
         with self.assertRaises(ValueError): make_print_info('bad', 'normal')
 
     @unittest.skipUnless(sys.platform == 'darwin', '需要 macOS')

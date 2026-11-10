@@ -2,6 +2,29 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.5] - 2026-11-10
+
+### Fixed
+- **Find no longer types into your document.** In source view, typing a search made the cursor jump into the text after the first letter, so the rest of the search ended up inside the document. Focus now stays in the Find box.
+- **Find now jumps to and highlights matches inside tables, lists and footnotes** (before, only matches in ordinary paragraphs were shown).
+- **⌘F again closes the Find box** (as ⎋ does), and the close button now sits at the far right end of the bar, after the Replace controls, instead of in the middle.
+- **Clicking the Dock icon always gets you a window:** if every window was minimised or had been left off-screen, the click did nothing. Now the windows are brought back onto your screen (or a blank one is created if none exist).
+- **New windows stay on the screen you are using,** also with two displays: they open beside the one you are reading, stepping down and to the right, and never pile on top of each other or drift off-screen. Windows keep their height instead of getting a little shorter each time.
+- The outline button no longer overlaps the Find box or the "unsaved changes restored" note.
+
+- **Editing no longer rewrites what you did not touch.** Saving after an edit in the rendered page now changes only the blocks you edited. Everything else keeps its exact original text: HTML comments, `<details>` blocks, reference-style links, footnote and link definitions, image titles, `~~~` fences, `***` rules, setext headings, list indentation and table alignment (before, any edit could rewrite or drop these).
+- **Print and PDF:** the table's right and bottom border is always drawn, and the default page margins are wider (22 mm instead of 16–18 mm), which looks calmer and more like a document.
+- The broken-image placeholder now has equal space above the icon and below its caption.
+- **Chinese bold works next to full-width punctuation:** `**定位：**S1`, `这是**“引用”**文字` and `前**（备注）**后` are now bold, as people expect (before, the stars showed up as text).
+- Turning a paragraph into a bulleted, numbered or task list no longer leaves stray trailing spaces in the saved Markdown.
+- Nested lists no longer get extra blank lines inside list items, and lists with a blank line between items keep tidy spacing.
+- Autolinks (`<https://…>`) and snake_case words are no longer rewritten when you edit the paragraph they are in.
+
+### Changed
+- **The scrollbar is hidden at rest.** A thin position marker appears only while you scroll and for about two seconds afterwards, together with the reading-progress note.
+- **Top bars look like one family:** the Find bar and the "unsaved changes restored" note now use the same surface, hairline and controls as the format bar, in light and dark, and stack neatly below it instead of hiding behind it. The note is no longer bright yellow.
+- **The code-block "Copy" button is now a small icon** that turns into a check mark after copying.
+
 ## [2.0.4] - 2026-11-10
 
 ### Fixed

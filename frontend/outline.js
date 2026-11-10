@@ -655,7 +655,7 @@ window.DocumentOutline = {
       let node;
       while (node = walker.nextNode()) {
         const len = node.textContent.length;
-        if (!sn && current + len >= startOff) { sn = node; so = Math.min(startOff - current, len); }
+        if (!sn && current + len > startOff) { sn = node; so = Math.min(startOff - current, len); }
         if (current + len >= endOff) { en = node; eo = Math.min(endOff - current, len); break; }
         current += len;
       }

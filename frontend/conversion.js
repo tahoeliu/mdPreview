@@ -8,6 +8,12 @@ window.MarkdownConversion = {
       if (state.turndownService || typeof deps.TurndownService === 'undefined') return;
       state.turndownService = new deps.TurndownService({ headingStyle: 'atx', hr: '---', codeBlockStyle: 'fenced', bulletListMarker: '-', emDelimiter: '*', strongDelimiter: '**' });
       state.turndownService.remove(node=>node.matches?.('.code-copy-btn,.remote-image-bar,.fold-more,.img-fallback'));
+      // Keep text as it was written: no backslash inside snake_case words, and <https://x> for links whose text is their address.
+      const defaultEscape = state.turndownService.escape.bind(state.turndownService);
+      state.turndownService.escape = text => defaultEscape(text).replace(/(\w)\\_(?=\w)/g, '$1_');
+      state.turndownService.addRule('autolink',{filter:node=>node.nodeName==='A'&&/^https?:\/\//i.test(node.getAttribute('href')||'')&&node.getAttribute('href')===node.textContent&&!node.getAttribute('title'),replacement:(_,node)=>'<'+node.getAttribute('href')+'>'});
+      // A <br> that ends a block does nothing on screen (the browser leaves one behind when a paragraph is turned into a list item); never write it as a trailing hard break.
+      state.turndownService.addRule('trailingBr',{filter:node=>{if(node.nodeName!=='BR')return false;let next=node.nextSibling;while(next&&next.nodeType===3&&!next.textContent.trim())next=next.nextSibling;return !next;},replacement:()=>''});
       state.turndownService.addRule('strike',{filter:['del','s','strike'],replacement:c=>'~~'+c+'~~'});
       state.turndownService.addRule('taskToggle',{filter:node=>node.matches?.('.task-toggle,.task-marker'),replacement:(_,node)=>{const m=(node.dataset.taskMarker||'').trim();return m?m+' ':'';}});
       state.turndownService.addRule('frontmatter', {
@@ -54,10 +60,11 @@ window.MarkdownConversion = {
           // Same shape as the bundled turndown listItem rule, but with a single
           // space after the marker ("- item" / "1. item") instead of the
           // hardcoded 3-space padding, so pasted lists match the app's style.
+          // Indent only continuation lines (never the line break that ends the item), so no item carries trailing spaces.
           content = content
             .replace(/^\n+/, '')
-            .replace(/\n+$/, '\n')
-            .replace(/\n/gm, '\n    ');
+            .replace(/\n+$/, '')
+            .replace(/\n(?=[^\n])/g, '\n    ');
           var parent = node.parentNode;
           var prefix;
           if (parent && parent.nodeName === 'OL') {
@@ -67,7 +74,7 @@ window.MarkdownConversion = {
           } else {
             prefix = options.bulletListMarker + ' ';
           }
-          return prefix + content + (node.nextSibling && !/\n$/.test(content) ? '\n' : '');
+          return prefix + content + (node.nextSibling ? '\n' : '');
         }
       });
       state.turndownService.addRule('renderCaretSpacer', {

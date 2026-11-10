@@ -112,11 +112,25 @@ window.ReadingProgress = (() => {
     }
     function schedule(reveal) { if (!frame) frame = requestAnimationFrame(() => update(reveal)); }
 
+    // A thin position marker replaces the scrollbar: visible while scrolling and ~2 s after, like the progress note.
+    const thumb = document.createElement('div'); thumb.className = 'read-thumb'; document.body.append(thumb);
+    let thumbTimer = 0;
+    function showThumb() {
+      const box = scroller.getBoundingClientRect(), range = scroller.scrollHeight - scroller.clientHeight;
+      if (range <= 1 || document.documentElement.hasAttribute('data-output')) { thumb.classList.remove('on'); return; }
+      const track = box.height - 16, size = Math.max(32, track * scroller.clientHeight / scroller.scrollHeight);
+      thumb.style.height = size.toFixed(1) + 'px';
+      thumb.style.top = (box.top + 8 + (track - size) * Math.min(1, Math.max(0, scroller.scrollTop / range))).toFixed(1) + 'px';
+      thumb.classList.add('on');
+      clearTimeout(thumbTimer);
+      thumbTimer = setTimeout(() => thumb.classList.remove('on'), 1800);
+    }
+    scroller.addEventListener('scroll', showThumb, { passive: true });
     scroller.addEventListener('scroll', () => schedule('scroll'), { passive: true });
     new MutationObserver(() => { measured = -1; schedule('open'); }).observe(content, { childList: true });
     window.addEventListener('resize', () => schedule('scroll'));
     schedule('open');
-    return { update, measure, estimateMinutes, bar, hud, end };
+    return { update, measure, estimateMinutes, bar, hud, end, thumb };
   }
 
   return { create, estimateMinutes, sectionMinutes };

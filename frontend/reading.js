@@ -42,8 +42,11 @@ window.ReadingFeatures = (() => {
   function decorate(root,markdown){
     for(const pre of root.querySelectorAll('pre')){
       if(pre.querySelector('.code-copy-btn'))continue;
-      const button=document.createElement('button');button.className='code-copy-btn';button.contentEditable='false';button.textContent=t('Copy','复制');button.setAttribute('aria-label',t('Copy code','复制代码'));
-      button.addEventListener('click',async e=>{e.preventDefault();e.stopPropagation();if(await copyTextToClipboard(pre.querySelector('code')?.textContent||'')){button.textContent=t('Copied','已复制');setTimeout(()=>button.textContent=t('Copy','复制'),1500);}});pre.append(button);
+      const button=document.createElement('button');button.type='button';button.className='code-copy-btn';button.contentEditable='false';
+      const icon=d=>'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>';
+      const copyIcon=icon('<rect x="9" y="9" width="11" height="11" rx="2.5"/><path d="M5 15V6.5A2.5 2.5 0 0 1 7.5 4H15"/>'),doneIcon=icon('<path d="M5 12.5l4.5 4.5L19 7.5"/>');
+      button.innerHTML=copyIcon;button.title=t('Copy code','复制代码');button.setAttribute('aria-label',t('Copy code','复制代码'));
+      button.addEventListener('click',async e=>{e.preventDefault();e.stopPropagation();if(await copyTextToClipboard(pre.querySelector('code')?.textContent||'')){button.innerHTML=doneIcon;button.classList.add('done');button.title=t('Copied','已复制');setTimeout(()=>{button.innerHTML=copyIcon;button.classList.remove('done');button.title=t('Copy code','复制代码');},1500);}});pre.append(button);
     }
     if(window.Folding)Folding.decorate(root);
     const positions=tasks(markdown);let index=0;

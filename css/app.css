@@ -6,7 +6,13 @@
 .release-notes-notice.is-leaving { opacity: 0; pointer-events: none; }
 :focus-visible { outline: 2px solid var(--link); outline-offset: 3px; }
 body { font-family: var(--font-sans); background: var(--bg); color: var(--app-fg); height: 100vh; overflow: hidden; }
-.scroll-wrap { position: absolute; top: 0; bottom: 0; left: 0; right: 0; overflow-y: auto; overflow-x: hidden; }
+.scroll-wrap { position: absolute; top: 0; bottom: 0; left: 0; right: 0; overflow-y: auto; overflow-x: hidden; scrollbar-width: none; }
+.scroll-wrap::-webkit-scrollbar { display: none; }
+/* Thin position marker instead of a scrollbar: shown only while scrolling and for a moment after (frontend/reading-progress.js). */
+.read-thumb { position: fixed; right: 3px; width: 4px; border-radius: 2px; background: rgba(0,0,0,.26); opacity: 0; pointer-events: none; transition: opacity .35s; z-index: 790; }
+.read-thumb.on { opacity: 1; }
+@media (prefers-color-scheme: dark) { .read-thumb { background: rgba(255,255,255,.34); } }
+@media print { .read-thumb { display: none; } }
 .page { position: relative; max-width: var(--page-width, 720px); margin: 0 auto; padding: 60px 16px 120px; }
 .page.full-width { max-width: none; padding: 30px 40px 120px; }
 .welcome-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #aaa; pointer-events: auto; cursor: text; z-index: 5; transition: opacity 0.2s ease; }
@@ -76,7 +82,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--app-fg
 .modal-button.secondary:hover { background: #e8e8ee; }
 .modal-button.danger { background: #b00020; }
 .modal-button.danger:hover { background: #93001b; }
-.find-bar { display: none; position: fixed; top: 0; left: 0; right: 0; height: 40px; background: #f5f5f7; border-bottom: 1px solid #d0d0d0; align-items: center; padding: 0 12px; gap: 8px; z-index: 900; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+.find-bar { display: none; position: fixed; top: 0; left: 0; right: 0; height: 40px; background: #f5f5f7; border-bottom: 1px solid #d0d0d0; align-items: center; padding: 0 12px 0 56px; gap: 8px; z-index: 900; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 .find-bar.visible { display: flex; }
 .find-bar input { flex: 1; height: 26px; border: 1px solid #c8c8c8; border-radius: 5px; padding: 0 8px; font-size: 14px; outline: none; background: #fff; }
 .find-bar input:focus { border-color: #007aff; box-shadow: 0 0 0 2px rgba(0,122,255,0.15); }
@@ -401,3 +407,31 @@ body.has-edit-bar .toc-toggle, body.has-source-bar .toc-toggle { top: calc(52px 
 .render-progress-ring { width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid currentColor; border-right-color: transparent; opacity: .7; animation: render-progress-spin .9s linear infinite; }
 @keyframes render-progress-spin { to { transform: rotate(360deg); } }
 @media print { .render-progress { display: none; } }
+
+/* ── Find bar: same surface, hairline, height and controls as the format bar and the title bar ── */
+.find-bar { height: 42px; background: var(--bg); color: #5f5f64; border-bottom: 1px solid rgba(0,0,0,.12); box-shadow: 0 1px 0 rgba(0,0,0,.04); gap: 4px; z-index: 950; }
+body.has-edit-bar .find-bar, body.has-source-bar .find-bar { top: calc(42px + var(--titlebar-h, 0px)); z-index: 930; }
+.find-bar input { min-width: 80px; height: 28px; border: 0; border-radius: 6px; background: rgba(0,0,0,.05); color: #1d1d1f; font-size: 13px; }
+.find-bar input:focus { border: 0; box-shadow: 0 0 0 2px rgba(0,98,204,.35); }
+.find-bar .find-count { color: #6e6e73; }
+.find-bar button { flex: none; min-width: 32px; height: 30px; padding: 0 6px; border: 0; border-radius: 6px; background: transparent; color: inherit; font-size: 14px; }
+.find-bar button:hover:not(:disabled) { background: rgba(0,0,0,.06); }
+@media (prefers-color-scheme: dark) {
+  .find-bar { background: var(--bg); color: #c7c7cc; border-color: rgba(255,255,255,.14); box-shadow: none; }
+  .find-bar input { background: rgba(255,255,255,.08); color: #f0f0f0; border: 0; }
+  .find-bar input:focus { box-shadow: 0 0 0 2px rgba(10,132,255,.5); }
+  .find-bar .find-count { color: #a1a1a6; }
+  .find-bar button:hover:not(:disabled) { background: rgba(255,255,255,.1); }
+}
+/* The close button always ends the bar, after the Replace controls in source view. */
+.find-bar .find-close { order: 99; margin-left: 4px; }
+
+/* ── Notice bar (e.g. "unsaved changes restored"): same surface as the other top bars ── */
+.notice-bar { position: fixed; top: var(--titlebar-h, 0px); left: 0; right: 0; height: 42px; z-index: 940; box-sizing: border-box; padding: 0 16px 0 56px; display: flex; align-items: center; justify-content: center; gap: 14px; font-size: 13px; color: #5f5f64; background: var(--bg); border-bottom: 1px solid rgba(0,0,0,.12); box-shadow: 0 1px 0 rgba(0,0,0,.04); }
+body.has-edit-bar .notice-bar, body.has-source-bar .notice-bar { top: calc(42px + var(--titlebar-h, 0px)); z-index: 920; }
+.notice-bar .notice-action { color: #0062cc; text-decoration: none; font-weight: 500; }
+.notice-bar .notice-action.quiet { color: #6e6e73; font-weight: 400; }
+.notice-bar .notice-action:hover { text-decoration: underline; }
+@media (prefers-color-scheme: dark) { .notice-bar { color: #c7c7cc; border-color: rgba(255,255,255,.14); box-shadow: none; } .notice-bar .notice-action { color: #6cb2ff; } .notice-bar .notice-action.quiet { color: #a1a1a6; } }
+@media print { .notice-bar { display: none !important; } }
+body.has-edit-bar .update-bubble, body.has-source-bar .update-bubble { top: calc(54px + var(--titlebar-h, 0px)); }
