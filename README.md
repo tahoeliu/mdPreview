@@ -70,7 +70,7 @@ Long answers get a clickable outline, section folding, your choice of reading fo
 <a href="https://tahoeliu.github.io/mdPreview/">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-reading-dark.webp">
-  <img src="docs/images/hero-reading.webp" alt="The mdPreview window on a Mac: a long Markdown document shown as a clean page, with a section outline on the left, a tip box and a table" width="860">
+  <img src="docs/images/hero-reading.webp" alt="The mdPreview window on a Mac: an AI-style guide shown as a clean page, with an eleven-section outline on the left, a tip, a table and the top of a flowchart" width="860">
 </picture>
 </a>
 </p>
@@ -82,7 +82,7 @@ Type a few letters, press Return, and you are there. No scrolling through a 5,00
 <div align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-goto-dark.webp">
-  <img src="docs/images/hero-goto.webp" alt="mdPreview's Go to Heading box: typing 'reg' jumps straight to the section 'Watch for regressions'" width="760">
+  <img src="docs/images/hero-goto.webp" alt="mdPreview's Go to Heading box: typing 'reg' jumps straight to the section 'Watch for regressions'" width="860">
 </picture>
 </div>
 
@@ -93,18 +93,32 @@ Documents open for reading. Click into the text and a formatting bar slides in. 
 <div align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/edit-bar-dark.webp">
-  <img src="docs/images/edit-bar.webp" alt="mdPreview's editing toolbar above a document: insert, undo, text style, bold, italic, lists, link and quote buttons" width="760">
+  <img src="docs/images/edit-bar.webp" alt="mdPreview's editing toolbar above a document: insert, undo, text style, bold, italic, lists, link and quote buttons" width="860">
 </picture>
 </div>
 
-### Before and after
+### Switch: `⌘E` shows the Markdown behind the page
 
-<div align="center">
+Press `⌘E` to flip between the formatted page and its plain-text Markdown, and back again. Each line of source lines up with what it becomes on the page: `##` is a heading, `**` is bold, `|` rows are a table, and a `mermaid` block is a diagram. Handy for copying exact text, or for learning what the symbols mean.
+
+<table>
+<tr>
+<td width="50%" valign="top">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/after-dark.webp">
-  <img src="docs/images/after.webp" alt="The same Markdown text shown rendered by mdPreview: a title, a tip box, a table and a list" width="420">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/cmde-source-dark.webp">
+  <img src="docs/images/cmde-source.webp" alt="mdPreview in source mode: the Markdown text of a heading, a tip, a table and a Mermaid block, with colour-coded symbols" width="100%">
 </picture>
-</div>
+<sub><b>Source</b>: the Markdown text</sub>
+</td>
+<td width="50%" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/cmde-preview-dark.webp">
+  <img src="docs/images/cmde-preview.webp" alt="The same section in reading mode: a heading, a tip, a table and a flowchart" width="100%">
+</picture>
+<sub><b>Preview</b>: the same lines, rendered</sub>
+</td>
+</tr>
+</table>
 
 ---
 
@@ -216,7 +230,7 @@ Use **Help → Report an Issue…** in the app, or [open an issue](https://githu
 | **What it is** | A Markdown viewer and editor for macOS |
 | **Price** | Free, MIT open-source licence |
 | **Works on** | macOS 13 or later; Apple silicon and Intel |
-| **Latest version** | [2.0.0](CHANGELOG.md) |
+| **Latest version** | [2.0.3](CHANGELOG.md) |
 | **Exports** | PDF, Word (.docx), HTML, plain text, Markdown, PNG, rich text |
 | **Renders** | Tables, task lists, footnotes, KaTeX maths, Mermaid diagrams, GitHub alerts, syntax-highlighted code |
 | **Languages** | English, 简体中文, 繁體中文, 日本語, 한국어, Deutsch, Français, Español |

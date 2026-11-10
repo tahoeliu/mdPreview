@@ -70,7 +70,7 @@
 <a href="https://tahoeliu.github.io/mdPreview/zh.html">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-reading-zh-dark.webp">
-  <img src="docs/images/hero-reading-zh.webp" alt="Mac 上的 mdPreview 窗口：左侧是文档大纲，右侧是排版好的长文档，含提示框和表格" width="860">
+  <img src="docs/images/hero-reading-zh.webp" alt="Mac 上的 mdPreview 窗口：左侧是十一个章节的大纲，右侧是 AI 风格的排版文档，含提示、表格和流程图的开头" width="860">
 </picture>
 </a>
 </p>
@@ -82,7 +82,7 @@
 <div align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/hero-goto-zh-dark.webp">
-  <img src="docs/images/hero-goto-zh.webp" alt="mdPreview 的“跳转到标题”框：输入几个字就直达对应章节" width="760">
+  <img src="docs/images/hero-goto-zh.webp" alt="mdPreview 的“跳转到标题”框：输入几个字就直达对应章节" width="860">
 </picture>
 </div>
 
@@ -93,18 +93,32 @@
 <div align="center">
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/edit-bar-zh-dark.webp">
-  <img src="docs/images/edit-bar-zh.webp" alt="mdPreview 文档上方的编辑工具条：插入、撤销、文本样式、加粗、斜体、列表、链接和引用" width="760">
+  <img src="docs/images/edit-bar-zh.webp" alt="mdPreview 文档上方的编辑工具条：插入、撤销、文本样式、加粗、斜体、列表、链接和引用" width="860">
 </picture>
 </div>
 
-### 前后对比
+### 切换：`⌘E` 看见页面背后的 Markdown
 
-<div align="center">
+按 `⌘E`，在排版好的页面和纯文本 Markdown 之间来回切换。源码的每一行都对应页面上的一处：`##` 是标题，`**` 是加粗，`|` 竖线是表格，`mermaid` 代码块就是流程图。想复制原文，或想弄懂那些符号的含义，都很方便。
+
+<table>
+<tr>
+<td width="50%" valign="top">
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/after-zh-dark.webp">
-  <img src="docs/images/after-zh.webp" alt="同一段 Markdown 经 mdPreview 渲染后的样子：标题、提示框、表格和列表" width="420">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/cmde-source-zh-dark.webp">
+  <img src="docs/images/cmde-source-zh.webp" alt="mdPreview 的源码模式：标题、提示、表格和 Mermaid 代码块的 Markdown 文本，符号带有颜色" width="100%">
 </picture>
-</div>
+<sub><b>源码</b>：Markdown 文本</sub>
+</td>
+<td width="50%" valign="top">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/cmde-preview-zh-dark.webp">
+  <img src="docs/images/cmde-preview-zh.webp" alt="同一段内容的阅读模式：标题、提示、表格和流程图" width="100%">
+</picture>
+<sub><b>预览</b>：同样的内容，排好版</sub>
+</td>
+</tr>
+</table>
 
 ---
 
@@ -216,7 +230,7 @@ App 里的“**帮助 → 报告问题…**”，或 [在 GitHub 提 issue](http
 | **是什么** | macOS 上的 Markdown 阅读与编辑工具 |
 | **价格** | 免费，MIT 开源许可 |
 | **系统** | macOS 13 或更高；Apple 芯片和 Intel |
-| **最新版本** | [2.0.0](CHANGELOG.md) |
+| **最新版本** | [2.0.3](CHANGELOG.md) |
 | **导出** | PDF、Word（.docx）、HTML、纯文本、Markdown、PNG、富文本 |
 | **渲染** | 表格、任务列表、脚注、KaTeX 公式、Mermaid 图表、GitHub 提示块、代码高亮 |
 | **界面语言** | 简体中文、繁體中文、English、日本語、한국어、Deutsch、Français、Español |

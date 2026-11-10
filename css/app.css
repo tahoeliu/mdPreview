@@ -323,8 +323,8 @@ body.toc-animating .page { transition: margin-left .34s cubic-bezier(.32,.72,0,1
 /* 工具栏出现时，目录开关和目录第一项让到工具栏下面，不再重叠 */
 .toc-toggle { transition: top .26s cubic-bezier(.32,.72,0,1), color .15s ease, background .15s ease; }
 .toc-sidebar { transition: transform .34s cubic-bezier(.32,.72,0,1), opacity .28s ease, visibility .34s, padding-top .26s cubic-bezier(.32,.72,0,1); }
-body.has-edit-bar .toc-toggle { top: 52px; }
-body.has-edit-bar .toc-sidebar { padding-top: 94px; }
+body.has-edit-bar .toc-toggle, body.has-source-bar .toc-toggle { top: 52px; }
+body.has-edit-bar .toc-sidebar, body.has-source-bar .toc-sidebar { padding-top: 94px; }
 
 /* 窗口未聚焦时系统标题栏变灰，工具栏同步变成同一种灰 */
 
@@ -367,7 +367,7 @@ svg.edit-icon { stroke-width: 1.15px; }
 .scroll-wrap { top: var(--titlebar-h, 0px); }
 .toc-sidebar { top: var(--titlebar-h, 0px); }
 .toc-toggle { top: calc(16px + var(--titlebar-h, 0px)); }
-body.has-edit-bar .toc-toggle { top: calc(52px + var(--titlebar-h, 0px)); }
+body.has-edit-bar .toc-toggle, body.has-source-bar .toc-toggle { top: calc(52px + var(--titlebar-h, 0px)); }
 .edit-bar { top: var(--titlebar-h, 0px); }
 .find-bar { top: var(--titlebar-h, 0px); }
 .read-progress { top: var(--titlebar-h, 0px); }
