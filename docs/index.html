@@ -420,27 +420,27 @@ footer a { color: var(--muted); }
         <div class="cmp-window ed" role="img" aria-label="示意：标准的开发工作环境，满是标签、文件树、AI 对话、终端、问题面板和通知，并显示同一份 Markdown 源码。" data-label-zh="示意：标准的开发工作环境，满是标签、文件树、AI 对话、终端、问题面板和通知，并显示同一份 Markdown 源码。" data-label-en="Illustration: a typical development workspace full of tabs, a file tree, an AI chat, a terminal, problems and notifications, showing the same Markdown source.">
           <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div><span>rag-evaluation.md — project — main</span></div>
           <div class="ed-tabs"><span class="on">rag-evaluation.md<em>●</em><i>×</i></span><span>notes.md<i>×</i></span><span>todo.md<em>M</em></span><span>eval.py<i>×</i></span><span>config.json</span><span>…</span></div>
-          <div class="ed-crumb">docs › rag-evaluation.md › # Evaluating a RAG system › ## 1. Define</div>
+          <div class="ed-crumb">docs › rag-evaluation.md › # Evaluating a RAG System › ## 1. Define</div>
           <div class="ed-main">
             <div class="ed-act"><i></i><i></i><i></i><i></i><b></b></div>
             <div class="ed-tree"><b>EXPLORER</b>▾ project<br>&nbsp;▾ docs<br>&nbsp;&nbsp;&nbsp;<span class="mod">rag-evaluation.md</span><br>&nbsp;&nbsp;&nbsp;notes.md<br>&nbsp;&nbsp;&nbsp;<span class="new">todo.md</span><br>&nbsp;▾ src<br>&nbsp;&nbsp;&nbsp;eval.py<br>&nbsp;&nbsp;&nbsp;judge.py<br>&nbsp;&nbsp;&nbsp;utils.py<br>&nbsp;▸ tests<br>&nbsp;▸ node_modules<br>&nbsp;&nbsp;config.json<br>&nbsp;&nbsp;README.md<br>&nbsp;&nbsp;.gitignore</div>
-            <div class="ed-code"><div class="ed-gutter">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16<br>17<br>18<br>19<br>20<br>21<br>22<br>23</div><pre data-zh="# 评估一个检索增强系统\n\n从原型到上线的实用清单，**大多数团队会跳过前两步**，之后再付出代价。[^1]\n\n> [!TIP]\n> 数据集小到一个下午能读完。\n\n## 1. 先定义什么叫“好”\n\n- [x] 收集五十个真实问题\n- [x] 写出专家答案\n\n## 2. 单独衡量检索\n\n| 指标 | 说明什么 |\n|---|---|\n| Recall@5 | 证据是否在前五条里 |" data-en="# Evaluating a RAG system\n\nA practical checklist, **from first prototype to production**. Most teams skip the first two steps and pay for it later.[^1]\n\n> [!TIP]\n> Keep the set small enough to read in an afternoon.\n\n## 1. Define what “good” means\n\n- [x] Collect fifty real questions\n- [x] Write the expert answers\n\n## 2. Measure retrieval separately\n\n| Metric | What it tells you |\n|---|---|\n| Recall@5 | Is the evidence in the top five? |"># 评估一个检索增强系统
+            <div class="ed-code"><div class="ed-gutter">1<br>2<br>3<br>4<br>5<br>6<br>7<br>8<br>9<br>10<br>11<br>12<br>13<br>14<br>15<br>16<br>17<br>18<br>19<br>20<br>21<br>22<br>23</div><pre data-zh="# 评估一个 RAG 系统\n\n一份从原型到上线的实用指南，**大多数团队会跳过前两步**。\n\n## 1. 先定义什么叫“好”\n\n> **提示：** 问题集小到一个下午能读完就好。\n\n## 2. 单独衡量检索\n\n| 指标 | 说明什么 |\n|---|---|\n| Recall@5 | 证据是否在前五条里 |\n\n```mermaid\nflowchart TD\n    Q[用户提问] --> R[改写并向量化]" data-en="# Evaluating a RAG System\n\nA practical guide, **from first prototype to production**.\n\n## 1. Define what “good” means\n\n> **Tip:** Keep the question set small enough to read in an afternoon.\n\n## 2. Measure retrieval separately\n\n| Metric | What it tells you |\n|---|---|\n| Recall@5 | Is the evidence in the top five? |\n\n```mermaid\nflowchart TD\n    Q[User question] --> R[Rewrite and embed]"># 评估一个 RAG 系统
 
-从原型到上线的实用清单，**大多数团队会跳过前两步**，之后再付出代价。[^1]
-
-> [!TIP]
-> 数据集小到一个下午能读完。
+一份从原型到上线的实用指南，**大多数团队会跳过前两步**。
 
 ## 1. 先定义什么叫“好”
 
-- [x] 收集五十个真实问题
-- [x] 写出专家答案
+> **提示：** 问题集小到一个下午能读完就好。
 
 ## 2. 单独衡量检索
 
 | 指标 | 说明什么 |
 |---|---|
-| Recall@5 | 证据是否在前五条里 |</pre><div class="ed-mini"></div></div>
+| Recall@5 | 证据是否在前五条里 |
+
+```mermaid
+flowchart TD
+    Q[用户提问] --> R[改写并向量化]</pre><div class="ed-mini"></div></div>
             <div class="ed-chat">
               <div class="ed-chat-head">AI ASSISTANT<span>gpt ▾ · New chat ＋</span></div>
               <div class="ed-msgs">
@@ -465,7 +465,7 @@ footer a { color: var(--muted); }
         <p class="compare-tag"><b>mdPreview</b></p>
         <div class="cmp-window" role="img" aria-label="同一份文件在 mdPreview 里：只有一个干净的文档窗口。" data-label-zh="同一份文件在 mdPreview 里：只有一个干净的文档窗口。" data-label-en="The same file in mdPreview: just one calm document window.">
           <div class="titlebar"><div class="lights"><i></i><i></i><i></i></div><img src="images/doc-icon.webp" alt="" width="14" height="14"><span data-zh="检索评估报告.md" data-en="rag-evaluation.md">检索评估报告.md</span></div>
-          <div class="cmp-body"><div class="comp-side" id="strip-side"></div><div class="comp-long"><img data-frame="long" alt=""></div></div>
+          <div class="cmp-body"><div class="comp-side"><img class="on" data-frame="cmpside" alt=""></div><div class="comp-long"><img data-frame="cmplong" alt=""></div></div>
         </div>
       </figure>
     </div>
