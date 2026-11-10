@@ -137,3 +137,143 @@ test('turning paragraphs into bullet, numbered and task lists writes clean Markd
   expect(out).toMatch(/^- \[ \] Fourth\.$/m);
   expect(out).not.toMatch(/ +$/m);
 });
+for(const scheme of ['light','dark']){
+  test(`list markers and inline code stay readable in ${scheme} mode`,async({page})=>{
+    await page.emulateMedia({colorScheme:scheme});
+    await load(page,'- item with `code`\n\n1. numbered\n');
+    const lum=c=>{const m=c.match(/[\d.]+/g).map(Number);return (0.2126*m[0]+0.7152*m[1]+0.0722*m[2])/255;};
+    const got=await page.evaluate(()=>{const bg=getComputedStyle(document.body).backgroundColor;const li=document.querySelector('#content ul li'),ol=document.querySelector('#content ol li'),code=li.querySelector('code');return {bg,ul:getComputedStyle(li,'::marker').color,ol:getComputedStyle(ol,'::marker').color,code:getComputedStyle(code).color};});
+    for(const k of ['ul','ol','code']) expect(Math.abs(lum(got[k])-lum(got.bg)),k).toBeGreaterThan(0.6);
+  });
+}
+test('checked and unchecked task boxes have exactly the same size and shape',async({page})=>{
+  await load(page,'- [x] done\n- [ ] open\n');
+  const boxes=await page.evaluate(()=>[...document.querySelectorAll('#content .task-toggle')].map(b=>{const r=b.getBoundingClientRect(),c=getComputedStyle(b);return {w:Math.round(r.width*10)/10,h:Math.round(r.height*10)/10,radius:c.borderTopLeftRadius,border:c.borderTopWidth,checked:b.getAttribute('aria-checked')};}));
+  expect(boxes).toHaveLength(2);
+  expect(boxes[0].w).toBe(boxes[1].w); expect(boxes[0].h).toBe(boxes[1].h);
+  expect(boxes[0].radius).toBe(boxes[1].radius); expect(boxes[0].border).toBe(boxes[1].border);
+  expect(boxes[0].w).toBeGreaterThan(10);
+});
+for(const scheme of ['light','dark']){
+  test(`bullets, numbers and both checkbox states share one colour in ${scheme} mode`,async({page})=>{
+    await page.emulateMedia({colorScheme:scheme});
+    await load(page,'- bullet\n\n1. number\n\n- [x] done\n- [ ] open\n');
+    const c=await page.evaluate(()=>{const ul=document.querySelector('#content > ul:not(:has(.task-toggle)) > li'),ol=document.querySelector('#content ol > li'),on=document.querySelector('.task-toggle[aria-checked="true"]'),off=document.querySelector('.task-toggle[aria-checked="false"]');return {ul:getComputedStyle(ul,'::marker').color,ol:getComputedStyle(ol,'::marker').color,onBg:getComputedStyle(on).backgroundColor,onBorder:getComputedStyle(on).borderTopColor,offBorder:getComputedStyle(off).borderTopColor};});
+    for(const k of ['ol','onBg','onBorder','offBorder']) expect(c[k],k).toBe(c.ul);
+  });
+}
+test('callouts can be edited in the rendered page; the label stays fixed and other callouts are untouched',async({page})=>{
+  const doc='> [!NOTE]\n> Note text.\n\n> [!WARNING]\n> Warn text.\n\nTail.\n';
+  await load(page,doc);
+  expect(await page.locator('.markdown-alert').first().evaluate(e=>e.isContentEditable)).toBe(true);
+  await page.locator('.markdown-alert').first().locator('p:not(.markdown-alert-title)').click();
+  await page.keyboard.press('End'); await page.keyboard.type(' more');
+  await page.keyboard.press('Enter'); await page.keyboard.type('Second line');
+  const out=(await page.evaluate(md)).replace(/\s+$/,'');
+  expect(out).toContain('> [!NOTE]\n> Note text. more\n>\n> Second line');
+  expect(out).toContain('> [!WARNING]\n> Warn text.\n\nTail.');
+  expect(await page.locator('.markdown-alert-title').first().getAttribute('contenteditable')).toBe('false');
+});
+
+// ── Tables must be edited perfectly: only the touched cell changes, everything else is exactly as written ──
+const TABLE_DOC='Before.\n\n|Name|Qty|Note|\n|:--|:-:|--:|\n|apple|1|**fresh** `code`|\n|a\\|b||[link](http://x.y)|\n|中文单元格|3|最后一列|\n\nBetween.\n\n| A | B |\n|---|---|\n| one | two |\n\nAfter.\n';
+const cell=(page,text)=>page.locator('#content td, #content th',{hasText:text}).first();
+test('table: editing one cell changes only that cell; alignment, formatting, escaped pipe, empty cell and CJK survive',async({page})=>{
+  await load(page,TABLE_DOC);
+  await cell(page,'apple').click(); await page.keyboard.press('End'); await page.keyboard.type('s');
+  const out=await page.evaluate(md);
+  expect(out).toContain('|Name|Qty|Note|\n|:--|:-:|--:|');           // header and alignment row untouched
+  expect(out).toContain('| apples | 1 | **fresh** `code` |');          // only this row rewritten
+  expect(out).toContain('|a\\|b||[link](http://x.y)|');               // escaped pipe + empty cell row untouched
+  expect(out).toContain('|中文单元格|3|最后一列|');                   // CJK row untouched
+  expect(out).toContain('| A | B |\n|---|---|\n| one | two |');       // second table untouched
+  expect(out).toContain('Before.\n\n|Name');
+  expect(out).toContain('last'.length?'\n\nBetween.\n\n| A | B |':'');
+});
+test('table: editing the header and a CJK cell keeps every other row byte for byte',async({page})=>{
+  await load(page,TABLE_DOC);
+  await cell(page,'Qty').click(); await page.keyboard.press('End'); await page.keyboard.type('!');
+  await cell(page,'最后一列').click(); await page.keyboard.press('End'); await page.keyboard.type('。');
+  const out=await page.evaluate(md);
+  expect(out).toMatch(/\| Name \| Qty! \| Note \|\n\|:--\|:-:\|--:\|/);
+  expect(out).toContain('|apple|1|**fresh** `code`|');
+  expect(out).toContain('最后一列。');
+  expect(out).toContain('|a\\|b||[link](http://x.y)|');
+});
+test('table: typing a pipe inside a cell is escaped so the table stays intact',async({page})=>{
+  await load(page,'|A|B|\n|-|-|\n|x|y|\n');
+  await cell(page,'x').click(); await page.keyboard.press('End'); await page.keyboard.type('|z');
+  const out=await page.evaluate(md);
+  expect(out).toContain('x\\|z');
+  expect((out.match(/\n\|/g)||[]).length).toBeGreaterThanOrEqual(2);
+});
+test('table: undoing an edit restores the original text exactly',async({page})=>{
+  await load(page,TABLE_DOC);
+  await cell(page,'apple').click(); await page.keyboard.press('End'); await page.keyboard.type('XYZ');
+  for(let i=0;i<3;i++) await page.keyboard.press('Meta+z');
+  expect((await page.evaluate(md)).replace(/\s+$/,'')).toBe(TABLE_DOC.replace(/\s+$/,''));
+});
+test('table: adding a row and a column through the editor keeps the rest of the table readable',async({page})=>{
+  await load(page,'|A|B|\n|:-|-:|\n|1|2|\n|3|4|\n');
+  await cell(page,'4').click(); await page.keyboard.press('End');
+  await page.keyboard.press('Tab');                        // Tab in the last cell adds a row
+  await page.keyboard.type('5');
+  const out=await page.evaluate(md);
+  expect(out).toContain('|A|B|\n|:-|-:|\n|1|2|\n|3|4|');
+  expect(out).toMatch(/\| 5 \|/);
+  const rows=out.trim().split('\n').filter(l=>l.startsWith('|'));
+  expect(rows.length).toBe(5);
+  for(const r of rows) expect((r.match(/(?<!\\)\|/g)||[]).length).toBe(3);   // every row still has two cells
+});
+test('table: a line break inside a cell stays inside the cell',async({page})=>{
+  await load(page,'|A|B|\n|-|-|\n|one|two|\n');
+  await cell(page,'one').click(); await page.keyboard.press('End'); await page.keyboard.press('Shift+Enter'); await page.keyboard.type('next');
+  const out=await page.evaluate(md);
+  const rows=out.trim().split('\n').filter(l=>l.startsWith('|'));
+  expect(rows.length).toBe(3);                              // the table did not break into extra lines
+  expect(out).toMatch(/one.*next/);
+});
+test('table: a long table is edited without losing or reordering rows',async({page})=>{
+  const rows=Array.from({length:150},(_,i)=>`|row${i}|${i}|text ${i}|`);
+  const doc='|H1|H2|H3|\n|---|---|---|\n'+rows.join('\n')+'\n\nEnd\n';
+  await load(page,doc);
+  await cell(page,'row2').click(); await page.keyboard.press('End'); await page.keyboard.type('Y');
+  let out=await page.evaluate(md);
+  expect(out).toContain('| row2Y | 2 | text 2 |');
+  expect(out.replace('| row2Y | 2 | text 2 |','|row2|2|text 2|').replace(/\s+$/,'')).toBe(doc.replace(/\s+$/,''));
+  // a row deep in the table is just as editable: nothing is folded away
+  expect(await page.locator('.fold-more').count()).toBe(0);
+  await cell(page,'row77').click(); await page.keyboard.press('End'); await page.keyboard.type('X');
+  out=await page.evaluate(md);
+  expect(out).toContain('| row77X | 77 | text 77 |');
+  expect(out.replace('| row77X | 77 | text 77 |','|row77|77|text 77|').replace('| row2Y | 2 | text 2 |','|row2|2|text 2|').replace(/\s+$/,'')).toBe(doc.replace(/\s+$/,''));
+});
+test('on-screen buttons such as "Show all N rows" never leak into the saved Markdown',async({page})=>{
+  const rows=Array.from({length:60},(_,i)=>`|r${i}|${i}|`).join('\n');
+  const code=Array.from({length:80},(_,i)=>`line ${i}`).join('\n');
+  await load(page,'|H|V|\n|-|-|\n'+rows+'\n\nMiddle paragraph.\n\n```\n'+code+'\n```\n\nEnd.\n');
+  expect(await page.locator('.fold-more').count()).toBeGreaterThan(0);
+  await page.locator('#content p',{hasText:'Middle paragraph.'}).click(); await page.keyboard.press('End'); await page.keyboard.type('!');
+  const out=await page.evaluate(md);
+  expect(out).not.toMatch(/Show all|显示全部|Copy/);
+  expect(out).toContain('Middle paragraph.!');
+  expect(out).toContain('line 79');
+});
+test('front matter can be edited in place; only its text changes',async({page})=>{
+  const doc='---\ntitle: One\ntags: [a, b]\n---\n\n# Heading\n\nBody text.\n';
+  await load(page,doc);
+  expect(await page.locator('.frontmatter-body').evaluate(e=>e.isContentEditable)).toBe(true);
+  await page.locator('.frontmatter-body').click();
+  await page.evaluate(()=>{const n=document.querySelector('.frontmatter-body').firstChild,at=n.textContent.indexOf('[a, b]')+6;const r=document.createRange();r.setStart(n,at);r.collapse(true);const g=getSelection();g.removeAllRanges();g.addRange(r);});
+  await page.keyboard.type('\ndate: 2026-11-10');
+  const out=await page.evaluate(md);
+  expect(out.startsWith('---\ntitle: One\ntags: [a, b]\ndate: 2026-11-10\n---\n\n# Heading')).toBe(true);
+  expect(out).toContain('Body text.');
+  expect(await page.locator('#editHintBubble.visible').count()).toBe(0);
+});
+test('front matter that is not touched is saved exactly as written',async({page})=>{
+  const doc='---\ntitle: "Quoted: yes"\nsummary: >\n  folded text\n  more text\n---\n\nBody.\n';
+  await load(page,doc);
+  await page.locator('#content p',{hasText:'Body.'}).click(); await page.keyboard.press('End'); await page.keyboard.type('!');
+  expect((await page.evaluate(md)).replace(/\s+$/,'')).toBe(doc.replace('Body.','Body.!').replace(/\s+$/,''));
+});

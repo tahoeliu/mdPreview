@@ -40,7 +40,7 @@ window.ReadingFeatures = (() => {
     visit(MarkdownPipeline.lex(body),body,Array.from({length:body.length},(_,i)=>i+offset));return found.sort((a,b)=>a.offset-b.offset);
   }
   function decorate(root,markdown){
-    for(const pre of root.querySelectorAll('pre')){
+    for(const pre of root.querySelectorAll('pre:not(.frontmatter-body)')){
       if(pre.querySelector('.code-copy-btn'))continue;
       const button=document.createElement('button');button.type='button';button.className='code-copy-btn';button.contentEditable='false';
       const icon=d=>'<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+d+'</svg>';

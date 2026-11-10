@@ -40,6 +40,7 @@ window.EditorFeedback = {
     function findNonEditableAncestor(target) {
       const contentEl = document.getElementById('content');
       let el = target && target.nodeType === 1 ? target : (target ? target.parentNode : null);
+      if (el && el.isContentEditable) return null; // an editable island (e.g. front matter text) inside a locked block
       while (el && el !== contentEl && el !== document.body) {
         if (el.getAttribute && el.getAttribute('contenteditable') === 'false') return el;
         el = el.parentNode;
@@ -63,7 +64,7 @@ window.EditorFeedback = {
       const contentEl = document.getElementById('content');
       function editableCodeBlockFrom(el) {
         const pre = el && el.closest ? el.closest('pre') : null;
-        if (!pre || !contentEl || !contentEl.contains(pre)) return null;
+        if (!pre || !contentEl || !contentEl.contains(pre) || pre.classList.contains('frontmatter-body')) return null;
         const code = pre.querySelector('code');
         if (code && normalizeCodeLanguage(code) === 'mermaid') return null;
         return pre;

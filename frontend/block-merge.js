@@ -126,6 +126,23 @@
     return { partner, members, moved };
   }
 
+  const isTable = text => { const lines = text.trim().split('\n'); return lines.length >= 2 && lines.every(l => /^\s*\|/.test(l)) && /^\s*\|?[\s:|-]+\|?\s*$/.test(lines[1]) && /-/.test(lines[1]); };
+
+  // A changed table: keep every row you did not touch exactly as written (spacing, alignment markers),
+  // and use the converted text only for rows that changed, were added, or were removed.
+  function mergeTable(originalTable, baseTable, curTable) {
+    if (!isTable(originalTable) || !isTable(baseTable) || !isTable(curTable)) return null;
+    const rows = t => t.trim().split('\n').map(l => l.replace(/\s+$/, ''));
+    const O = rows(originalTable), B = rows(baseTable), C = rows(curTable);
+    if (O.length !== B.length) return null;
+    const pairs = lcs(B, C, (x, y) => x.trim() === y.trim());
+    if (!pairs) return null;
+    const matched = new Map(pairs.map(([bi, ci]) => [ci, bi]));
+    const out = [];
+    for (let ci = 0; ci < C.length; ci++) out.push(matched.has(ci) ? O[matched.get(ci)] : C[ci]);
+    return out.join('\n');
+  }
+
   function merge(original, base, cur) {
     original = String(original); base = String(base); cur = String(cur);
     const tail = (/\s*$/.exec(original) || [''])[0];
@@ -144,10 +161,17 @@
     O.forEach(o => { o.fromOriginal = true; });
     let i = 0, j = 0;
     for (const [pb, pc] of [...ops, [B.length, C.length]]) {
-      for (; i < pb; i++) { const oi = partner[i]; if (oi >= 0) { flushTo(oi); nextO = oi + 1; } } // edited or deleted
-      for (; j < pc; j++) fresh(C[j]);                                                          // edited or new
-      if (pb < B.length && moved.has(pb)) { i = pb + 1; j = pc + 1; continue; }                 // moved and untouched: stays where it was
-      if (pb < B.length) {                                                                      // unchanged
+      const edited = [];                                                       // base blocks that changed or were removed
+      for (; i < pb; i++) { const oi = partner[i]; edited.push({ b: i, oi }); if (oi >= 0) { flushTo(oi); nextO = oi + 1; } }
+      const added = []; for (; j < pc; j++) added.push(j);                       // blocks that are edited or new
+      const sameCount = edited.length === added.length;
+      added.forEach((cj, k) => {
+        const e = sameCount ? edited[k] : null;
+        const merged = e && e.oi >= 0 ? mergeTable(O[e.oi].text, B[e.b].text, C[cj].text) : null;
+        if (merged !== null) out.push({ text: merged, sep: O[e.oi].sep, idx: O[e.oi].idx, fromOriginal: true }); else fresh(C[cj]);
+      });
+      if (pb < B.length && moved.has(pb)) { i = pb + 1; j = pc + 1; continue; }  // moved and untouched: stays where it was
+      if (pb < B.length) {                                                       // unchanged
         const oi = partner[pb];
         if (oi >= 0) {
           flushTo(oi);

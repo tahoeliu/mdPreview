@@ -2,6 +2,21 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.6] - 2026-11-10
+
+### Changed
+- **A calmer reading style, closer to a chat app:** real bold for headings and key phrases, a steadier line rhythm, tighter paragraph and list spacing, quieter headings (they are only slightly larger than the text, set apart by weight), dark bullets and numbers that match the text, soft grey code chips without red text, and lighter text rendering so body text no longer looks heavy. Light and dark mode both checked. Exports and print are unchanged.
+- **Task checkboxes are drawn the same way in both states** (same size, shape and colour), and share their colour with bullets and numbers.
+- **Long tables are no longer folded:** every row is always shown and editable. (Very long code blocks still fold.)
+
+### Improved
+- **Callouts (NOTE, TIP, WARNING…) and front matter can now be edited right in the rendered page.** The callout label stays fixed. Formulas and diagrams stay read-only.
+- **Tables are saved row by row:** changing one cell rewrites only that row. Every other row, the alignment row, escaped pipes, empty cells, Chinese text, bold, links and code keep their exact original text.
+
+### Fixed
+- **Editing a document with a folded long table or long code block could write the button label ("Show all 150 rows") into your file.** It no longer can.
+- Editing a paragraph no longer adds blank lines between nested list items, and the invisible caret spacers after blocks are compact.
+
 ## [2.0.5] - 2026-11-10
 
 ### Fixed

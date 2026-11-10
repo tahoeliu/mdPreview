@@ -31,3 +31,15 @@ assert.strictEqual(typeof merge(big,big,big+'\n\nx'),'string');
 // a paragraph added after the very last original paragraph is separated by a blank line
 assert.strictEqual(merge('A\n\nB','A\n\nB','A\n\nB\n\nC'),'A\n\nB\n\nC');
 console.log('block-merge: all assertions passed');
+// tables: only the changed row is rewritten, other rows and the alignment row keep their original text
+{
+  const o='Intro\n\n|Name|Qty|\n|:--|--:|\n|apple|1|\n|pear|2|\n|plum|3|\n\nEnd\n';
+  const b='Intro\n\n| Name | Qty |\n| :--- | ---: |\n| apple | 1 |\n| pear | 2 |\n| plum | 3 |\n\nEnd';
+  const edited=b.replace('| pear | 2 |','| pear | 20 |');
+  assert.strictEqual(merge(o,b,edited),o.replace('|pear|2|','| pear | 20 |'));
+  // a row added at the end
+  assert.strictEqual(merge(o,b,b.replace('| plum | 3 |','| plum | 3 |\n| fig | 4 |')),o.replace('|plum|3|','|plum|3|\n| fig | 4 |'));
+  // a row removed
+  assert.strictEqual(merge(o,b,b.replace('| pear | 2 |\n','')),o.replace('|pear|2|\n',''));
+}
+console.log('block-merge tables: all assertions passed');

@@ -26,7 +26,12 @@ window.MarkdownRendering = {
         fmDiv.setAttribute('contenteditable', 'false');
         fmDiv.setAttribute('data-frontmatter', 'true');
         fmDiv.setAttribute('data-raw', '---\n' + frontmatter + '\n---');
-        fmDiv.innerHTML = '<button class="frontmatter-toggle">' + t('Collapse', '折叠') + '</button>' + renderFrontmatter(frontmatter);
+        // Front matter is plain text: show the real lines in a plain-text editing area, so what you edit is what is saved.
+        fmDiv.innerHTML = '<button class="frontmatter-toggle">' + t('Collapse', '折叠') + '</button>';
+        const fmBody = document.createElement('pre');
+        fmBody.className = 'frontmatter-body'; fmBody.setAttribute('contenteditable', 'plaintext-only'); fmBody.setAttribute('spellcheck', 'false');
+        fmBody.textContent = '---\n' + frontmatter + '\n---';
+        fmDiv.appendChild(fmBody);
         fragment.appendChild(fmDiv);
       }
 

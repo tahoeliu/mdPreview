@@ -21,6 +21,12 @@ window.MarkdownConversion = {
           return node.classList && node.classList.contains('frontmatter');
         },
         replacement: function (content, node) {
+          const body = node.querySelector && node.querySelector('.frontmatter-body');
+          if (body) {                                                                                      // the (possibly edited) text itself
+            const copy = body.cloneNode(true);
+            copy.querySelectorAll('br').forEach(br => br.replaceWith('\n'));                                // some engines write Enter as <br>
+            return copy.textContent.replace(/\u00a0/g, ' ').replace(/\n+$/, '') + '\n\n';
+          }
           const raw = node.getAttribute('data-raw');
           return (raw || node.textContent) + '\n\n';
         }
@@ -39,6 +45,19 @@ window.MarkdownConversion = {
         replacement: (content, node) => {
           const raw = node.getAttribute('data-raw') || '';
           return node.classList.contains('math-block') || node.classList.contains('footnotes') || node.classList.contains('markdown-definitions') || node.classList.contains('markdown-alert') ? '\n\n' + raw + '\n\n' : raw;
+        }
+      });
+      // Callouts are plain quotes with a label: write the (possibly edited) body back as "> [!KIND]" + "> text".
+      state.turndownService.addRule('alertEdit', {
+        filter: node => node.classList && node.classList.contains('markdown-alert'),
+        replacement: (content, node) => {
+          const kind = (/markdown-alert-(note|tip|important|warning|caution)/.exec(node.className) || [])[1];
+          if (!kind) return '\n\n' + (node.getAttribute('data-raw') || '') + '\n\n';
+          const body = node.cloneNode(true);
+          body.querySelector('.markdown-alert-title')?.remove();
+          const text = state.turndownService.turndown(body.innerHTML).trim();
+          const lines = ['[!' + kind.toUpperCase() + ']'].concat(text ? text.split('\n') : []);
+          return '\n\n' + lines.map(line => line ? '> ' + line : '>').join('\n') + '\n\n';
         }
       });
       state.turndownService.addRule('blockedResource', {

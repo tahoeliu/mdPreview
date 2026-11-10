@@ -217,6 +217,8 @@ window.RenderedEditing = {
         const tmp = document.createElement('div');
         // Task checkboxes are buttons, which the sanitizer removes: turn them into marker spans first so "- [x]" survives edits.
         const pre = document.createElement('div'); pre.innerHTML = html;
+        // Buttons that only exist on screen ("Show all 150 rows", copy, image notices) must never reach the Markdown, not even as their label text.
+        pre.querySelectorAll('.fold-more, .code-copy-btn, .remote-image-bar, .img-fallback').forEach(el => el.remove());
         pre.querySelectorAll('.task-toggle').forEach((box) => {
           const mark = document.createElement('span'); mark.className = 'task-marker'; mark.textContent = 'x'; mark.setAttribute('data-task-marker', box.dataset.taskMarker || ''); box.replaceWith(mark);
         });

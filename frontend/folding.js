@@ -1,7 +1,7 @@
 /* 折叠：点击标题左侧的小箭头收起/展开整节；很长的代码块和表格默认只显示开头，点击展开。
    折叠按钮放在 #content 之外的覆盖层里，折叠状态只是 CSS 类，不会进入 Markdown 或任何导出。 */
 window.Folding = (() => {
-  const CODE_LINES = 28, TABLE_ROWS = 14, CODE_SHOW = 18, ROWS_SHOW = 10;
+  const CODE_LINES = 28, CODE_SHOW = 18;
   const t = (en, zh) => (window.I18n && I18n.t ? I18n.t(en, zh) : en);
   const HEADING = /^H[1-6]$/;
   let hoveredHeading = null, content = null, layer = null, folded = new Set(), observer = null, frame = 0;
@@ -94,11 +94,7 @@ window.Folding = (() => {
       if (count <= CODE_LINES || pre.nextElementSibling?.classList.contains('fold-more')) continue;
       pre.classList.add('is-folded'); pre.style.setProperty('--fold-lines', CODE_SHOW); moreButton(pre, count, 'lines');
     }
-    for (const table of root.querySelectorAll(':scope > table, :scope > .table-wrap > table')) {
-      const rows = [...table.tBodies].flatMap(b => [...b.rows]);
-      if (rows.length <= TABLE_ROWS || (table.closest('.table-wrap') || table).nextElementSibling?.classList.contains('fold-more')) continue;
-      rows.slice(ROWS_SHOW).forEach(r => r.classList.add('row-folded')); table.classList.add('has-folded-rows'); moreButton(table, rows.length, 'rows');
-    }
+    // Long tables are never folded: every row is always shown and editable.
   }
   function decorate(root) {
     if (!root || root.id !== 'content') return;

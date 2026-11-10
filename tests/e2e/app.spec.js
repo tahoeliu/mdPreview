@@ -120,8 +120,8 @@ test('sections fold, long code and tables show a head, folds never reach Markdow
   await page.setViewportSize({width:1100,height:800});
   await page.evaluate(m=>loadContent('/tmp/f.md',m,720,false,false),md);
   const before=await page.evaluate(()=>getCurrentMarkdown());
-  await expect(page.locator('.fold-more')).toHaveCount(2);
-  await expect(page.locator('#content tr.row-folded')).toHaveCount(10);
+  await expect(page.locator('.fold-more')).toHaveCount(1);               // only the long code block folds
+  await expect(page.locator('#content tr.row-folded')).toHaveCount(0);   // a long table always shows every row
   await page.locator('.fold-toggle[aria-label*="One"]').click({force:true});
   await expect(page.locator('#content p:has-text("Body one")')).toBeHidden();
   await expect(page.locator('#content h3')).toBeHidden();

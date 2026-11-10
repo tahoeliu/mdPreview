@@ -138,7 +138,7 @@
           listitem(text,task){return '<li'+(task?' data-task="true"':'')+'>'+text+'</li>\n';},
           image(href,title,text){return '<img src="'+escape(href)+'" alt="'+escape(text)+'"'+(title?' title="'+escape(title)+'"':'')+' data-md-image="true">';} },
         tokenizer: { emStrong: cjkEmStrong }, extensions: [...mathExtensions, {
-          name:'alert',level:'block',renderer(token){return '<div class="markdown-alert markdown-alert-'+token.kind.toLowerCase()+'" contenteditable="false" data-raw="'+escape(token.raw.trimEnd())+'"><p class="markdown-alert-title"><span aria-hidden="true">!</span> '+token.kind+'</p>'+this.parser.parse(token.tokens)+'</div>';}
+          name:'alert',level:'block',renderer(token){return '<div class="markdown-alert markdown-alert-'+token.kind.toLowerCase()+'" data-raw="'+escape(token.raw.trimEnd())+'"><p class="markdown-alert-title" contenteditable="false"><span aria-hidden="true">!</span> '+token.kind+'</p>'+this.parser.parse(token.tokens)+'</div>';}
         }], walkTokens(token) {
         if(token.type==='blockquote'){
           const match=/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\][ \t]*(?:\n|$)/.exec(token.text);
