@@ -2,6 +2,17 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.8] - 2026-11-11
+
+### Improved
+- **Clearer heading hierarchy in the app.** At the default 16 px body size, heading levels 1–6 now use 28, 24, 22, 20, 19 and 18 px. Body text, heading weights and line-height ratios are unchanged.
+- **Tighter spacing between consecutive parent and child headings, including skipped levels.** Headings at the same level, transitions back to a higher level, and headings separated by content retain their existing spacing. Callouts keep their compact internal layout.
+
+### Fixed
+- Task checkboxes now align with the first line of text instead of sitting too low, including wrapped and nested tasks.
+
+These changes apply to the app's reading and rendered-editing views. HTML exports, Quick Look and print retain their existing typography.
+
 ## [2.0.7] - 2026-11-10
 
 ### Fixed
