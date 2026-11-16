@@ -16,8 +16,6 @@ See it in action · Explore features · Choose how to install
 
 [Download for Mac](https://github.com/tahoeliu/mdPreview/releases/latest) · [Install](#install) · [FAQ](#frequently-asked-questions) · [简体中文](README.zh-CN.md)
 
-<sub>Official website: <a href="https://tahoeliu.github.io/mdPreview/">tahoeliu.github.io/mdPreview</a></sub>
-
 </div>
 
 <br>
