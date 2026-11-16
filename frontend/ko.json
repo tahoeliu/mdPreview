@@ -388,5 +388,6 @@
   "Paragraph spacing is automatic — no need for extra blank lines.": "문단 간격은 자동으로 유지됩니다. 빈 줄을 더 넣을 필요가 없습니다.",
   "Loading the rest…": "나머지를 불러오는 중…",
   "Image could not be displayed": "이미지를 표시할 수 없습니다",
-  "Just type, or open something.": "바로 입력하거나 문서를 여세요."
+  "Just type, or open something.": "바로 입력하거나 문서를 여세요.",
+  "Could not make a secure connection to the update server.": "업데이트 서버에 안전하게 연결할 수 없습니다."
 }

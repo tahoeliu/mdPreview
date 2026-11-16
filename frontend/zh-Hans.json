@@ -388,5 +388,6 @@
   "onboarding.example": "打开示例文档",
   "Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.": "自动安装已阻止，安装记录已保留。请通过「帮助 > 报告问题」获取恢复协助。",
   "This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.": "此更新器需要从 github.com/tahoeliu/mdPreview/releases 手动安装。",
-  "Just type, or open something.": "直接输入，或打开一份文档。"
+  "Just type, or open something.": "直接输入，或打开一份文档。",
+  "Could not make a secure connection to the update server.": "无法与更新服务器建立安全连接。"
 }

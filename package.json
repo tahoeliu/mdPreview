@@ -1,6 +1,6 @@
 {
   "name": "mdpreview",
-  "version": "2.0.10",
+  "version": "2.0.11",
   "private": true,
   "description": "Offline macOS Markdown viewer and editor",
   "engines": {

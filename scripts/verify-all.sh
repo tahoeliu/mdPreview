@@ -29,6 +29,7 @@ $PY scripts/check_release.py --app "$MDPREVIEW_VERIFY_APP"
 $PY scripts/verify-native.py --app "$MDPREVIEW_VERIFY_APP"
 $PY scripts/verify-headless.py --app "$MDPREVIEW_VERIFY_APP"
 $PY scripts/verify-update-e2e.py --app "$MDPREVIEW_VERIFY_APP"
+$PY scripts/verify-update-live.py --app "$MDPREVIEW_VERIFY_APP"
 node scripts/verify-architecture.mjs "$MDPREVIEW_VERIFY_APP" "$MDPREVIEW_VERIFY_ARCH"
 
 echo '== 冷启动实测与性能/无障碍预算'

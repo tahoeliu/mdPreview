@@ -2,6 +2,13 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.11] - 2026-11-16
+
+### Fixed
+- **Updating works again.** Versions 2.0.9 and 2.0.10 could not connect securely to the update server, so "Check for Updates" always failed. **If you have 2.0.9 or 2.0.10, please install this version by hand once** (download it, or run the one-line installer again); from 2.0.11 on, mdPreview updates itself.
+- If a secure connection really cannot be made, the message now says so instead of "failed the version check".
+- After an update is installed, its download is removed instead of staying on disk.
+
 ## [2.0.10] - 2026-11-16
 
 ### Improved

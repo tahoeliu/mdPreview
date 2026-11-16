@@ -58,7 +58,7 @@ def main():
                     'assets': [{'name': archive.name, 'size': archive.stat().st_size,
                                 'digest': 'sha256:' + hashlib.sha256(archive.read_bytes()).hexdigest()}]}
 
-        def urlopen(request, timeout=None):
+        def urlopen(request, timeout=None, context=None):
             url = request.full_url
             if '/releases/tags/' in url:
                 return Response(json.dumps(metadata).encode())

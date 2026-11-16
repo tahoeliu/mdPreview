@@ -14,11 +14,16 @@ data=root/'WorkSpace/native-verification'/str(time.time_ns());data.mkdir(parents
 source=data/'native.md';source.write_text('# Native verification\n\nInitial document',encoding='utf-8')
 environment=dict(os.environ,MDPREVIEW_DATA_DIR=str(data),MDPREVIEW_DISABLE_UPDATES='1')
 output=(data/'process.log').open('w')
+# WebKit stops drawing while the display is off, so the window check would wait forever: wake the
+# display and keep it awake for the run. (A locked screen still blocks it; the failure says so.)
+awake=subprocess.Popen(['/usr/bin/caffeinate','-d','-u','-t','240'])
 process=subprocess.Popen([str(app/'Contents/MacOS/mdPreview'),str(source),'--selftest-integrity'],env=environment,stdout=output,stderr=output)
 try:
     process.wait(timeout=180)
 except subprocess.TimeoutExpired:
-    process.kill();process.wait();raise SystemExit('FAIL: native application did not exit; '+str(data))
+    process.kill();process.wait();raise SystemExit('FAIL: native application did not exit (it needs a visible window: is the display asleep or the screen locked?); '+str(data))
+finally:
+    awake.terminate()
 result_path=data/'native-result.json'
 if not result_path.is_file():raise SystemExit('BLOCKED/FAIL: application never completed native tests; '+str(data))
 result=json.loads(result_path.read_text())

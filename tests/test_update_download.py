@@ -72,7 +72,7 @@ class Fixture:
                         '-out', str(signing / 'sig'), str(signing / 'manifest')], check=True)
         self.signature = (signing / 'sig').read_bytes()
 
-    def urlopen(self, request, timeout=None):
+    def urlopen(self, request, timeout=None, context=None):
         url = request.full_url
         self.requests.append(url)
         if url.startswith('https://api.github.com/'):
@@ -89,6 +89,7 @@ class Fixture:
 class DownloadPipeline(unittest.TestCase):
     def setUp(self):
         self.folder = Path(tempfile.mkdtemp(prefix='update-download-', dir=ROOT / 'WorkSpace'))
+        self.addCleanup(__import__('shutil').rmtree, self.folder, True)
         self.staging = self.folder / 'staging'
         self.fixture = Fixture(self.folder)
         for patcher in (patch.object(release_sig, 'RELEASE_PUBKEY_B64', self.fixture.public_b64),

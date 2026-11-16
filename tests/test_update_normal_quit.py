@@ -91,6 +91,7 @@ class NormalQuitTests(unittest.TestCase):
                        _verify_pending_update=Mock(side_effect=lambda pending, **kw: pending),
                        verify_bundle=Mock(),
                        _t=lambda en, zh: zh, _opportunistic_marker_path=lambda: '/private/outcome.json',
+                       _discard_installed_download=Mock(),
                        _auto_update_enabled=lambda: True, update_config=Mock(),
                        _download_and_extract=Mock(return_value=self.candidate),
                        _smoke_test_app=Mock(return_value=True), log_exception=Mock())
@@ -763,6 +764,7 @@ class NormalQuitTests(unittest.TestCase):
         self.assertEqual(self.state['code'], 'quit-gap-version-unverified')
         self.ns['_get_current_version'] = lambda: '2.0.0'
         self.ns['_check_pending_install']()
+        self.ns['_discard_installed_download'].assert_called_once_with(self.candidate)
         self.assertEqual(self.state['phase'], 'idle')
         self.assertIsNone(self.state['pending'])
         self.assertIsNone(self.state['code'])

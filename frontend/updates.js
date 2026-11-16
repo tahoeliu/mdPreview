@@ -24,6 +24,7 @@ window.UpdateFeedback = {
       if (['quit-gap-inconclusive', 'quit-gap-version-unverified'].includes(current.code)) return t('Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.', '自动安装已阻止，安装记录已保留。请通过「帮助 > 报告问题」获取恢复协助。');
       if (current.code === 'helper-handshake-unavailable') return t('This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.', '此更新器需要从 github.com/tahoeliu/mdPreview/releases 手动安装。');
       if (current.code === 'release-signing-key-not-configured') return t('Updates are unavailable: this build has no release signing key.', '更新不可用：此版本未内置发布签名公钥。');
+      if (current.code === 'tls-verification-failed') return t('Could not make a secure connection to the update server.', '无法与更新服务器建立安全连接。');
       const reasons = {
         network: t('Network error. Check your connection.', '网络错误，请检查网络连接。'),
         rate_limited: t('Too many update requests. Please try again later.', '更新请求过于频繁，请稍后重试。'),

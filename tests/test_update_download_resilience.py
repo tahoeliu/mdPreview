@@ -240,7 +240,7 @@ class NativeSignedDownload(unittest.TestCase):
         signature = subprocess.run(['openssl', 'dgst', '-sha256', '-sign', str(self.key)], input=self.manifest, capture_output=True, check=True)
         self.signature = signature.stdout
 
-    def open(self, request, timeout):
+    def open(self, request, timeout, context=None):
         self.requests.append(request.full_url)
         if request.full_url.startswith('https://api.github.com/'):
             raise recovery.http_error(403, {'X-RateLimit-Remaining': '0'})

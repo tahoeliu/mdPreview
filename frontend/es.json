@@ -388,5 +388,6 @@
   "Paragraph spacing is automatic — no need for extra blank lines.": "El espacio entre párrafos es automático: no hace falta añadir líneas en blanco.",
   "Loading the rest…": "Cargando el resto…",
   "Image could not be displayed": "No se pudo mostrar la imagen",
-  "Just type, or open something.": "Empieza a escribir o abre un documento."
+  "Just type, or open something.": "Empieza a escribir o abre un documento.",
+  "Could not make a secure connection to the update server.": "No se pudo establecer una conexión segura con el servidor de actualizaciones."
 }

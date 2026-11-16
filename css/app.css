@@ -515,7 +515,7 @@ body.is-blank:not(.is-editing):not(.edit-pinned) #content { caret-color: #0062cc
 /* ── Start screen on an empty document: title, one line, three entry tiles ── */
 .welcome-overlay { color: #6e6e73; }
 .welcome-overlay .welcome-title { font-size: 20px; font-weight: 500; color: #6e6e73; margin-bottom: 5px; }
-.welcome-hint { font-size: 13px; color: #a1a1a6; margin-bottom: 22px; }
+.welcome-hint { font-size: 13px; color: #737378; margin-bottom: 22px; }
 .welcome-actions { display: flex; justify-content: center; gap: 8px; }
 .welcome-slot { position: relative; display: flex; }
 .welcome-overlay .welcome-tile { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 7px; width: 128px; height: 76px; padding: 16px 6px 0; border: 1px solid rgba(0,0,0,.07); border-radius: 10px; background: transparent; color: #6e6e73; font: inherit; font-size: 12px; font-weight: 400; line-height: 1.25; cursor: pointer; transition: background .12s ease, border-color .12s ease, box-shadow .12s ease; }
@@ -536,7 +536,7 @@ body.is-blank:not(.is-editing):not(.edit-pinned) #content { caret-color: #0062cc
 .welcome-overlay [data-onboarding] button:hover { background: rgba(0,0,0,.06); }
 @media (prefers-color-scheme: dark) {
   .welcome-overlay .welcome-title { color: #a1a1a6; }
-  .welcome-hint { color: #6e6e73; }
+  .welcome-hint { color: #98989d; }
   .welcome-overlay .welcome-tile { border-color: rgba(255,255,255,.1); color: #a1a1a6; }
   .welcome-overlay .welcome-tile svg { color: #8e8e93; }
   .welcome-overlay .welcome-tile:hover:not(:disabled) { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.18); color: #dcdcde; }

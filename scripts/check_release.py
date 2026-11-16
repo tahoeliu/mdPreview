@@ -43,7 +43,11 @@ def check_app(path):
                            capture_output=True, text=True, timeout=30, check=True)
     if json.loads(probe.stdout) != {'protocol': 2, 'normalQuit': 1}:
         raise ValueError('Packaged installer protocol mismatch')
-    print('Application identity, resources, installer protocol and code signature PASS (ad-hoc distribution)')
+    tls = json.loads(subprocess.run([str(path/'Contents/MacOS/mdPreview'), '--tls-selfcheck'],
+                                    capture_output=True, text=True, timeout=30, check=True).stdout)
+    if tls.get('roots') != '/etc/ssl/cert.pem' or not tls.get('count', 0) > 50:
+        raise ValueError('Packaged app cannot verify HTTPS: system root certificates not loaded')
+    print('Application identity, resources, installer protocol, HTTPS trust and code signature PASS (ad-hoc distribution)')
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--source',action='store_true');parser.add_argument('--app')

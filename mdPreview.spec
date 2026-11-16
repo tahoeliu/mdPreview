@@ -60,6 +60,7 @@ a = Analysis(
         'mdpreview_core.release_sig',
         'mdpreview_core.release_zip',
         'mdpreview_core.update_download',
+        'mdpreview_core.tls',
         'mdpreview_core.headless',
         'mdpreview_core.csp_bridge',
         'Security',

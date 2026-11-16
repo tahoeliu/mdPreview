@@ -388,5 +388,6 @@
   "Paragraph spacing is automatic — no need for extra blank lines.": "Der Absatzabstand ergibt sich automatisch – zusätzliche Leerzeilen sind nicht nötig.",
   "Loading the rest…": "Rest wird geladen …",
   "Image could not be displayed": "Bild konnte nicht angezeigt werden",
-  "Just type, or open something.": "Einfach lostippen oder etwas öffnen."
+  "Just type, or open something.": "Einfach lostippen oder etwas öffnen.",
+  "Could not make a secure connection to the update server.": "Es konnte keine sichere Verbindung zum Update-Server hergestellt werden."
 }

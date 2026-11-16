@@ -182,6 +182,55 @@ class ReleaseSafetyTests(unittest.TestCase):
             for name in pair:
                 self.assertRegex(name, r'^(state|opportunistic)(-[a-f0-9]{16})?\.json$')
 
+    def test_https_uses_the_system_roots_not_the_build_machine_default(self):
+        import ssl
+        from mdpreview_core import tls, update_download
+        self.assertEqual(tls.selfcheck()['roots'], '/etc/ssl/cert.pem')
+        self.assertGreater(tls.selfcheck()['count'], 50)
+        self.assertEqual(tls.context().verify_mode, ssl.CERT_REQUIRED)
+        self.assertTrue(tls.context().check_hostname)
+        seen = {}
+
+        def urlopen(request, timeout=None, context=None):
+            seen['context'] = context
+            raise TimeoutError()
+        with patch.object(update_download.urllib.request, 'urlopen', urlopen):
+            with self.assertRaises(TimeoutError):
+                update_download._Transfers().read('https://example.invalid/x', 10, 'manifest')
+        self.assertIsInstance(seen['context'], ssl.SSLContext)
+        source = (ROOT / 'mdPreview.py').read_text()
+        self.assertIn('urllib.request.HTTPSHandler(context=context())', source)
+
+    def test_installed_download_is_removed_but_nothing_outside_staging(self):
+        import logging, shutil
+        nodes = {node.name: node for node in ast.parse((ROOT / 'mdPreview.py').read_text()).body
+                 if isinstance(node, ast.FunctionDef)}
+        staging = self.root / 'UpdateStaging'
+        ns = dict(os=os, shutil=shutil, logging=logging, UPDATE_STAGING_DIR=str(staging))
+        exec(compile(ast.Module(body=[nodes['_discard_installed_download']], type_ignores=[]), 'mdPreview.py', 'exec'), ns)
+        discard = ns['_discard_installed_download']
+        job = staging / 'signed-abc'
+        (job / 'verified/mdPreview.app').mkdir(parents=True)
+        (job / 'mdPreview-2.0.9-arm64.zip').write_text('zip')
+        other = staging / 'signed-other'
+        other.mkdir()
+        outside = self.root / 'Documents'
+        outside.mkdir()
+        (outside / 'mdPreview-2.0.9-arm64.zip').write_text('keep')
+        nested = staging / 'signed-abc2/deeper'
+        nested.mkdir(parents=True)
+        link = staging / 'signed-link'
+        link.symlink_to(outside)
+        for pending in (None, {}, {'archive': str(outside / 'mdPreview-2.0.9-arm64.zip')},
+                        {'archive': str(nested / 'x.zip')}, {'archive': str(link / 'x.zip')},
+                        {'archive': str(staging / 'x.zip')}, {'archive': str(staging / 'other-job/x.zip')}):
+            discard(pending)
+        self.assertTrue(job.is_dir() and other.is_dir() and nested.is_dir()
+                        and (outside / 'mdPreview-2.0.9-arm64.zip').is_file())
+        discard({'archive': str(job / 'mdPreview-2.0.9-arm64.zip')})
+        self.assertFalse(job.exists())
+        self.assertTrue(other.is_dir() and (outside / 'mdPreview-2.0.9-arm64.zip').is_file())
+
     def legacy_plan(self):
         staging = self.root / 'UpdateStaging/job/install'
         app = staging / 'mdPreview.app'

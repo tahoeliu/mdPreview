@@ -119,6 +119,7 @@ class InterruptedTests(unittest.TestCase):
         ns = dict(os=os, re=re, time=types.SimpleNamespace(time=lambda: 100),
                   hashlib=hashlib, logging=logging, _STARTUP_BUNDLE_SNAPSHOT=startup,
                   UPDATE_PRIVATE_DIR=str(support / 'UpdateTransactions'),
+                  UPDATE_STAGING_DIR=str(support / 'UpdateStaging'), shutil=__import__('shutil'),
                   _get_current_version=lambda: '1.0.0', _publisher_team_id=lambda: 'ABCDEFGHIJ',
                   verify_bundle=release.verify_bundle, _get_update_state=lambda: store,
                   _broadcast_update=Mock(), _t=lambda en, zh: zh, update_config=Mock(),
@@ -126,7 +127,7 @@ class InterruptedTests(unittest.TestCase):
                   _QUIT_REQUESTED=threading.Event(), _QUIT_APPROVED=threading.Event(),
                   _auto_update_enabled=lambda: True, _update_wakeup=threading.Event(),
                   _request_update=Mock(side_effect=AssertionError('结算不得自动安装')))
-        names = ('_resolve_opportunistic_outcome', '_update_state_name', '_opportunistic_marker_path', '_install_journal_path',
+        names = ('_resolve_opportunistic_outcome', '_discard_installed_download', '_update_state_name', '_opportunistic_marker_path', '_install_journal_path',
                  '_check_pending_install', '_remove_private_file', '_fatal_update', '_update_change')
         exec(compile(ast.Module(body=[NODES[name] for name in names], type_ignores=[]),
                      str(ROOT / 'mdPreview.py'), 'exec'), ns)

@@ -388,5 +388,6 @@
   "Paragraph spacing is automatic — no need for extra blank lines.": "L’espacement entre paragraphes est automatique : inutile d’ajouter des lignes vides.",
   "Loading the rest…": "Chargement de la suite…",
   "Image could not be displayed": "L'image n'a pas pu être affichée",
-  "Just type, or open something.": "Écrivez directement, ou ouvrez un document."
+  "Just type, or open something.": "Écrivez directement, ou ouvrez un document.",
+  "Could not make a secure connection to the update server.": "Impossible d’établir une connexion sécurisée avec le serveur de mise à jour."
 }

@@ -131,7 +131,7 @@ class DownloadRecovery(unittest.TestCase):
             for name in (names if names is not None else [UNIVERSAL])).encode()
         self.trusted_manifest = self.manifest
 
-    def open(self, request, timeout):
+    def open(self, request, timeout, context=None):
         self.requests.append(request)
         self.assertTrue(request.full_url.startswith(BASE), request.full_url)
         self.assertGreater(timeout, 0)
@@ -177,7 +177,7 @@ class DownloadRecovery(unittest.TestCase):
     def test_complete_download_without_api_preserves_return_contract(self):
         # 若错误地访问 API，此替身返回用户复现的 403，而非伪造可用的元数据。
         direct = self.open
-        def api_blocked(request, timeout):
+        def api_blocked(request, timeout, context=None):
             if request.full_url.startswith('https://api.github.com/'):
                 raise http_error(403, {'X-RateLimit-Remaining': '0'})
             return direct(request, timeout)
@@ -402,7 +402,7 @@ class DownloadRecovery(unittest.TestCase):
 
     def test_no_network_budget_left_after_connect(self):
         direct = self.open
-        def slow_connect(request, timeout):
+        def slow_connect(request, timeout, context=None):
             self.clock.now += 2
             return direct(request, timeout)
         self.urlopen.side_effect = slow_connect

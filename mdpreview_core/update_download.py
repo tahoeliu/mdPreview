@@ -17,6 +17,7 @@ from pathlib import Path
 from .release import verify_bundle, version_tuple
 from .release_sig import configured, signed_digest
 from .release_zip import extract_verified
+from .tls import context
 
 
 _MAX_ARCHIVE = 300 * 1024 * 1024
@@ -172,7 +173,7 @@ class _Transfers:
 
     def read(self, url, limit, stage, output=None, progress=None):
         request = urllib.request.Request(url, headers={'User-Agent': 'mdPreview', 'Accept-Encoding': 'identity'})
-        with urllib.request.urlopen(request, timeout=min(_REQUEST_TIMEOUT, self.remaining(stage))) as response:
+        with urllib.request.urlopen(request, timeout=min(_REQUEST_TIMEOUT, self.remaining(stage)), context=context()) as response:
             status = getattr(response, 'status', 200)
             if status != 200:
                 # 不发送 Range，因此 206 也不能作为完整资产接受。

@@ -388,5 +388,6 @@
   "onboarding.example": "Open Example",
   "Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.": "Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.",
   "This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.": "This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.",
-  "Just type, or open something.": "Just type, or open something."
+  "Just type, or open something.": "Just type, or open something.",
+  "Could not make a secure connection to the update server.": "Could not make a secure connection to the update server."
 }

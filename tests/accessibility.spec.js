@@ -44,6 +44,12 @@ for(const [state,prepare] of [
    await prepare(page);
    for(const reducedMotion of ['reduce','no-preference']){
     await page.emulateMedia({reducedMotion,colorScheme});
+    // Transient notes (view label, editing hint) fade in and out; audit the settled page, not a frame of a fade.
+    await page.waitForFunction(()=>{
+     const label=document.getElementById('modeIndicator');
+     const fading=document.getAnimations().some(a=>a.playState==='running'&&Number.isFinite(a.effect?.getComputedTiming().endTime));
+     return !fading&&(!label||!label.classList.contains('visible'));
+    },null,{timeout:10000});
     expect(await violations(page),`${state}/${colorScheme}/${reducedMotion}`).toEqual([]);
    }
   });

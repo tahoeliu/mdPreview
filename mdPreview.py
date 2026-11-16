@@ -46,6 +46,10 @@ from contextlib import contextmanager, nullcontext
 from urllib.parse import urlsplit
 from mdpreview_core.storage import atomic_write, atomic_create, DraftStore
 from mdpreview_core.images import export_image
+if '--tls-selfcheck' in sys.argv:
+    from mdpreview_core.tls import selfcheck
+    print(json.dumps(selfcheck()))
+    sys.exit(0)
 if '--install-update-helper' in sys.argv:
     from scripts.install_update import main as install_helper
     sys.argv.remove('--install-update-helper')
@@ -4467,7 +4471,8 @@ def _fetch_latest_version():
     class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             return None  # don't follow — let it raise
-    opener = urllib.request.build_opener(NoRedirectHandler)
+    from mdpreview_core.tls import context
+    opener = urllib.request.build_opener(NoRedirectHandler, urllib.request.HTTPSHandler(context=context()))
     from mdpreview_core.update_download import DownloadError
     try:
         with opener.open(req, timeout=5):
@@ -5140,6 +5145,7 @@ def _resolve_opportunistic_outcome():
                 _settle_exchanged_transaction(journal_path, journal, status, expected, fd,
                                              (opened_root.st_dev, opened_root.st_ino))
             if status == 'ready':
+                _discard_installed_download(_get_update_state().snapshot().get('pending'))
                 _update_change(phase='idle', version=None, pending=None, error=None, nextRetryAt=None,
                                retryCount=0, armedForQuit=False, code=None, retryable=False,
                                detail=_t('Updated to mdPreview {version}.', '已更新到 mdPreview {version}。').format(version=version))
@@ -5154,6 +5160,21 @@ def _resolve_opportunistic_outcome():
             logging.info('[update] stage=startup code=quit-gap-settled')
         finally:
             os.close(fd)
+
+
+def _discard_installed_download(pending):
+    """The update is installed and verified: its download (archive plus unpacked copy) is no
+    longer needed. Only a `signed-*` job folder directly inside our own staging folder is removed."""
+    from pathlib import Path
+    try:
+        root = Path(os.path.abspath(UPDATE_STAGING_DIR)).resolve()
+        job = Path(pending['archive']).parent
+        if (job.parent != root or not job.name.startswith('signed-') or job.is_symlink()
+                or job.resolve() != job or not shutil.rmtree.avoids_symlink_attacks):
+            return
+        shutil.rmtree(job)
+    except Exception:
+        logging.info('[update] stage=cleanup code=download-kept')
 
 
 def _remove_private_file(path):
