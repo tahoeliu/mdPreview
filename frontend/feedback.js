@@ -136,19 +136,8 @@ window.EditorFeedback = {
         tocToggle.title = label;
         tocToggle.setAttribute('aria-label', label);
       }
-        const ub = document.getElementById('updateBubble');
-      if (ub) {
-        const txt = ub.querySelector('.update-bubble-text');
-        if (txt && !ub.classList.contains('installing') && !ub.classList.contains('downloading')) {
-          txt.textContent = t('Update available, click to install...', '有新版本可用，点击安装…');
-        }
-        const closeBtn = ub.querySelector('.update-bubble-close');
-        if (closeBtn) {
-          const dismiss = t('Dismiss', '忽略');
-          closeBtn.title = dismiss;
-          closeBtn.setAttribute('aria-label', dismiss);
-        }
-      }
+      // 翻译是当前状态的投影，不能把 failed/deferred/ready 改成可安装。
+      if (deps.renderUpdateFeedback) deps.renderUpdateFeedback();
     }
 
 

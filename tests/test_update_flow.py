@@ -15,7 +15,6 @@ Run:
 """
 import os
 import sys
-import shutil
 import tempfile
 import unittest
 from unittest import mock
@@ -80,8 +79,8 @@ class DownloadErrorContractTests(unittest.TestCase):
     """_download_and_extract 把签名下载管线的异常映射为界面使用的错误码。"""
 
     def setUp(self):
-        self._tmp = tempfile.mkdtemp(prefix='mdpreview-update-test-')
-        self.addCleanup(shutil.rmtree, self._tmp, True)
+        self._tmp = tempfile.mkdtemp(prefix='mdpreview-update-test-',
+                                     dir=os.path.join(PROJECT_ROOT, 'WorkSpace'))
         patcher = mock.patch.object(mv, 'UPDATE_STAGING_DIR', self._tmp)
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -93,10 +92,20 @@ class DownloadErrorContractTests(unittest.TestCase):
         with mock.patch('mdpreview_core.update_download.download', side_effect=error):
             return mv._download_and_extract('1.4.10')
 
-    def test_http_error_returns_network(self):
+    def test_http_error_preserves_exact_status(self):
         result = self._result(urllib.error.HTTPError('http://x', 404, 'Not Found', {}, None))
-        self.assertEqual(result['error'], 'network')
+        self.assertEqual(result['error'], 'not_found')
+        self.assertEqual(result['http'], 404)
+        self.assertEqual(result['code'], 'http-not-found')
+        self.assertFalse(result['retryable'])
         self.assertTrue(result['detail'])
+
+    def test_rate_limit_remains_distinct_and_retryable(self):
+        result = self._result(urllib.error.HTTPError('http://x', 403, 'Forbidden',
+                                                   {'X-RateLimit-Remaining': '0'}, None))
+        self.assertEqual(result['error'], 'rate_limited')
+        self.assertEqual(result['http'], 403)
+        self.assertTrue(result['retryable'])
 
     def test_url_error_returns_network(self):
         self.assertEqual(self._result(urllib.error.URLError('dns'))['error'], 'network')

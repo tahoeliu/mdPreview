@@ -37,7 +37,13 @@ def check_app(path):
                 raise ValueError('Packaged vendor mismatch: '+asset['target'])
     with (path/'Contents/Info.plist').open('rb') as stream:info=plistlib.load(stream)
     if info.get('NSAppTransportSecurity',{}).get('NSAllowsArbitraryLoads'):raise ValueError('ATS is globally disabled')
-    print('Application identity, resources and code signature PASS (ad-hoc distribution)')
+    if type(info.get('MDPreviewRuntimeLease')) is not int or info['MDPreviewRuntimeLease'] != 1:
+        raise ValueError('Packaged runtime lease protocol missing')
+    probe = subprocess.run([str(path/'Contents/MacOS/mdPreview'), '--install-update-helper', '--capabilities'],
+                           capture_output=True, text=True, timeout=30, check=True)
+    if json.loads(probe.stdout) != {'protocol': 2, 'normalQuit': 1}:
+        raise ValueError('Packaged installer protocol mismatch')
+    print('Application identity, resources, installer protocol and code signature PASS (ad-hoc distribution)')
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('--source',action='store_true');parser.add_argument('--app')

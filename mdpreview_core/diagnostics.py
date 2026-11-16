@@ -40,12 +40,32 @@ def issue_url(version):
     return 'https://github.com/tahoeliu/mdPreview/issues/new?' + urlencode({'template': 'bug.yml', **metadata(version)})
 
 
-def archive(version, config):
+_UPDATE_TEXT = re.compile(r'[A-Za-z0-9._-]{1,64}')
+
+
+def update_summary(value):
+    """再过滤一遍：只保留布尔、小整数和短的代码式字符串，任何路径或句子都进不来。"""
+    def clean(item):
+        if item is None or isinstance(item, bool):
+            return item
+        if type(item) is int and 0 <= item <= 100000:
+            return item
+        if isinstance(item, str) and _UPDATE_TEXT.fullmatch(item):
+            return item
+        if isinstance(item, dict):
+            return {key: clean(child) for key, child in item.items()
+                    if isinstance(key, str) and _UPDATE_TEXT.fullmatch(key)}
+        return 'redacted'
+    return clean(value) if isinstance(value, dict) else {}
+
+
+def archive(version, config, update=None):
     output = io.BytesIO()
     with _lock:
         events = list(_events)
     with zipfile.ZipFile(output, 'w', zipfile.ZIP_DEFLATED) as bundle:
         for name, value in [('environment.json', metadata(version)),
-                            ('config.json', settings(config)), ('events.json', events)]:
+                            ('config.json', settings(config)), ('events.json', events),
+                            ('update.json', update_summary(update))]:
             bundle.writestr(name, json.dumps(value, ensure_ascii=False, indent=2))
     return output.getvalue()

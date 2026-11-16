@@ -1,121 +1,255 @@
-// 更新状态反馈与安装交互：由入口显式注入依赖。
+// 更新反馈只消费后端状态；下载、验证及安装均由后端状态机负责。
 window.UpdateFeedback = {
   create(deps) {
-    const {
-      document, t, showStatus, pushContentToPython, state,
-    } = deps;
-    let _updateBubbleDismissed = false;
+    const { document, t } = deps;
+    const phases = new Set(['idle', 'checking', 'downloading', 'retrying', 'ready', 'preparing', 'deferred', 'installing', 'failed']);
+    let current = { phase: 'idle', automatic: true, progress: null };
+    let authoritative = false, generation = 0, request = 0;
+    let dismissed = false, retryPending = false, requestFailed = null;
+    let knownVersion = null, dismissedVersion = null, presentedVersion = null;
+    let consentPending = null, approvalWaiting = false;
 
     function setUpdateBubbleText(text) {
-      const el = document.getElementById('updateBubble');
-      const txt = el ? el.querySelector('.update-bubble-text') : null;
-      if (txt) txt.textContent = text;
+      const el = document.querySelector('#updateBubble .update-bubble-text');
+      if (el) el.textContent = text;
     }
-
-    function setUpdateProgress(percent) {
+    function percent(value) {
+      return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0;
+    }
+    function setUpdateProgress(value) {
       const bar = document.getElementById('updateProgressBar');
-      if (bar) bar.style.width = Math.max(0, Math.min(100, percent || 0)) + '%';
+      if (bar) bar.style.width = percent(value) + '%';
     }
-
-    function showUpdateBubble() {
-      if (_updateBubbleDismissed) return;
-      const el = document.getElementById('updateBubble');
-      if (el) {
-        el.classList.remove('downloading');
-        el.classList.add('visible');
-        setUpdateProgress(0);
-        setUpdateBubbleText(t('Update available, click to install...', '有新版本可用，点击安装…'));
-      }
-    }
-
-    function showUpdateDownloadProgress(percent) {
-      _updateBubbleDismissed = false;
-      const el = document.getElementById('updateBubble');
-      const p = Math.max(0, Math.min(100, Math.round(percent || 0)));
-      if (el) {
-        el.classList.remove('installing');
-        el.classList.add('visible', 'downloading');
-        setUpdateProgress(p);
-        setUpdateBubbleText(t('Downloading update... ', '正在下载更新… ') + p + '%');
-      }
-    }
-
-    function showUpdateDownloadFailed(code, detail) {
-      // `code` comes from the Python updater: 'network' | 'incomplete' |
-      // 'mount' | 'verify' | 'unknown'. `detail` is an already-localized
-      // sentence from Python (may be empty) for the status bar.
+    function reason() {
+      if (['quit-gap-inconclusive', 'quit-gap-version-unverified'].includes(current.code)) return t('Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.', '自动安装已阻止，安装记录已保留。请通过「帮助 > 报告问题」获取恢复协助。');
+      if (current.code === 'helper-handshake-unavailable') return t('This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.', '此更新器需要从 github.com/tahoeliu/mdPreview/releases 手动安装。');
+      if (current.code === 'release-signing-key-not-configured') return t('Updates are unavailable: this build has no release signing key.', '更新不可用：此版本未内置发布签名公钥。');
       const reasons = {
         network: t('Network error. Check your connection.', '网络错误，请检查网络连接。'),
+        rate_limited: t('Too many update requests. Please try again later.', '更新请求过于频繁，请稍后重试。'),
+        not_found: t('The update file was not found.', '未找到更新文件。'),
+        forbidden: t('Access to the update was denied.', '更新访问被拒绝。'),
+        http: t('The update server returned an HTTP error.', '更新服务器返回 HTTP 错误。'),
         incomplete: t('The downloaded file is incomplete.', '下载的文件不完整。'),
         mount: t('Failed to open the update image.', '安装包无法打开。'),
         verify: t('The update failed the version check.', '更新未通过版本校验。'),
         unknown: t('Unexpected error.', '未知错误。'),
       };
-      const reason = reasons[code] || reasons.unknown;
+      // detail 是后端当时语言下的句子，不能把它当作可重新翻译的状态。
+      const status = current.error === 'http' && Number.isInteger(current.http) && current.http >= 100 && current.http <= 599 ? ` (HTTP ${current.http})` : '';
+      return (reasons[current.error] || reasons.unknown) + status;
+    }
+    function canRetry() {
+      return current.automatic === false && current.phase === 'failed'
+        && !['quit-gap-inconclusive', 'quit-gap-version-unverified', 'helper-handshake-unavailable', 'release-signing-key-not-configured', 'update-requires-running-bundle'].includes(current.code);
+    }
+    function readyForConsent() {
+      return authoritative && current.phase === 'ready' && typeof current.version === 'string' && !!current.version;
+    }
+    function busy() {
+      return !!consentPending || approvalWaiting || ['preparing', 'installing'].includes(current.phase);
+    }
+    function isVisible() {
+      if (dismissed) return false;
+      if (current.automatic === false) return true;
+      if (dismissedVersion === current.version) return false;
+      return readyForConsent() || (presentedVersion === current.version && !!presentedVersion && ['preparing', 'installing'].includes(current.phase));
+    }
+    function renderUpdateFeedback() {
       const el = document.getElementById('updateBubble');
-      if (el) {
-        el.classList.remove('downloading', 'installing');
-        el.classList.add('visible');
-        setUpdateProgress(0);
-        setUpdateBubbleText(t('Download failed: ', '下载失败：') + reason);
+      if (!el) return;
+      const visible = isVisible();
+      if (visible && readyForConsent()) presentedVersion = current.version;
+      const phase = approvalWaiting && current.phase === 'ready' ? 'preparing' : current.phase;
+      const downloading = phase === 'downloading';
+      el.dataset.phase = phase;
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      el.setAttribute('aria-hidden', String(!visible));
+      el.setAttribute('aria-busy', String(busy()));
+      el.classList.toggle('visible', visible);
+      el.classList.toggle('downloading', downloading);
+      el.classList.toggle('installing', phase === 'installing');
+      el.classList.toggle('retryable', canRetry() && !retryPending);
+      // 选择态里“稍后 / 立即更新”就是全部决定，不再另画关闭按钮。
+      el.classList.toggle('choosing', visible && (readyForConsent() || phase === 'preparing'));
+      setUpdateProgress(downloading ? current.progress : 0);
+      const readyText = current.version
+        ? t('Update {version} is ready.', '更新 {version} 已就绪。').replace('{version}', current.version)
+        : t('Update downloaded. Waiting for a safe restart.', '更新已下载，等待安全重启。');
+      const texts = {
+        idle: current.detail ? t("You're up to date!", '已是最新版本！') : t('Check for Updates…', '检查更新…'),
+        checking: t('Checking for updates…', '正在检查更新…'),
+        downloading: t('Downloading update... ', '正在下载更新… ') + percent(current.progress) + '%',
+        retrying: t('Update will retry later.', '更新将稍后重试。') + ' ' + reason(),
+        ready: readyText,
+        preparing: t('Preparing a safe restart…', '正在准备安全重启…'),
+        deferred: t('Update postponed. Keep editing or retry when ready.', '更新已延期。可继续编辑，就绪后再重试。'),
+        installing: t('Installing update...', '正在安装更新…'),
+        failed: (current.stage === 'download' ? t('Download failed: ', '下载失败：') : t('Update failed: ', '更新失败：')) + reason(),
+      };
+      const errors = {
+        retry: t('Retry request failed. Please try again.', '重试请求失败，请再试一次。'),
+        approve: t('The update request failed. Please try again.', '更新请求失败，请再试一次。'),
+        decline: t('Could not dismiss the update. Please try again.', '未能关闭更新提示，请再试一次。'),
+      };
+      setUpdateBubbleText(texts[phase] + (requestFailed ? ' ' + errors[requestFailed] : ''));
+      const body = el.querySelector('.update-bubble-body');
+      if (body) { body.removeAttribute('role'); body.removeAttribute('tabindex'); }
+      const button = el.querySelector('.update-retry');
+      if (button) {
+        button.hidden = !visible || !canRetry();
+        button.disabled = retryPending || busy();
+        button.textContent = retryPending ? t('Requesting retry…', '正在请求重试…') : t('Retry update', '重试更新');
       }
-      showStatus(t('Update download failed: ', '更新下载失败：') + (detail || reason), true);
+      const approve = el.querySelector('.update-approve'), later = el.querySelector('.update-later');
+      if (approve && later) {
+        approve.hidden = later.hidden = !visible || !(readyForConsent() || phase === 'preparing');
+        approve.disabled = later.disabled = busy();
+        approve.textContent = t('Update now', '立即更新');
+        later.textContent = t('Later', '稍后');
+      }
+      const close = el.querySelector('.update-bubble-close');
+      if (close) {
+        close.disabled = busy();
+        close.title = t('Dismiss', '忽略'); close.setAttribute('aria-label', close.title);
+      }
     }
-
+    function updateFeedbackState(state) {
+      if (!state || !phases.has(state.phase) || typeof state.automatic !== 'boolean') return false;
+      const newVersion = typeof state.version === 'string' && !!state.version && state.version !== knownVersion;
+      if (newVersion) {
+        knownVersion = state.version;
+        dismissedVersion = presentedVersion = null;
+      }
+      if (newVersion || state.phase !== current.phase || state.automatic !== current.automatic) {
+        dismissed = false;
+        requestFailed = null;
+      }
+      if (state.automatic && state.phase === 'ready' && presentedVersion === state.version
+          && !['ready', 'preparing', 'installing'].includes(current.phase)) dismissed = true;
+      // armedForQuit 只是后端已挂起退出更新的状态，不是用户已关闭提示的标记。
+      if (newVersion || state.phase !== 'ready' || state.error || state.code) approvalWaiting = false;
+      current = { ...state };
+      authoritative = true;
+      generation++;
+      renderUpdateFeedback();
+      return true;
+    }
+    async function refreshUpdateState() {
+      if (!deps.Bridge.ready()) return false;
+      const at = generation, id = ++request;
+      try {
+        const result = await deps.Bridge.call('get_update_state');
+        // 初始查询或旧窗口的慢回包不能覆盖期间收到的广播。
+        return id === request && at === generation ? updateFeedbackState(result) : false;
+      } catch (_) { return false; }
+    }
+    function legacy(patch) {
+      // 新后端已经广播时，迟到的旧接口只能触发读取，不得降级状态。
+      if (authoritative) { void refreshUpdateState(); return; }
+      current = { ...current, ...patch };
+      generation++;
+      renderUpdateFeedback();
+    }
+    function showUpdateBubble() {
+      // 旧自动路径没有版本或验签状态，默认静默，不据此提供批准入口。
+      if (current.phase === 'failed') return;
+      legacy({ phase: 'ready', progress: null });
+    }
+    function showUpdateDownloadProgress(value) {
+      if (!authoritative) dismissed = false;
+      legacy({ phase: 'downloading', automatic: false, progress: value, error: null });
+    }
+    function showUpdateDownloadFailed(code, detail) {
+      legacy({ phase: 'failed', stage: 'download', progress: null, error: code, detail });
+    }
     function showManualInstallGuide(dmgPath, message) {
-      const hint = dmgPath
-        ? t(' Open the DMG and drag mdPreview to Applications: ', ' 请打开 DMG，并将 mdPreview 拖到 Applications：') + dmgPath
-        : t(' Please download the DMG manually and drag mdPreview to Applications.', ' 请手动下载 DMG，并将 mdPreview 拖到 Applications。');
-      showStatus((message || t('Update failed.', '更新失败。')) + hint, true);
+      // 保留旧签名，但不把下载失败转换为安装入口，也不弹出自动路径 toast。
+      legacy({ phase: 'failed', progress: null, error: 'unknown', detail: message });
     }
-
     function dismissUpdateBubble(event) {
       if (event) event.stopPropagation();
-      _updateBubbleDismissed = true;
-      const el = document.getElementById('updateBubble');
-      if (el) el.classList.remove('visible');
+      if (busy() || dismissed) return false;
+      if (readyForConsent()) return requestConsent('decline');
+      dismissed = true;
+      renderUpdateFeedback();
+      return true;
     }
-
+    async function requestConsent(action) {
+      if (!readyForConsent() || !isVisible() || busy() || retryPending) return false;
+      const version = current.version, at = generation, previousDismissedVersion = dismissedVersion;
+      consentPending = action;
+      requestFailed = null;
+      approvalWaiting = action === 'approve';
+      if (action === 'approve') dismissedVersion = null;
+      if (action === 'decline') { dismissed = true; dismissedVersion = version; }
+      renderUpdateFeedback();
+      let succeeded = false;
+      try {
+        if (!deps.Bridge.ready()) throw new Error('bridge-unavailable');
+        // 批准只能由明确按钮触发，保存确认及退出始终交给后端现有流程。
+        const result = await deps.Bridge.call(action === 'approve' ? 'approve_update' : 'decline_update');
+        if (at === generation && result?.state) updateFeedbackState(result.state);
+        succeeded = result?.success === true;
+        return succeeded;
+      } catch (_) { return false; }
+      finally {
+        consentPending = null;
+        if (!succeeded) {
+          approvalWaiting = false;
+          if (current.version === version && current.phase === 'ready') {
+            dismissed = false;
+            dismissedVersion = previousDismissedVersion;
+            requestFailed = action;
+          }
+        }
+        renderUpdateFeedback();
+      }
+    }
     async function installUpdate() {
-      if (state.isDirty) await pushContentToPython(true);
-      const el = document.getElementById('updateBubble');
-      if (el && (el.classList.contains('installing') || el.classList.contains('downloading'))) return;
-      if (el) {
-        setUpdateBubbleText(t('Installing...', '正在安装…'));
-        el.classList.remove('downloading');
-        el.classList.add('installing');
-      }
-      showStatus(t('Installing update...', '正在安装更新…'));
-      if (deps.Bridge.ready()) {
-        deps.Bridge.call('perform_auto_install').then(function(result) {
-          if (result && result.success) {
-            showStatus(t('Update prepared. Finish saving to restart.', '更新已准备，请完成保存以重启。'));
-          } else {
-            const error = result ? result.error : t('unknown', '未知');
-            if (result && result.manual_install) {
-              showManualInstallGuide(result.manual_dmg_path || '', t('Automatic install failed.', '自动安装失败。'));
-            } else {
-              showStatus(t('Update failed: ', '更新失败：') + error, true);
-            }
-            if (el) {
-              setUpdateBubbleText(t('Update available, click to install...', '有新版本可用，点击安装…'));
-              el.classList.remove('installing');
-            }
-          }
-        }).catch(function(err) {
-          showStatus(t('Update failed: ', '更新失败：') + err, true);
-          if (el) {
-            setUpdateBubbleText(t('Update available, click to install...', '有新版本可用，点击安装…'));
-            el.classList.remove('installing');
-          }
-        });
-      }
+      // 兼容旧函数名；这里只能重试手动失败，绝不批准安装。
+      if (!canRetry() || retryPending || busy() || !deps.Bridge.ready()) return false;
+      retryPending = true;
+      requestFailed = null;
+      const at = generation;
+      renderUpdateFeedback();
+      try {
+        const result = await deps.Bridge.call('retry_update');
+        if (at === generation) {
+          if (result?.state) updateFeedbackState(result.state);
+          if (result?.success !== true) requestFailed = 'retry';
+        }
+        if (result?.success !== true) return false;
+        await refreshUpdateState();
+        return true;
+      } catch (_) {
+        if (at === generation) requestFailed = 'retry';
+        return false;
+      } finally { retryPending = false; renderUpdateFeedback(); }
     }
-
-
+    const body = document.querySelector('#updateBubble .update-bubble-body');
+    if (body) {
+      const actions = document.createElement('div');
+      actions.className = 'update-actions';
+      for (const [className, handler] of [
+        ['update-later', dismissUpdateBubble],
+        ['update-approve', () => requestConsent('approve')],
+        ['update-retry', installUpdate],
+      ]) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = className;
+        button.addEventListener('click', event => { event.stopPropagation(); void handler(); });
+        actions.appendChild(button);
+      }
+      body.appendChild(actions);
+    }
+    renderUpdateFeedback();
     return {
-      setUpdateBubbleText, setUpdateProgress, showUpdateBubble, showUpdateDownloadProgress, 
+      setUpdateBubbleText, setUpdateProgress, showUpdateBubble, showUpdateDownloadProgress,
       showUpdateDownloadFailed, showManualInstallGuide, dismissUpdateBubble, installUpdate,
+      updateFeedbackState, refreshUpdateState, renderUpdateFeedback,
     };
   }
 };

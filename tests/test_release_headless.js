@@ -12,7 +12,12 @@ const assert=require('node:assert/strict'),fs=require('node:fs'),crypto=require(
  assert.ok(crypto.createPublicKey(pem).export({format:'der',type:'spki'}).subarray(-65).equals(point),'release-pubkey.pem 与固定公钥一致');
  assert.ok(fs.readFileSync('scripts/get.sh','utf8').includes(pem.trim().split('\n')[1]),'get.sh 内嵌了同一把公钥');
  assert.match(code,/if not configured\(\)/);
- const download=fs.readFileSync('mdpreview_core/update_download.py','utf8');assert.ok(download.indexOf('if not configured()')<download.indexOf('metadata = json.loads'));
+ const download=fs.readFileSync('mdpreview_core/update_download.py','utf8');
+ const preflight=download.indexOf('if not configured()'),firstTransfer=download.indexOf('manifest = transfers.run');
+ assert.ok(preflight>=0 && firstTransfer>preflight,'未配置可信公钥时必须在任何网络请求前拒绝');
+ assert.doesNotMatch(download,/api\.github\.com|metadata = json\.loads/,'下载不依赖发布 API');
+ const manifestVerification=download.indexOf('expected = signed_digest(manifest, signature, filename)');
+ assert.ok(manifestVerification>firstTransfer && manifestVerification<download.indexOf('def fetch_archive()'),'先验证签名清单再请求资产');
  const pair=crypto.generateKeyPairSync('ec',{namedCurve:'prime256v1'}),other=crypto.generateKeyPairSync('ec',{namedCurve:'prime256v1'});
  const message=Buffer.from('isolated-test-only'),signature=crypto.sign('sha256',message,pair.privateKey);
  assert.ok(crypto.verify('sha256',message,pair.publicKey,signature));assert.ok(!crypto.verify('sha256',Buffer.from('tampered'),pair.publicKey,signature));assert.ok(!crypto.verify('sha256',message,other.publicKey,signature));

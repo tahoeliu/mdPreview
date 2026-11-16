@@ -12,7 +12,10 @@ case "$ARCH" in arm64|x86_64) ;; *) echo "expected a single-architecture app, go
 VERSION="$(cat "$ROOT/VERSION")"
 APPEX="$APP/Contents/PlugIns/MDPreviewQuickLook.appex"
 [[ "$APPEX" == */Contents/PlugIns/MDPreviewQuickLook.appex ]] || exit 1
-rm -rf "$APPEX"
+if [[ -e "$APPEX" || -L "$APPEX" ]]; then
+  echo "extension already exists; use a fresh build directory: $APPEX" >&2
+  exit 1
+fi
 mkdir -p "$APPEX/Contents/MacOS" "$APPEX/Contents/Resources/web/fonts"
 
 swiftc -parse-as-library -module-name MDPreviewQuickLook -target "$ARCH-apple-macos13.0" -O \

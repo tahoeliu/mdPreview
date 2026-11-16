@@ -3,6 +3,15 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
+const { performance } = require('node:perf_hooks');
+const started = performance.now();
+let stepStarted = started;
+const logStep = label => {
+  const now = performance.now();
+  console.log(`T30 ${label}：elapsed=${Math.round(now - stepStarted)}ms，总计=${Math.round(now - started)}ms`);
+  stepStarted = now;
+};
+process.on('exit', code => console.log(`T30 进程退出：退出码=${code}，elapsed=${Math.round(performance.now() - started)}ms`));
 const root = path.resolve(__dirname, '..');
 const read = p => fs.readFileSync(path.join(root, p));
 const json = p => JSON.parse(read(p));
@@ -36,10 +45,19 @@ for (const match of css.matchAll(/url\(([^)]+)\)/g)) {
 assert.ok(read('THIRD_PARTY_NOTICES.md').toString().includes('emStrong'));
 assert.ok(read('vendor/Credits.rtf').toString().startsWith('{\\rtf1'));
 const before = new Map([...Object.keys(checks), 'vendor/checksums.json', 'vendor/Credits.rtf'].map(p => [p, read(p)]));
+logStep('资源、许可证、checksum 与生成前快照校验完成');
 for (const args of [[], ['--check']]) {
-  const run = spawnSync(process.execPath, ['scripts/vendor.mjs', ...args], { cwd: root, encoding: 'utf8' });
-  assert.equal(run.status, 0, run.stdout + run.stderr);
+  const label = args.length ? 'vendor --check' : 'vendor 生成';
+  const timeout = 45000;
+  console.log(`T30 开始 ${label}，预算=${timeout}ms`);
+  const run = spawnSync(process.execPath, ['scripts/vendor.mjs', ...args], { cwd: root, encoding: 'utf8', timeout });
+  const diagnostic = `${label}，退出码=${run.status}，信号=${run.signal}，错误=${run.error?.code ?? '无'}`;
+  logStep(diagnostic);
+  assert.ifError(run.error);
+  assert.equal(run.status, 0, `${diagnostic}\n${run.stdout}${run.stderr}`);
+  console.log(run.stdout.trim());
   for (const [p, bytes] of before) assert.deepEqual(read(p), bytes, p);
+  logStep(`${label} 后逐字节一致性校验完成`);
 }
 const vm = require('node:vm');
 const { TextEncoder, TextDecoder } = require('node:util');
@@ -56,5 +74,6 @@ assert.ok(sandbox.katex.renderToString('x^2', { throwOnError: true }).includes('
   const { unzipSync, strFromU8 } = require('fflate');
   const xml = strFromU8(unzipSync(bytes)['word/document.xml']);
   assert.ok(xml.includes('T30 OOXML smoke') && !xml.includes('altChunk'));
+  logStep('浏览器构建及 OOXML 校验完成');
   console.log('T30 资源、许可证、字体引用、浏览器构建及重复生成校验通过');
 })().catch(error => { console.error(error); process.exitCode = 1; });

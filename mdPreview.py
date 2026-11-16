@@ -7,14 +7,30 @@ import sys
 import os
 # 在WebView/窗口/更新逻辑加载前冻结当前启动副本，采样失败永久禁用本进程更新。
 _STARTUP_BUNDLE_SNAPSHOT = None
+_RUNTIME_LEASE = None
 if getattr(sys, 'frozen', False):
     try:
         from pathlib import Path
         from types import MappingProxyType
         from mdpreview_core.release import bundle_snapshot
         _STARTUP_BUNDLE_SNAPSHOT = MappingProxyType(bundle_snapshot(Path(sys.executable).resolve().parents[2]))
-    except (OSError, ValueError):
-        pass
+        if '--install-update-helper' not in sys.argv:
+            from mdpreview_core.update_runtime import RuntimeLease
+            from mdpreview_core.release import check_startup_snapshot
+            _RUNTIME_LEASE = RuntimeLease(_STARTUP_BUNDLE_SNAPSHOT['path'], blocking=True)
+            # An installer may have exchanged this path while startup waited for the lease.
+            check_startup_snapshot(_STARTUP_BUNDLE_SNAPSHOT['path'], _STARTUP_BUNDLE_SNAPSHOT)
+    except (OSError, ValueError) as startup_error:
+        # 未取得租约（只读位置、锁目录或锁文件权限异常等）时照常打开，但本进程禁用自动安装；
+        # 安装助手对同一把锁的校验同样会失败，因此不会在无租约实例运行时替换应用。
+        # 只有取得租约后发现启动副本已被替换，才拒绝继续启动。
+        replaced = _RUNTIME_LEASE is not None
+        if replaced:
+            _RUNTIME_LEASE.close()
+            _RUNTIME_LEASE = None
+        if replaced and '--install-update-helper' not in sys.argv:
+            raise SystemExit('Cannot safely open this application. Check its location and permissions, then open it again.')
+        _STARTUP_BUNDLE_SNAPSHOT = None
 import json
 import re
 import time
@@ -54,12 +70,29 @@ def verify_asset(*args, **kwargs):
 
 _START_T0 = time.time()  # cold-start profiling
 
-APP_SUPPORT_DIR = os.environ.get('MDPREVIEW_DATA_DIR') or os.path.expanduser('~/Library/Application Support/mdPreview')
+# 仅在入口规范化显式配置的可信环境根；私有目录及其内部文件仍逐级拒绝符号链接。
+APP_SUPPORT_DIR = (os.path.realpath(os.environ['MDPREVIEW_DATA_DIR']) if os.environ.get('MDPREVIEW_DATA_DIR')
+                   else os.path.expanduser('~/Library/Application Support/mdPreview'))
 CONFIG_FILE = os.path.join(APP_SUPPORT_DIR, 'config.json')
 LEGACY_CONFIG_FILE = os.path.expanduser('~/.mdviewer_config.json')
 LOG_FILE = os.path.join(APP_SUPPORT_DIR, 'Logs', 'mdPreview.log') if os.environ.get('MDPREVIEW_DATA_DIR') else os.path.expanduser('~/Library/Logs/mdPreview/mdPreview.log')
 DRAFT_DIR = os.path.join(APP_SUPPORT_DIR, 'Drafts')
 UPDATE_STAGING_DIR = os.path.join(APP_SUPPORT_DIR, 'UpdateStaging')
+UPDATE_PRIVATE_DIR = os.path.join(APP_SUPPORT_DIR, 'UpdateTransactions')
+_update_state_store = None
+_update_state_init_lock = threading.Lock()
+_update_job_lock = threading.Lock()
+_update_wakeup = threading.Event()
+_update_scheduler_started = False
+_update_cancel = threading.Event()
+_pending_update_install = None
+_update_install_lock = threading.RLock()
+_update_relaunch_requested = False
+# 更新启动仅等待首屏 ready，不涉及文档恢复；外部禁用保持有效。
+_update_scheduler_paused = '--update-paused' in sys.argv
+_update_scheduler_resume = threading.Event()
+if not _update_scheduler_paused:
+    _update_scheduler_resume.set()
 
 
 def _setup_logging():
@@ -1007,7 +1040,7 @@ class MarkdownAPI:
             return False
 
     def startup_ready(self, ms):
-        """只记录本进程首次首屏，后续文档加载不混入冷启动。"""
+        """只记录首次首屏；更新启动仅回执版本和 PID。"""
         if _UI_READY.is_set():
             return
         try:
@@ -1020,11 +1053,16 @@ class MarkdownAPI:
         _UI_READY.set()
         if '--update-ready' in sys.argv:
             try:
-                marker = sys.argv[sys.argv.index('--update-ready') + 1]
-                if os.path.commonpath([os.path.realpath(marker), os.path.realpath(UPDATE_STAGING_DIR)]) == os.path.realpath(UPDATE_STAGING_DIR):
-                    _safe_write_text(marker, json.dumps({'pid': os.getpid(), 'version': _get_current_version()}))
+                from pathlib import Path
+                from mdpreview_core.update_storage import private_write
+                marker = Path(sys.argv[sys.argv.index('--update-ready') + 1])
+                roots = (Path(os.path.abspath(UPDATE_PRIVATE_DIR)), Path(os.path.abspath(UPDATE_STAGING_DIR)))
+                if not marker.is_absolute() or not any(marker.is_relative_to(root) for root in roots):
+                    raise ValueError('unsafe-ready-marker')
+                private_write(marker, {'pid': os.getpid(), 'version': _get_current_version(), 'success': True})
             except Exception:
                 log_exception('ready marker failed')
+        _update_scheduler_resume.set()
         return True
 
     def get_initial_content(self):
@@ -1735,7 +1773,7 @@ class MarkdownAPI:
                 completed.wait()
             if 'path' not in selected:
                 return {'success': False, 'cancelled': True}
-            atomic_write(selected['path'], archive(_get_current_version(), load_config()))
+            atomic_write(selected['path'], archive(_get_current_version(), load_config(), _update_diagnostics()))
             return {'success': True}
         except Exception:
             return {'success': False, 'error': 'diagnostics-export-failed'}
@@ -1822,7 +1860,12 @@ class MarkdownAPI:
                     AppHelper.callAfter(_apply_toggle_shortcut, values['toggle_shortcut'])
                 except Exception:
                     pass
-            return {'success': load_config().get('settings') == values, 'settings': values}
+            success = load_config().get('settings') == values
+        if success and 'auto_update' in patch:
+            if not values['auto_update']:
+                _update_cancel.set()
+            _update_wakeup.set()
+        return {'success': success, 'settings': values}
 
     def save_font_size(self, size):
         return self.set_settings({'font_size': size})
@@ -2287,9 +2330,27 @@ class MarkdownAPI:
         """Return app metadata (version, etc.) for the About panel."""
         return {'version': _get_current_version()}
 
+    def get_update_state(self):
+        try:
+            return _get_update_state().snapshot(public=True)
+        except Exception:
+            return {'phase': 'failed', 'version': None, 'progress': None, 'error': 'state-unavailable',
+                    'detail': _t('Update state could not be read safely. The current app is unchanged.', '无法安全读取更新状态，当前应用未更改。'),
+                    'automatic': False, 'nextRetryAt': None}
+
+    def retry_update(self):
+        return _request_update(automatic=False, retry=True)
+
     def perform_auto_install(self):
-        """Called from JS when user clicks the update bubble."""
-        return _perform_auto_install()
+        return _request_update(automatic=False, retry=True)
+
+    def approve_update(self):
+        """用户点击立即更新：helper 就绪后走原正常退出确认。"""
+        return _approve_update()
+
+    def decline_update(self):
+        """用户选择“稍后”：置 armedForQuit，退出间隙静默安装；本会话不再打扰。"""
+        return _decline_update()
 
     def download_update_with_progress(self, version):
         """Manual update download with progress updates shown in the page."""
@@ -2350,7 +2411,7 @@ def get_resource_path(filename):
 
 def load_config():
     try:
-        path = CONFIG_FILE if os.path.exists(CONFIG_FILE) else LEGACY_CONFIG_FILE
+        path = CONFIG_FILE if os.path.exists(CONFIG_FILE) or os.environ.get('MDPREVIEW_DATA_DIR') else LEGACY_CONFIG_FILE
         if os.path.exists(path):
             with open(path, 'r') as f:
                 cfg = json.load(f)
@@ -3835,26 +3896,7 @@ if HAS_COCOA:
             _dispatch_js('findPrev()')
 
         def checkForUpdates_(self, sender):
-            """Manual update check — user explicitly asked, so alerts are OK."""
-            global _available_update_version
-            if _available_update_version:
-                AppHelper.callAfter(_show_update_alert, _available_update_version)
-                return
-            def _do_check():
-                try:
-                    remote = _fetch_latest_version()
-                    if not remote:
-                        AppHelper.callAfter(_manual_check_error)
-                        return
-                    local = _get_current_version()
-                    if _is_newer(remote, local):
-                        AppHelper.callAfter(_show_update_alert, remote)
-                    else:
-                        _clear_update_available()
-                        AppHelper.callAfter(_manual_check_up_to_date)
-                except Exception:
-                    AppHelper.callAfter(_manual_check_error)
-            threading.Thread(target=_do_check, daemon=True).start()
+            _request_update(automatic=False)
 
         def showAbout_(self, sender):
             """Show a custom native About window with a plain white background."""
@@ -4237,6 +4279,8 @@ def main():
                 _register_quicklook()
             except Exception:
                 pass
+            if os.environ.get('MDPREVIEW_UPDATE_SMOKE'):
+                return
             try:
                 time.sleep(1.2)
                 _offer_default_handler()
@@ -4402,17 +4446,22 @@ def _fetch_latest_version():
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             return None  # don't follow — let it raise
     opener = urllib.request.build_opener(NoRedirectHandler)
+    from mdpreview_core.update_download import DownloadError
     try:
-        opener.open(req, timeout=5)
-    except urllib.error.HTTPError as e:
-        if e.code in (301, 302, 303, 307, 308):
-            location = e.headers.get('Location', '')
-            # location = 'https://github.com/tahoeliu/mdPreview/releases/tag/v1.2.4'
-            tag = location.rstrip('/').split('/')[-1]  # 'v1.2.4'
-            return tag.lstrip('v') if tag else None
-    except Exception:
-        pass
-    return None
+        with opener.open(req, timeout=5):
+            pass
+    except urllib.error.HTTPError as error:
+        try:
+            if error.code in (301, 302, 303, 307, 308):
+                location = error.headers.get('Location', '')
+                match = re.fullmatch(r'https://github\.com/tahoeliu/mdPreview/releases/tag/v([0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?)/?', location)
+                if match and len(match[1]) <= 32:
+                    return match[1]
+                raise DownloadError('check', 'invalid-release-version') from None
+            raise
+        finally:
+            error.close()
+    raise DownloadError('check', 'release-redirect-missing', 'network', retryable=True)
 
 
 def _is_newer(remote, local):
@@ -4428,43 +4477,231 @@ def _is_newer(remote, local):
         return False
 
 
-def _should_check_update():
-    """Return True if enough time has passed since the last check."""
-    cfg = load_config()
+def _update_state_name(kind):
+    """每个安装位置各用一份更新状态，两份应用副本互不覆盖对方的待装版本和重试计数。"""
+    if not _STARTUP_BUNDLE_SNAPSHOT:
+        return kind + '.json'
+    key = hashlib.sha256(os.path.abspath(_STARTUP_BUNDLE_SNAPSHOT['path']).encode()).hexdigest()[:16]
+    return f'{kind}-{key}.json'
+
+
+def _update_diagnostics():
+    """诊断包里的更新信息：只有固定字段的状态码和阶段名，不含路径、文档或原始日志。"""
+    result = {'installable': bool(_STARTUP_BUNDLE_SNAPSHOT)}
+    try:
+        state = _get_update_state().snapshot()
+        result['state'] = {key: state.get(key) for key in (
+            'phase', 'version', 'error', 'code', 'stage', 'http', 'attempts', 'retryable',
+            'retryCount', 'automatic', 'armedForQuit')}
+        result['state']['pending'] = bool(state.get('pending'))
+    except Exception:
+        result['state'] = 'unreadable'
+    try:
+        from mdpreview_core.update_storage import private_read
+        journal_path = _install_journal_path()
+        journal = private_read(journal_path) if journal_path else None
+        result['journal'] = journal.get('state') if isinstance(journal, dict) else None
+    except FileNotFoundError:
+        result['journal'] = None
+    except Exception:
+        result['journal'] = 'unreadable'
+    try:
+        from mdpreview_core.update_storage import private_read
+        private_read(_opportunistic_marker_path())
+        result['unsettled'] = True
+    except FileNotFoundError:
+        result['unsettled'] = False
+    except Exception:
+        result['unsettled'] = 'unreadable'
+    return result
+
+
+def _get_update_state():
+    global _update_state_store
+    from mdpreview_core.update_state import UpdateState
+    with _update_state_init_lock:
+        if _update_state_store is None:
+            _update_state_store = UpdateState(os.path.join(UPDATE_PRIVATE_DIR, _update_state_name('state')))
+    return _update_state_store
+
+
+def _auto_update_enabled():
     from mdpreview_core.settings import settings
-    if not settings(cfg)['auto_update']:
-        return False
-    last = cfg.get('last_update_check', 0)
-    return (time.time() - last) >= CHECK_INTERVAL
+    return not os.environ.get('MDPREVIEW_DISABLE_UPDATES') and settings(load_config())['auto_update']
+
+
+def _broadcast_update(state=None):
+    state = _get_update_state().snapshot(public=True)
+    code = 'if (typeof updateFeedbackState === "function") updateFeedbackState(' + json.dumps(state) + ');'
+    with _state_lock:
+        windows = [api.window for api in _window_apis.values() if api.window]
+    from mdpreview_core.csp_bridge import run_body
+    for window in windows:
+        try:
+            run_body(window, code)
+        except Exception:
+            logging.warning('[update] stage=feedback code=bridge-failed')
+
+
+def _update_change(**patch):
+    if 'error' in patch and patch['error'] is None:
+        patch.update(code=None, stage=None, http=None, attempts=0, retryable=False)
+    state = _get_update_state().change(**patch)
+    _broadcast_update(state)
+    return state
+
+
+def _update_error(error, stage=None):
+    from mdpreview_core.update_download import error_info
+    info = error_info(error)
+    if stage:
+        info['stage'] = stage
+    messages = {
+        'network': ('The update connection was interrupted or timed out.', '更新连接中断或超时。'),
+        'incomplete': ('The update download is incomplete or exceeds the size limit.', '更新包不完整或超过大小限制。'),
+        'rate_limited': ('The update server is rate limiting requests. A background retry is scheduled when possible.', '更新服务器限制了请求频率，将按计划在后台重试。'),
+        'forbidden': ('The update server denied this request.', '更新服务器拒绝了请求。'),
+        'not_found': ('The signed manifest or update package is not available for this version.', '此版本的签名清单或更新包暂不可用。'),
+        'http': ('The update server returned an unexpected HTTP response.', '更新服务器返回了异常 HTTP 响应。'),
+        'verify': ('Update verification failed. The current application is unchanged.', '更新安全校验失败，当前应用未更改。'),
+        'unknown': ('Local update processing failed. The current application is unchanged.', '更新本地处理失败，当前应用未更改。'),
+    }
+    info['detail'] = _t(*messages.get(info['error'], messages['unknown']))
+    if info['code'] == 'release-signing-key-not-configured':
+        info['detail'] = _t('Updates are unavailable: this build has no release signing key.', '更新不可用：此版本未内置发布签名公钥。')
+    logging.warning('[update] %s', json.dumps({key: info.get(key) for key in
+                    ('error', 'stage', 'code', 'http', 'retryable', 'attempts', 'cleanup_failed')}, sort_keys=True))
+    return info
+
+
+def _should_check_update():
+    return _get_update_state().due(_auto_update_enabled())
 
 
 def _mark_update_checked():
-    cfg = load_config()
+    # 仅在无需升级时消费七天周期；发现新版本但下载失败不能算完成。
+    _update_change(lastCompletedCheck=time.time())
     update_config({'last_update_check': time.time()})
 
 
 def _set_update_available(remote_version):
-    """Remember that an update is available, auto-download, and show bubble."""
-    global _available_update_version
-    _available_update_version = remote_version
-    if HAS_COCOA:
-        def _update_menu():
+    return _request_update(automatic=True, version=remote_version)
+
+
+def _request_update(automatic=True, version=None, retry=False):
+    if version is not None and (not isinstance(version, str) or len(version) > 32
+                                or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?', version)):
+        return {'success': False, 'error': 'invalid-release-version'}
+    if os.environ.get('MDPREVIEW_DISABLE_UPDATES') or (automatic and not _auto_update_enabled()):
+        return {'success': False, 'error': 'auto-update-disabled'}
+    state = _get_update_state().snapshot()
+    if state.get('code') in ('quit-gap-version-unverified', 'quit-gap-inconclusive'):
+        return {'success': False, 'error': state['code']}
+    if not _update_job_lock.acquire(blocking=False):
+        return {'success': True, 'joined': True, 'state': _get_update_state().snapshot(public=True)}
+    _update_cancel.clear()
+    def work():
+        try:
+            if _get_update_state().snapshot().get('code') == 'quit-gap-settlement-pending':
+                _check_pending_install()
+                return
+            if retry:
+                _update_change(retryCount=0, deferCount=0, nextRetryAt=None)
+            _run_update_job(automatic, version, retry=retry)
+        except Exception as error:
             try:
-                if _update_menu_item:
-                    _update_menu_item.setTitle_(_t('Update Available: {version}...', '有可用更新：{version}…').format(version=remote_version))
+                _broadcast_update(_get_update_state().failure(_update_error(error)))
             except Exception:
-                pass
-        AppHelper.callAfter(_update_menu)
-    # Auto-download in background to hidden staging dir (silent by design:
-    # no progress UI). When staging succeeds the install bubble appears.
-    def _bg_download():
-        result = _download_and_extract(remote_version)
-        if result and 'staging_app' in result:
-            update_config({'pending_staging_app': result['staging_app'], 'pending_update_version': result['version']}, remove=('pending_update_dmg',))
-            if HAS_COCOA:
-                AppHelper.callAfter(lambda: _dispatch_js('showUpdateBubble()'))
-        # Failures stay silent: already logged inside _download_and_extract.
-    threading.Thread(target=_bg_download, daemon=True).start()
+                logging.error('[update] stage=state code=persistence-failed')
+        finally:
+            with _update_install_lock:
+                prepared = _pending_update_install
+                request_quit = (_update_relaunch_requested and prepared
+                                and prepared['process'].poll() is None)
+                if not request_quit:
+                    _cancel_update_relaunch()
+                _update_job_lock.release()
+            _update_wakeup.set()
+            if request_quit:
+                AppHelper.callAfter(_begin_prepared_update_quit)
+    threading.Thread(target=work, daemon=True, name='update-job').start()
+    return {'success': True, 'started': True}
+
+
+def _run_update_job(automatic, version=None, retry=False):
+    store = _get_update_state()
+    state = store.snapshot()
+    if state.get('code') in ('quit-gap-version-unverified', 'quit-gap-inconclusive'):
+        return
+    if state.get('code') == 'quit-gap-settlement-pending':
+        _check_pending_install()
+        return
+    pending = state.get('pending')
+    if not pending:
+        cfg = load_config()
+        if cfg.get('pending_staging_app') and cfg.get('pending_update_version'):
+            pending = {'staging_app': cfg['pending_staging_app'], 'version': cfg['pending_update_version']}
+            _update_change(pending=pending)
+    if automatic and (not _auto_update_enabled() or _update_cancel.is_set()):
+        return
+    # P1-3：手动检查/重试也必须重新发现最新版本，不得复用旧 version，
+    # 否则失败后会一直重试同一个已知坏包；显式传入 version 的入口不受影响。
+    discovered = version is None
+    if discovered:
+        _update_change(phase='checking', automatic=automatic, progress=None, lastDiscoveryAt=time.time())
+        try:
+            version = _fetch_latest_version()
+            if not version:
+                from mdpreview_core.update_download import DownloadError
+                raise DownloadError('check', 'release-unavailable', 'network', retryable=True)
+            version_tuple(version)
+        except Exception as error:
+            _broadcast_update(store.failure(_update_error(error, 'check')))
+            return
+        if not _is_newer(version, _get_current_version()):
+            _update_change(phase='idle', version=None, pending=None, error=None,
+                           detail=_t("You're up to date!", '已是最新版本！'), nextRetryAt=None, retryCount=0)
+            update_config(remove=('pending_staging_app', 'pending_update_version', 'pending_update_dmg'))
+            _mark_update_checked()
+            return
+        # 已终止失败或 helper 能力不兼容时仅低频发现新版；
+        # 已安全回退/取消的 retrying 状态仍按原有有界预算重新准备。
+        blocked = {'helper-handshake-unavailable'}
+        if (automatic and version == state.get('version')
+                and (state['phase'] == 'failed' or state.get('code') in blocked)):
+            return _update_change(phase=state['phase'], automatic=automatic,
+                                  nextRetryAt=time.time() + CHECK_INTERVAL)
+    changed = version != state.get('version')
+    _update_change(automatic=automatic, version=version, error=None, detail='', nextRetryAt=None,
+                   **({'retryCount': 0, 'deferCount': 0} if changed else {}))
+    # 只替换当前任务引用；新包下载失败仍保留原有可信资产，绝不删除旧目录。
+    candidate = pending if pending and pending['version'] == version else None
+    if candidate:
+        _update_change(phase='preparing', progress=100)
+        try:
+            candidate = _verify_pending_update(candidate, extract=False)
+        except Exception as error:
+            # Preserve evidence, but do not pin every future retry to an unusable asset.
+            _update_change(pending=None)
+            update_config(remove=('pending_staging_app', 'pending_update_version', 'pending_update_dmg'))
+            _broadcast_update(store.failure(_update_error(error, 'pending_verify')))
+            return
+    else:
+        if automatic and (not _auto_update_enabled() or _update_cancel.is_set()):
+            return _update_change(phase='idle')
+        _update_change(phase='downloading', progress=0)
+        result = _download_and_extract(version, progress_callback=lambda percent: _update_change(progress=int(percent)))
+        if not result or 'staging_app' not in result:
+            _broadcast_update(store.failure(result))
+            return
+        candidate = result
+        # 后台仅验证资产和应用身份；不启动目标 UI，避免预检抢占用户窗口。
+    # ready 默认挂起到正常退出；后台准备 helper 不触碰文档或请求退出。
+    _update_change(pending=candidate, phase='ready', version=candidate['version'], progress=100,
+                   armedForQuit=True, error=None, detail='', nextRetryAt=None)
+    update_config(remove=('pending_staging_app', 'pending_update_version', 'pending_update_dmg'))
+    return _prepare_update_install(candidate)
+
 
 
 def _clear_update_available():
@@ -4516,89 +4753,37 @@ def _staged_version_acceptable(staged_version, local_version):
 
 
 def _download_and_extract_unlocked(version, progress_callback=None, keep_dmg=False):
-    from mdpreview_core.update_download import download, classify
-    from mdpreview_core.release_sig import configured
+    from mdpreview_core.update_download import download
     try:
         return download(version, _get_current_version(), UPDATE_STAGING_DIR, _publisher_team_id(), progress_callback)
     except Exception as error:
-        code = classify(error)
-        if code == 'unknown':
-            log_exception('update download failed')
-        if not configured():
-            detail = _t('Updates are unavailable: this build has no release signing key.', '更新不可用：此版本未内置发布签名公钥。')
-        elif code == 'network':
-            detail = _t('Network error while downloading the update.', '下载更新时网络出错。')
-        elif code == 'incomplete':
-            detail = _t('The update download was incomplete or too large.', '更新包下载不完整或体积异常。')
-        elif code == 'verify':
-            detail = _t('The update could not be verified and was discarded.', '更新包校验失败，已丢弃。')
-        else:
-            detail = _t('Unexpected error while downloading the update.', '下载更新时发生未知错误。')
-        return {'error': code, 'detail': detail}
+        return _update_error(error)
 
 
 def _manual_download_update_with_progress(version):
-    """Download a manually requested update and report progress to the UI.
-
-    Progress (percent) is shown in the top-right bubble. On failure the bubble
-    shows a short reason and a status bar entry carries the detailed cause.
-    On success the same "click to install" bubble as the auto-download path
-    is shown.
-    """
-    def _progress(percent):
-        if HAS_COCOA:
-            AppHelper.callAfter(lambda p=percent: _dispatch_js(f'showUpdateDownloadProgress({int(p)})'))
-
-    result = _download_and_extract(version, progress_callback=_progress, keep_dmg=True)
-    if not result or 'staging_app' not in result:
-        err = (result or {}).get('error', 'unknown')
-        detail = (result or {}).get('detail', '')
-        if HAS_COCOA:
-            detail_js = json.dumps(detail or '')
-            AppHelper.callAfter(
-                lambda c=err, d=detail_js: _dispatch_js(f"showUpdateDownloadFailed('{c}', {d})")
-            )
-        return {'success': False, 'error': err, 'detail': detail}
-
-    update_config({'pending_staging_app': result['staging_app'], 'pending_update_version': result['version'], 'pending_update_dmg': result.get('dmg_path', '')})
-    if HAS_COCOA:
-        AppHelper.callAfter(lambda: _dispatch_js('showUpdateBubble()'))
-    return {'success': True}
+    return _request_update(automatic=False, version=version, retry=True)
 
 
 def _schedule_startup_update_check():
-    """Schedule a low-friction automatic update check after app launch.
-
-    Automatic checks are intentionally quiet:
-    - wait STARTUP_UPDATE_DELAY seconds after launch
-    - run at most once every CHECK_INTERVAL (7 days)
-    - fail silently on network errors
-    - if an update exists, auto-download to staging dir and show a
-      non-blocking update bubble in the top-right corner.
-    """
-    if not HAS_COCOA:
-        return
-
-    def _delayed_check():
-        try:
-            time.sleep(STARTUP_UPDATE_DELAY)
-            if not _should_check_update():
-                return
-            remote = _fetch_latest_version()
-            if not remote:
-                # Network failure: do NOT consume the 7-day interval — the
-                # next launch retries (one lightweight request is cheap).
-                return
-            _mark_update_checked()
-            local = _get_current_version()
-            if _is_newer(remote, local):
-                _set_update_available(remote)
-            else:
-                _clear_update_available()
-        except Exception:
-            pass
-
-    threading.Thread(target=_delayed_check, daemon=True).start()
+    global _update_scheduler_started
+    with _update_state_init_lock:
+        if _update_scheduler_started or os.environ.get('MDPREVIEW_DISABLE_UPDATES'):
+            return
+        _update_scheduler_started = True
+    def scheduler():
+        _update_wakeup.wait(STARTUP_UPDATE_DELAY)
+        while not _QUIT_REQUESTED.is_set():
+            # 更新启动等待首屏回执后恢复调度。
+            _update_scheduler_resume.wait()
+            _update_wakeup.clear()
+            try:
+                _check_prepared_update()
+                if _should_check_update():
+                    _request_update(automatic=True)
+            except Exception:
+                logging.error('[update] stage=scheduler code=state-unavailable')
+            _update_wakeup.wait(60)
+    threading.Thread(target=scheduler, daemon=True, name='update-scheduler').start()
 
 
 def _manual_check_up_to_date():
@@ -4771,137 +4956,508 @@ def _try_set_default_handler():
 
 
 def _check_pending_install():
-    """On app launch, check if a staged update exists and show the bubble."""
-    if not HAS_COCOA or os.environ.get('MDPREVIEW_DISABLE_UPDATES'):
+    # 只结算旧事务，不改本进程已登记的正常退出安装。
+    with _update_install_lock:
+        if _pending_update_install is not None or _QUIT_REQUESTED.is_set() or _QUIT_APPROVED.is_set():
+            return
+        try:
+            blocked = _resolve_opportunistic_outcome()
+        except Exception:
+            blocked = True
+            _fatal_update('quit-gap-inconclusive')
+            logging.warning('[update] stage=startup code=quit-gap-detection-failed')
+        _broadcast_update()
+        state = _get_update_state().snapshot()
+    if blocked == 'pending' and not _auto_update_enabled():
+        # 自动更新关闭时原调度不发起任务；仅延迟结算，不下载、不准备或请求退出。
+        timer = threading.Timer(60, _check_pending_install)
+        timer.daemon = True
+        timer.start()
+    if not blocked and state.get('phase') == 'ready' and state.get('pending') and _auto_update_enabled():
+        _request_update(automatic=True, version=state['version'])
+    _update_wakeup.set()
+
+
+def _opportunistic_marker_path():
+    return os.path.join(UPDATE_PRIVATE_DIR, _update_state_name('opportunistic'))
+
+
+def _install_journal_path():
+    """与安装助手同一推导：目标包父目录下的 .mdPreview-install-<key>/journal.json。"""
+    from pathlib import Path
+    if not _STARTUP_BUNDLE_SNAPSHOT:
+        return None
+    destination = Path(os.path.abspath(_STARTUP_BUNDLE_SNAPSHOT['path']))
+    key = hashlib.sha256(destination.name.encode()).hexdigest()[:16]
+    return destination.parent / ('.mdPreview-install-' + key) / 'journal.json'
+
+
+def _resolve_opportunistic_outcome():
+    """持目标锁结算；活跃 helper 返回 pending，未知/中断事务保留证据并阻塞。"""
+    import fcntl
+    import stat
+    from pathlib import Path
+    from mdpreview_core.update_storage import private_directory, private_read
+    from mdpreview_core.release import check_startup_snapshot
+    try:
+        marker = private_read(_opportunistic_marker_path())
+    except FileNotFoundError:
         return
-    try:
-        cfg = load_config()
-        staging_app = cfg.get('pending_staging_app', '')
-        version = cfg.get('pending_update_version', '')
-        if staging_app and os.path.exists(staging_app):
-            local = _get_current_version()
-            if not _is_newer(version, local):
-                # Already updated — clean up staging
-                cfg.pop('pending_staging_app', None)
-                cfg.pop('pending_update_version', None)
-                update_config(remove=('pending_staging_app', 'pending_update_version', 'pending_update_dmg'))
-                if os.path.commonpath([os.path.realpath(staging_app), os.path.realpath(UPDATE_STAGING_DIR)]) == os.path.realpath(UPDATE_STAGING_DIR):
-                    shutil.rmtree(staging_app, ignore_errors=True)
-                return
-            # Show the update bubble (non-blocking)
-            global _available_update_version
-            _available_update_version = version
-            if _update_menu_item:
-                def _update_menu():
-                    try:
-                        _update_menu_item.setTitle_(_t('Update Available: {version}...', '有可用更新：{version}…').format(version=version))
-                    except Exception:
-                        pass
-                AppHelper.callAfter(_update_menu)
-            AppHelper.callAfter(lambda: _dispatch_js('showUpdateBubble()'))
-        else:
-            # Clean up stale config entries
-            if 'pending_staging_app' in cfg or 'pending_update_dmg' in cfg:
-                cfg.pop('pending_staging_app', None)
-                cfg.pop('pending_update_version', None)
-                cfg.pop('pending_update_dmg', None)
-                update_config(remove=('pending_staging_app', 'pending_update_version', 'pending_update_dmg'))
-    except Exception:
-        log_exception('pending update recovery failed')
-
-
-def _smoke_test_app(app_path, timeout=20):
-    import subprocess
-    process = None
-    try:
-        with tempfile.TemporaryDirectory(prefix='mdpreview-smoke-') as temporary:
-            marker = os.path.join(temporary, 'UpdateStaging', 'ready.json')
-            environment = dict(os.environ, MDPREVIEW_DATA_DIR=temporary, MDPREVIEW_DISABLE_UPDATES='1')
-            process = subprocess.Popen([os.path.join(app_path, 'Contents/MacOS/mdPreview'),
-                                        '--update-ready', marker], env=environment,
-                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            deadline = time.monotonic() + timeout
-            while time.monotonic() < deadline:
-                if process.poll() is not None:
-                    return False
-                if os.path.exists(marker):
-                    with open(marker) as stream:
-                        return json.load(stream).get('pid') == process.pid
-                time.sleep(0.1)
-            return False
-    except Exception:
-        log_exception('smoke test failed')
-        return False
-    finally:
-        if process and process.poll() is None:
-            process.terminate()
+    if (not isinstance(marker, dict) or set(marker) != {'schema', 'nonce', 'version', 'pid'}
+            or type(marker.get('schema')) is not int or marker['schema'] != 1
+            or type(marker.get('pid')) is not int or marker['pid'] <= 1):
+        _fatal_update('quit-gap-inconclusive')
+        return True
+    nonce, version = marker.get('nonce'), marker.get('version')
+    if (not isinstance(nonce, str) or not re.fullmatch(r'[a-f0-9]{32}', nonce)
+            or not isinstance(version, str) or len(version) > 32
+            or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?', version)):
+        _fatal_update('quit-gap-inconclusive')
+        return True
+    journal_path = _install_journal_path()
+    if journal_path is None:
+        _fatal_update('quit-gap-inconclusive')
+        return True
+    journal_path = Path(journal_path)
+    with private_directory(journal_path.parent) as directory:
+        # 不创建锁文件；必须是 helper 在原目标目录建立的同一个私有锁。
+        fd = os.open('lock', os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory)
+        try:
+            locked = os.fstat(fd)
+            named = os.stat('lock', dir_fd=directory, follow_symlinks=False)
+            if (not stat.S_ISREG(locked.st_mode) or locked.st_uid != os.getuid()
+                    or locked.st_nlink != 1 or stat.S_IMODE(locked.st_mode) & 0o077
+                    or (locked.st_dev, locked.st_ino) != (named.st_dev, named.st_ino)):
+                raise ValueError('install-lock-invalid')
             try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
-                process.wait()
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                # 不消耗安装重试预算；现有后台调度到期只重试结算，不发起新安装。
+                _broadcast_update(_get_update_state().change(
+                    phase='retrying', armedForQuit=False, error=None,
+                    code='quit-gap-settlement-pending', stage='quit_gap_install',
+                    retryable=False, http=None, attempts=0, nextRetryAt=time.time() + 60, detail=''))
+                return 'pending'
+            named = os.stat('lock', dir_fd=directory, follow_symlinks=False)
+            root, opened_root = journal_path.parent.stat(), os.fstat(directory)
+            if ((locked.st_dev, locked.st_ino) != (named.st_dev, named.st_ino)
+                    or (root.st_dev, root.st_ino) != (opened_root.st_dev, opened_root.st_ino)):
+                raise ValueError('transaction-lock-changed')
+            journal = private_read(journal_path)
+            fields = {'schema', 'nonce', 'state', 'destination', 'previous', 'prepared',
+                      'rejected', 'oldIdentity', 'newIdentity'}
+            destination = _STARTUP_BUNDLE_SNAPSHOT['path']
+            if (not isinstance(journal, dict) or set(journal) != fields
+                    or type(journal.get('schema')) is not int or journal['schema'] != 1
+                    or journal.get('nonce') != nonce or journal.get('destination') != destination
+                    or any(journal.get(key) != str(journal_path.parent / nonce / name)
+                           for key, name in (('previous', 'previous.app'), ('prepared', 'prepared.app'),
+                                             ('rejected', 'rejected.app')))):
+                _fatal_update('quit-gap-inconclusive')
+                return True
+            status = journal['state']
+            if status in ('exchanging', 'exchanged', 'rollback-exchanging', 'launching'):
+                # Atomic exchange leaves a complete old or new bundle at the public path.
+                # Classify by inode, not by the last journal write before a crash.
+                def matches(identity):
+                    if not isinstance(identity, dict):
+                        return False
+                    return all(identity.get(key) == _STARTUP_BUNDLE_SNAPSHOT.get(key)
+                               for key in ('device', 'inode', 'executableDevice', 'executableInode'))
+                if matches(journal.get('newIdentity')):
+                    status = 'ready'
+                elif matches(journal.get('oldIdentity')):
+                    if status == 'exchanging':
+                        from scripts.install_update import _cancel_unreplaced_transaction
+                        journal = _cancel_unreplaced_transaction(
+                            journal_path, journal, _STARTUP_BUNDLE_SNAPSHOT, fd,
+                            (opened_root.st_dev, opened_root.st_ino), _publisher_team_id(), nonce)
+                        status = journal['state']
+                    elif status == 'rollback-exchanging':
+                        status = 'rolled-back'
+            if status not in ('ready', 'rolled-back', 'cancelled', 'preparing', 'prepared', 'armed'):
+                # moving-old 及之后或未知阶段均不能证明未替换，保留材料人工检查。
+                _fatal_update('quit-gap-inconclusive')
+                return True
+            identity = journal.get('newIdentity' if status == 'ready' else 'oldIdentity')
+            old = journal.get('oldIdentity')
+            try:
+                keys = {'path', 'device', 'inode', 'parentDevice', 'parentInode',
+                        'executableDevice', 'executableInode', 'version'}
+                for value in (identity, old):
+                    if (not isinstance(value, dict) or set(value) != keys
+                            or any(type(value[key]) is not int or value[key] < 0
+                                   for key in keys - {'path', 'version'})):
+                        raise ValueError('transaction-identity-invalid')
+                expected_version = version if status == 'ready' else old['version']
+                if (old['path'] != destination or _get_current_version() != expected_version
+                        or identity['version'] != expected_version
+                        or identity['path'] != (journal['prepared'] if status == 'ready' else destination)):
+                    raise ValueError('transaction-identity-mismatch')
+                # prepared 改名后 inode 不变，路径及父目录身份改用原安装目标。
+                expected = dict(identity, path=destination, parentDevice=old['parentDevice'],
+                                parentInode=old['parentInode'])
+                expected.pop('version')
+                if expected != _STARTUP_BUNDLE_SNAPSHOT:
+                    raise ValueError('running-identity-mismatch')
+                check_startup_snapshot(destination, expected)
+                if verify_bundle(destination, _publisher_team_id(), expected_version) != expected_version:
+                    raise ValueError('running-version-mismatch')
+                check_startup_snapshot(destination, expected)
+            except Exception:
+                _fatal_update('quit-gap-version-unverified')
+                return True
+            if status in ('preparing', 'prepared', 'armed'):
+                from scripts.install_update import _cancel_unreplaced_transaction
+                journal = _cancel_unreplaced_transaction(
+                    journal_path, journal, _STARTUP_BUNDLE_SNAPSHOT, fd,
+                    (opened_root.st_dev, opened_root.st_ino), _publisher_team_id(), nonce)
+                status = journal['state']
+            elif status in ('ready', 'rolled-back') and journal['state'] != status:
+                from scripts.install_update import _settle_exchanged_transaction
+                _settle_exchanged_transaction(journal_path, journal, status, expected, fd,
+                                             (opened_root.st_dev, opened_root.st_ino))
+            if status == 'ready':
+                _update_change(phase='idle', version=None, pending=None, error=None, nextRetryAt=None,
+                               retryCount=0, armedForQuit=False, code=None, retryable=False,
+                               detail=_t('Updated to mdPreview {version}.', '已更新到 mdPreview {version}。').format(version=version))
+                update_config(remove=('pending_staging_app', 'pending_update_version', 'pending_update_dmg'))
+            else:
+                info = {'error': 'unknown', 'stage': 'quit_gap_install', 'code': 'quit-gap-install-failed',
+                        'http': None, 'retryable': True, 'attempts': 0,
+                        'detail': _t('The update could not be installed while quitting. The previous version is unchanged; a retry is scheduled.',
+                                     '退出时未能完成更新安装，旧版本保持不变，将按计划重试。')}
+                _broadcast_update(_get_update_state().failure(info))
+            _remove_private_file(_opportunistic_marker_path())
+            logging.info('[update] stage=startup code=quit-gap-settled')
+        finally:
+            os.close(fd)
 
 
-def _perform_auto_install():
-    global _pending_install_plan
-    import subprocess
+def _remove_private_file(path):
+    from pathlib import Path
+    from mdpreview_core.update_storage import private_directory
+    path = Path(os.path.abspath(path))
     try:
-        cfg = load_config()
-        staged = cfg.get('pending_staging_app')
-        version = cfg.get('pending_update_version')
-        if not staged or os.path.commonpath([os.path.realpath(staged), os.path.realpath(UPDATE_STAGING_DIR)]) != os.path.realpath(UPDATE_STAGING_DIR):
-            raise ValueError('No trusted staged application')
-        from pathlib import Path
-        from mdpreview_core.release_zip import extract_verified
-        signed_job = Path(staged).parent.parent
-        archives = list(signed_job.glob('mdPreview-*.zip'))
+        with private_directory(path.parent) as directory:
+            os.unlink(path.name, dir_fd=directory)
+    except FileNotFoundError:
+        pass
+
+
+def _verify_pending_update(pending, extract=True):
+    from pathlib import Path
+    from mdpreview_core.release_zip import extract_verified
+    from mdpreview_core.update_storage import private_directory
+    version = pending.get('version')
+    if not _staged_version_acceptable(version, _get_current_version()):
+        raise ValueError('update-downgrade-refused')
+    root = Path(os.path.abspath(UPDATE_STAGING_DIR))
+    staged = Path(pending['staging_app'])
+    job = staged.parent.parent
+    if 'archive' in pending:
+        archive = Path(pending['archive'])
+        job = archive.parent
+    else:
+        if not job.is_relative_to(root) or job == root or job.resolve() != job:
+            raise ValueError('unsafe-staging-path')
+        with private_directory(job):
+            archives = list(job.glob('mdPreview-*.zip'))
         if len(archives) != 1:
             raise ValueError('signed-archive-required')
         archive = archives[0]
-        manifest, signature = signed_job / 'SHA256SUMS', signed_job / 'SHA256SUMS.sig'
-        staged = str(extract_verified(archive, manifest, signature,
-                                      signed_job / ('install-' + uuid.uuid4().hex)))
-        team_id = _publisher_team_id()
-        verify_bundle(staged, team_id, version)
-        if not _smoke_test_app(staged):
-            raise RuntimeError('Update did not reach a ready UI')
-        if not getattr(sys, 'frozen', False):
-            raise ValueError('update-requires-running-bundle')
-        from mdpreview_core.release import installation_identity, check_startup_snapshot
-        if _STARTUP_BUNDLE_SNAPSHOT is None:
-            raise ValueError('startup-identity-unavailable-restart-required')
+    if not job.is_relative_to(root) or job == root or job.resolve() != job:
+        raise ValueError('unsafe-staging-path')
+    manifest = Path(pending.get('manifest', job / 'SHA256SUMS'))
+    signature = Path(pending.get('signature', job / 'SHA256SUMS.sig'))
+    with private_directory(job):
+        for asset in (archive, manifest, signature):
+            if asset.parent != job or asset.is_symlink() or not asset.is_file() or asset.stat().st_nlink != 1:
+                raise ValueError('unsafe-staging-path')
+        if extract:
+            verified = extract_verified(archive, manifest, signature, job / ('recheck-' + uuid.uuid4().hex))
+        else:
+            from mdpreview_core.release_sig import signed_digest
+            import hmac
+            expected = signed_digest(manifest.read_bytes(), signature.read_bytes(), archive.name)
+            digest = hashlib.sha256()
+            with archive.open('rb') as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b''):
+                    digest.update(chunk)
+            if not hmac.compare_digest(expected, digest.hexdigest()):
+                raise ValueError('signed-digest-mismatch')
+            if not staged.is_relative_to(job) or staged.resolve() != staged:
+                raise ValueError('unsafe-staging-path')
+            verified = staged
+    verify_bundle(verified, _publisher_team_id(), version)
+    return dict(pending, staging_app=str(verified), archive=str(archive), manifest=str(manifest), signature=str(signature))
+
+
+def _fatal_update(code):
+    """同意路径上的永久性不可安装条件：进入 failed，低频重新发现新版本，不再对同包重试。"""
+    messages = {
+        'update-requires-running-bundle': ('Automatic installation is only available in a verified application bundle.', '仅已验证的应用包支持自动安装，源码运行不会安装更新。'),
+        'helper-handshake-unavailable': ('The current installer does not support normal-quit installation. The current app remains open.', '当前安装助手不支持正常退出安装，当前应用继续运行。'),
+        'quit-gap-version-unverified': ('The installation record conflicts with the running version. Evidence is preserved; installation is blocked.', '安装记录与运行版本冲突，已保留证据并阻止再次安装。'),
+        'quit-gap-inconclusive': ('The previous installation is unresolved. Evidence is preserved; installation is blocked.', '上次安装结果尚未确定，已保留证据并阻止再次安装。'),
+    }
+    detail = _t(*messages.get(code, ('Local update processing failed. The current application is unchanged.', '更新本地处理失败，当前应用未更改。')))
+    logging.info('[update] stage=prepare code=%s', code)
+    info = {'error': 'unknown', 'stage': 'prepare', 'code': code, 'http': None,
+            'retryable': False, 'attempts': 0, 'detail': detail}
+    _broadcast_update(_get_update_state().failure(info))
+    return {'success': False, 'error': code, 'detail': detail}
+
+
+def _approve_update():
+    """立即安装仍须通过原有保存、取消和逐窗退出确认。"""
+    global _update_relaunch_requested
+    if os.environ.get('MDPREVIEW_DISABLE_UPDATES'):
+        return {'success': False, 'error': 'auto-update-disabled'}
+    state = _get_update_state().snapshot()
+    if state.get('phase') != 'ready' or not state.get('pending'):
+        return {'success': False, 'error': 'update-not-ready', 'state': _get_update_state().snapshot(public=True)}
+    if state.get('code') in ('quit-gap-version-unverified', 'quit-gap-inconclusive'):
+        return {'success': False, 'error': state['code']}
+    with _update_install_lock:
+        _update_relaunch_requested = True
+        prepared = _pending_update_install
+        available = (prepared and prepared['plan']['version'] == state['version']
+                     and prepared['process'].poll() is None)
+        if available:
+            _update_cancel.clear()
+    if available:
+        _update_change(automatic=False, retryCount=0, deferCount=0, nextRetryAt=None)
+        AppHelper.callAfter(_begin_prepared_update_quit)
+        return {'success': True, 'started': True}
+    # 若下载 worker 正在准备 helper，加入该任务；完成后才请求正常退出。
+    return _request_update(automatic=False, version=state['version'], retry=True)
+
+
+def _check_prepared_update():
+    """现有后台调度检查失活；不等待进程，也不触碰文档退出确认。"""
+    global _pending_update_install
+    if not _update_job_lock.acquire(blocking=False):
+        return
+    try:
+        with _update_install_lock:
+            prepared = _pending_update_install
+            if _QUIT_APPROVED.is_set() or _QUIT_REQUESTED.is_set():
+                return
+            if not prepared and not _update_relaunch_requested:
+                return
+            state = _get_update_state().snapshot()
+            code, retryable = None, True
+            if _update_cancel.is_set():
+                code, retryable = 'helper-preflight-cancelled', False
+            elif (prepared and (state.get('version') != prepared['plan']['version']
+                  or (state.get('pending') or {}).get('version') != prepared['plan']['version'])):
+                code, retryable = 'helper-preflight-version-mismatch', False
+            elif not prepared or prepared['process'].poll() is not None:
+                code = 'helper-preflight-dead'
+            elif (state.get('phase') not in ('ready', 'preparing') or not state.get('armedForQuit')
+                  or (state['phase'] == 'preparing' and not prepared['relaunch']
+                      and not _quit_confirmation_active)):
+                code = 'helper-preflight-state-changed'
+            if code:
+                _cancel_update_relaunch()
+                _pending_update_install = None
+                if prepared and prepared['process'].poll() is None:
+                    from mdpreview_core.update_storage import private_write
+                    try:
+                        private_write(prepared['plan']['abort'],
+                                      {'nonce': prepared['plan']['transactionNonce'], 'success': False})
+                    except Exception:
+                        logging.error('[update] stage=abort code=receipt-write-failed')
+                if state.get('phase') in ('failed', 'retrying'):
+                    _broadcast_update()
+                    return
+                from mdpreview_core.update_download import DownloadError
+                info = _update_error(DownloadError('install_preflight', code, 'unknown', retryable=retryable))
+                _broadcast_update(_get_update_state().failure(info))
+            elif _update_relaunch_requested and state['phase'] == 'ready':
+                AppHelper.callAfter(_begin_prepared_update_quit)
+    finally:
+        _update_job_lock.release()
+
+
+def _begin_prepared_update_quit():
+    if not _update_install_lock.acquire(blocking=False):
+        _update_wakeup.set()
+        return
+    try:
+        prepared = _pending_update_install
+        if _QUIT_APPROVED.is_set() or _QUIT_REQUESTED.is_set():
+            _cancel_update_relaunch()
+            return
+        if not _update_relaunch_requested:
+            return
+        if not _update_state_store.lock.acquire(blocking=False):
+            _update_wakeup.set()
+            return
+        try:
+            state = dict(_update_state_store.value)
+        finally:
+            _update_state_store.lock.release()
+        if (not prepared or prepared['process'].poll() is not None or _update_cancel.is_set()
+                or state.get('phase') != 'ready' or not state.get('armedForQuit')
+                or state.get('version') != prepared['plan']['version']
+                or (state.get('pending') or {}).get('version') != prepared['plan']['version']):
+            _update_wakeup.set()
+            return
+        prepared['relaunch'] = True
+    finally:
+        _update_install_lock.release()
+    _update_change(phase='preparing', detail='', error=None)
+    _begin_quit_confirmation()
+
+
+def _cancel_update_relaunch():
+    global _update_relaunch_requested
+    with _update_install_lock:
+        _update_relaunch_requested = False
+        if _pending_update_install:
+            _pending_update_install['relaunch'] = False
+
+
+def _decline_update():
+    _cancel_update_relaunch()
+    store = _get_update_state()
+    state = store.snapshot()
+    if state.get('phase') != 'ready' or not state.get('pending'):
+        return {'success': False, 'error': 'update-not-ready', 'state': store.snapshot(public=True)}
+    detail = _t('The update is ready and will finish the next time you quit mdPreview.',
+                '更新已就绪，将在下次退出 mdPreview 时完成安装。')
+    updated = _update_change(armedForQuit=True, detail=detail, error=None, nextRetryAt=None)
+    return {'success': True, 'state': updated}
+
+
+def _prepare_update_install(pending):
+    """后台只准备安装事务，收到 armed 后登记；不读取或修改文档窗口。"""
+    global _pending_update_install
+    from pathlib import Path
+    from mdpreview_core.update_storage import private_read, private_write
+    from mdpreview_core.release import installation_identity, check_startup_snapshot
+    from mdpreview_core.update_download import DownloadError
+    import subprocess
+    token, plan, registered = uuid.uuid4().hex, None, False
+    try:
+        if not HAS_COCOA or not getattr(sys, 'frozen', False) or _STARTUP_BUNDLE_SNAPSHOT is None:
+            return _fatal_update('update-requires-running-bundle')
+        with _update_install_lock:
+            previous = _pending_update_install
+            if (previous and previous['plan']['version'] == pending['version']
+                    and previous['process'].poll() is None):
+                return {'success': True}
+            _pending_update_install = None
+        if previous:
+            private_write(previous['plan']['abort'], {'nonce': previous['plan']['transactionNonce'], 'success': False})
+        pending = _verify_pending_update(pending, extract=False)
         destination = Path(_STARTUP_BUNDLE_SNAPSHOT['path'])
+        executable = str(Path(sys.executable).resolve())
+        if Path(executable) != destination / 'Contents/MacOS/mdPreview':
+            raise ValueError('update-requires-running-bundle')
         check_startup_snapshot(destination, _STARTUP_BUNDLE_SNAPSHOT)
-        destination_identity = installation_identity(destination)
+        team_id = _publisher_team_id()
+        verify_bundle(destination, team_id, _get_current_version())
+        identity = installation_identity(destination)
         check_startup_snapshot(destination, _STARTUP_BUNDLE_SNAPSHOT)
-        if destination_identity['version'] != _get_current_version():
+        if identity['version'] != _get_current_version():
             raise ValueError('running-bundle-version-mismatch')
-        job = os.path.dirname(staged)
-        plan = {'pid': os.getpid(), 'staging': staged, 'destination': str(destination),
-                'destinationIdentity': destination_identity,
-                'startupIdentity': dict(_STARTUP_BUNDLE_SNAPSHOT),
-                'teamId': team_id, 'version': version,
-                'archive': str(archive), 'manifest': str(manifest), 'signature': str(signature),
-                'ready': os.path.join(UPDATE_STAGING_DIR, 'install-ready.json'),
-                'log': os.path.join(UPDATE_STAGING_DIR, 'install.log')}
-        plan_path = os.path.join(job, 'install-plan.json')
-        _safe_write_text(plan_path, json.dumps(plan))
-        def launch_helper():
-            check_startup_snapshot(destination, _STARTUP_BUNDLE_SNAPSHOT)
-            subprocess.Popen([os.path.join(staged, 'Contents/MacOS/mdPreview'),
-                              '--install-update-helper', '--plan', plan_path],
-                             start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            update_config(remove=('pending_staging_app', 'pending_update_version', 'pending_update_dmg'))
-        _pending_install_plan = launch_helper
-        AppHelper.callAfter(_begin_quit_confirmation)
+        # 执行当前已签名运行副本的 helper，不依赖目标旧版 helper 能力。
+        try:
+            probe = subprocess.run([executable, '--install-update-helper', '--capabilities'],
+                                   capture_output=True, timeout=10, check=False)
+        except subprocess.TimeoutExpired:
+            raise DownloadError('install_preflight', 'helper-preflight-timeout', 'unknown', retryable=True) from None
+        capabilities = json.loads(probe.stdout) if probe.returncode == 0 else {}
+        if capabilities.get('protocol') != 2 or capabilities.get('normalQuit') != 1:
+            return _fatal_update('helper-handshake-unavailable')
+        directory = Path(UPDATE_PRIVATE_DIR) / 'install' / token
+        plan = {'protocol': 2, 'normalQuit': 1, 'transactionNonce': token, 'pid': os.getpid(),
+                'destination': str(destination), 'startupIdentity': dict(_STARTUP_BUNDLE_SNAPSHOT),
+                'destinationIdentity': identity, 'archive': pending['archive'],
+                'manifest': pending['manifest'], 'signature': pending['signature'],
+                'staging': pending['staging_app'], 'version': pending['version'], 'teamId': team_id,
+                'ready': str(directory / 'ready.json'), 'armed': str(directory / 'armed.json'),
+                'commit': str(directory / 'commit.json'), 'abort': str(directory / 'abort.json'),
+                'log': str(directory / 'install.log')}
+        plan_path = directory / 'install-plan.json'
+        private_write(plan_path, plan)
+        check_startup_snapshot(destination, _STARTUP_BUNDLE_SNAPSHOT)
+        process = subprocess.Popen([executable, '--install-update-helper', '--plan', str(plan_path)],
+                                   start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        deadline = time.monotonic() + 45
+        while True:
+            if _update_cancel.is_set() or _QUIT_REQUESTED.is_set() or _QUIT_APPROVED.is_set():
+                raise DownloadError('install_preflight', 'helper-preflight-cancelled', 'unknown')
+            if process.poll() is not None:
+                raise DownloadError('install_preflight', 'helper-preflight-dead', 'unknown', retryable=True)
+            try:
+                armed = private_read(plan['armed'])
+                if _update_cancel.is_set() or _QUIT_REQUESTED.is_set() or _QUIT_APPROVED.is_set():
+                    raise DownloadError('install_preflight', 'helper-preflight-cancelled', 'unknown')
+                if (not isinstance(armed, dict) or armed.get('nonce') != token
+                        or armed.get('success') is not True or armed.get('pid') != process.pid):
+                    raise ValueError('helper-preflight-failed')
+                break
+            except FileNotFoundError:
+                if time.monotonic() >= deadline:
+                    raise DownloadError('install_preflight', 'helper-preflight-timeout', 'unknown', retryable=True)
+                _update_cancel.wait(0.2)
+        private_write(_opportunistic_marker_path(),
+                      {'schema': 1, 'nonce': token, 'version': pending['version'], 'pid': os.getpid()})
+        with _update_install_lock:
+            if _QUIT_APPROVED.is_set() or _QUIT_REQUESTED.is_set() or _update_cancel.is_set():
+                raise DownloadError('install_preflight', 'helper-preflight-cancelled', 'unknown')
+            if process.poll() is not None:
+                raise DownloadError('install_preflight', 'helper-preflight-dead', 'unknown', retryable=True)
+            _pending_update_install = {'plan': plan, 'process': process, 'relaunch': False}
+            registered = True
         return {'success': True}
-    except Exception as exc:
-        log_exception('auto install failed')
-        return {'success': False, 'error': str(exc), 'manual_install': True,
-                'manual_dmg_path': load_config().get('pending_update_dmg', '')}
+    except Exception as error:
+        _cancel_update_relaunch()
+        _broadcast_update(_get_update_state().failure(_update_error(error, 'install_preflight')))
+        return {'success': False, 'error': 'install-preflight-failed'}
+    finally:
+        if plan and not registered:
+            try:
+                private_write(plan['abort'], {'nonce': token, 'success': False})
+            except Exception:
+                logging.error('[update] stage=abort code=receipt-write-failed')
 
 
-
+def _commit_prepared_update_on_quit():
+    """原退出确认全部完成后，仅检查内存事务并写提交回执；失败不阻塞退出。"""
+    if not _update_install_lock.acquire(blocking=False):
+        return False
+    try:
+        if not _quit_confirmation_active or _quit_confirmation_queue:
+            return False
+        prepared = _pending_update_install
+        if not prepared or prepared['process'].poll() is not None or _update_cancel.is_set():
+            return False
+        plan = prepared['plan']
+        if not _update_state_store.lock.acquire(blocking=False):
+            return False
+        try:
+            state = dict(_update_state_store.value)
+        finally:
+            _update_state_store.lock.release()
+        if (state.get('phase') not in ('ready', 'preparing') or state.get('armedForQuit') is not True
+                or state.get('version') != plan['version']
+                or (state.get('pending') or {}).get('version') != plan['version']
+                or not _staged_version_acceptable(plan['version'], plan['destinationIdentity']['version'])):
+            return False
+        from mdpreview_core.update_storage import private_write
+        private_write(plan['commit'], {'nonce': plan['transactionNonce'], 'pid': os.getpid(),
+                                      'success': True, 'relaunch': bool(prepared['relaunch'])})
+        return True
+    except Exception:
+        logging.warning('[update] stage=quit code=commit-failed')
+        return False
+    finally:
+        _update_install_lock.release()
 
 
 _QUIT_APPROVED = threading.Event()
@@ -4965,21 +5521,13 @@ def _advance_quit_confirmation():
         _quit_ack_timer.start()
         _dispatch_js_to(api.window, 'confirmQuitDocument()')
     else:
-        global _pending_install_plan
-        if _pending_install_plan:
-            try:
-                _pending_install_plan()
-            except Exception:
-                log_exception('update helper launch failed')
-                _cancel_quit_confirmation()
-                return
-            _pending_install_plan = None
+        _commit_prepared_update_on_quit()
         _QUIT_APPROVED.set()
         AppHelper.callAfter(lambda: NSApplication.sharedApplication().terminate_(None))
 
 
 def _finish_quit_confirmation(api, approved):
-    global _quit_confirmation_active, _pending_install_plan
+    global _quit_confirmation_active
     if not _quit_confirmation_queue or _quit_confirmation_queue[0] is not api:
         return
     _cancel_quit_ack()
@@ -4991,7 +5539,6 @@ def _finish_quit_confirmation(api, approved):
 
 
 _update_download_lock = threading.Lock()
-_pending_install_plan = None
 
 
 def _publisher_team_id():
@@ -5013,14 +5560,19 @@ def _download_and_extract(version, progress_callback=None, keep_dmg=False):
 
 
 def _cancel_quit_confirmation():
-    global _quit_confirmation_active, _pending_install_plan
+    global _quit_confirmation_active
     _cancel_quit_ack()
     _quit_confirmation_queue.clear()
     _quit_confirmation_active = False
-    _pending_install_plan = None
+    _cancel_update_relaunch()
     _QUIT_APPROVED.clear()
     for api in _window_apis.values():
         _dispatch_js_to(api.window, 'setQuitFrozen(false)')
+    try:
+        if _update_state_store and _update_state_store.snapshot()['phase'] == 'preparing':
+            _update_change(phase='ready', error='cancelled', code='quit-cancelled', detail='')
+    except Exception:
+        logging.warning('[update] stage=quit code=feedback-failed')
 
 
 if __name__ == '__main__':

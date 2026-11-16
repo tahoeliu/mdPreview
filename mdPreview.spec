@@ -139,6 +139,7 @@ app = BUNDLE(
         'CFBundleDisplayName': 'mdPreview',
         'CFBundleShortVersionString': SHORT_VERSION,
         'CFBundleVersion': SHORT_VERSION,
+        'MDPreviewRuntimeLease': 1,
         'LSMinimumSystemVersion': '13.0',
         'NSHighResolutionCapable': True,
         'NSAppTransportSecurity': {

@@ -641,10 +641,7 @@ var {
     closePromptVisible = false;
     if (modalPreviousFocus && modalPreviousFocus.isConnected) modalPreviousFocus.focus();
   }
-  document.getElementById('updateBubble').addEventListener('click',event=>{if(!event.target.closest('.update-bubble-close'))installUpdate();});
-  document.querySelector('.update-bubble-body').setAttribute('role','button');
-  document.querySelector('.update-bubble-body').tabIndex=0;
-  document.querySelector('.update-bubble-body').addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();installUpdate();}else if(event.key==='Escape'){dismissUpdateBubble(event);document.getElementById(isSource?'textarea':'content').focus();}});
+  document.getElementById('updateBubble').addEventListener('keydown',event=>{if(event.key==='Escape'){dismissUpdateBubble(event);document.getElementById(isSource?'textarea':'content').focus();}});
   document.querySelector('.update-bubble-close').addEventListener('click',event=>dismissUpdateBubble(event));
   // While the rest of a long document is still being drawn, the page is read-only so nothing can be saved half-finished.
   ['beforeinput','paste','cut','drop'].forEach(type=>document.getElementById('content').addEventListener(type,event=>{if(window.__mdPartialRender)event.preventDefault();},true));
@@ -818,6 +815,7 @@ var {
     }
     if (draftRecovered) showDraftRecoveredBanner();
     if (meta.externalConflict) showStatus(t('The original file changed after this draft. Saving will ask how to resolve it.', '原文件在草稿之后发生变化，保存时将询问如何处理。'), true);
+    void refreshUpdateState();
     if (Bridge.ready()) Bridge.callSafe('startup_ready', Math.round(performance.now() - _jsT0));
     // Preload turndown.js in background (non-blocking) so it's ready
     // when the user first toggles to source mode.
@@ -1218,6 +1216,7 @@ var {
   clearTimeout,
   t: (...args) => t(...args),
   normalizeCodeLanguage: (...args) => normalizeCodeLanguage(...args),
+  renderUpdateFeedback: () => renderUpdateFeedback(),
   state: {
     get statusTimer() { return statusTimer; },
     set statusTimer(value) { statusTimer = value; },
@@ -1235,15 +1234,10 @@ var {
 var {
   setUpdateBubbleText, setUpdateProgress, showUpdateBubble, showUpdateDownloadProgress, 
   showUpdateDownloadFailed, showManualInstallGuide, dismissUpdateBubble, installUpdate,
+  updateFeedbackState, refreshUpdateState, renderUpdateFeedback,
 } = UpdateFeedback.create({
   document,
   t: (...args) => t(...args),
-  showStatus: (...args) => showStatus(...args),
-  pushContentToPython: (...args) => pushContentToPython(...args),
-  state: {
-    get isDirty() { return isDirty; },
-    set isDirty(value) { isDirty = value; },
-  },
   get Bridge() { return Bridge; }
 });
 
@@ -1430,7 +1424,9 @@ var {
   window.addEventListener('resize', handleTocResize);
   keepAliveTimer = setInterval(() => { if (!closing && isSource) pushContentToPython(false); }, 5000);
 
+  window.addEventListener('focus', () => { void refreshUpdateState(); });
   window.addEventListener('pywebviewready', () => {
+    void refreshUpdateState();
     Bridge.call('get_initial_content').then((data) => data.headless ? runHeadlessExport(data) : loadContent(data.path, data.content, data.pageWidth, data.draftRecovered, data.isZh, data));
   });
 

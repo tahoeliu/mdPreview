@@ -2,6 +2,24 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.9] - 2026-11-16
+
+### Improved
+- **Updates install themselves more quietly and more safely.** A new version is downloaded and checked in the background. When it is ready you can choose **Update now**, or just keep working: it is then installed the next time you quit, in about a second, without reopening the app.
+- **A simpler update note.** One line — "Update 2.0.9 is ready." — with **Later** and **Update now**, in the same style as the other bars at the top of the window.
+- **Your app is never left half-updated.** The new version is swapped in as one step, the previous version is kept as a backup, and if the new version cannot start, the previous one is put back.
+- **The new version is test-run before it replaces the current one.** If it cannot open a document, nothing is installed.
+- **Unsaved work is always asked about first.** Updating uses the normal quit questions; if you cancel, the update waits.
+- **A download that turns out to be damaged is fetched again** instead of being retried forever.
+- **Clearer messages when an update cannot be installed**, in all eight languages, with a Retry button only when retrying can help.
+
+### Fixed
+- If the app crashes or is force-quit while an update is waiting, nothing is installed; the update is prepared again the next time you open the app.
+- Two copies of mdPreview in different folders no longer mix up each other's pending update.
+- Help → Export Diagnostics now includes the state of the updater (status codes only — never file paths or document text).
+
+Updating from 2.0.8 works as before: choose to install, and mdPreview restarts into 2.0.9.
+
 ## [2.0.8] - 2026-11-11
 
 ### Improved
