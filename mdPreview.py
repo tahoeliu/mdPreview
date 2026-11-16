@@ -5619,4 +5619,12 @@ def _cancel_quit_confirmation():
 
 
 if __name__ == '__main__':
+    if '--update-check-selftest' in sys.argv:
+        # Release gate: look up the latest version over the real network, without opening a window.
+        try:
+            print(json.dumps({'latest': _fetch_latest_version()}))
+            sys.exit(0)
+        except Exception as error:
+            print(json.dumps({'error': type(error).__name__, 'code': str(error)[:80]}))
+            sys.exit(1)
     main()
