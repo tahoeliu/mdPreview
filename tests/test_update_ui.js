@@ -118,7 +118,8 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   const calls = [];
   const bridgeCall = window.Bridge.call;
   window.Bridge.call = (name, ...args) => {
-    calls.push({ name, args });
+    // 窗口获得/失去焦点后会延时采样标题栏颜色，与更新交互无关；在慢机器上它会落进计数窗口。
+    if (name !== 'get_chrome_color') calls.push({ name, args });
     return bridgeCall(name, ...args);
   };
   let backendState;
