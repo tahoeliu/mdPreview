@@ -19,7 +19,9 @@ import types
 import unittest
 from unittest.mock import Mock, patch
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
+SCRATCH = ROOT / 'WorkSpace' / 'test-scratch'
+SCRATCH.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(ROOT))
 from mdpreview_core import release
 from mdpreview_core.update_state import UpdateState, RETRY_DELAYS
@@ -28,7 +30,7 @@ from scripts import install_update as helper
 
 SOURCE = (ROOT / 'mdPreview.py').read_text()
 NODES = {node.name: node for node in ast.parse(SOURCE).body if isinstance(node, ast.FunctionDef)}
-ARTIFACTS = Path(tempfile.mkdtemp(prefix='interrupted-run-', dir=Path(__file__).parent)).resolve()
+ARTIFACTS = Path(tempfile.mkdtemp(prefix='interrupted-run-', dir=SCRATCH)).resolve()
 
 
 class InterruptedTests(unittest.TestCase):

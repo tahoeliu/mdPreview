@@ -31,16 +31,7 @@ environment = dict(os.environ, PYTHONDONTWRITEBYTECODE='1', PYTHONPATH=str(root)
                    PYTEST_ADDOPTS=f'-o cache_dir={run / "pytest"}',
                    RUFF_CACHE_DIR=str(run / 'ruff'))
 failed = False
-# 工作区仅纳入当前有效套件；禁止自动发现已废弃的 checkpoint 测试。
-tests = [*sorted((root / 'tests').glob('test_*.py')),
-         *(workspace / 'tests' / name for name in (
-             'test_update_state_storage.py',
-             'test_update_download_resilience.py',
-             'test_update_download_recovery.py',
-             'test_install_normal_quit.py',
-             'test_update_normal_quit.py',
-             'test_update_interrupted.py',
-         ))]
+tests = sorted((root / 'tests').glob('test_*.py'))
 for test in tests:
     # 中断恢复包含两端真实文件/签名故障注入，实测约534秒；仅此套件扩展预算。
     timeout = 600 if test.name == 'test_update_interrupted.py' else 300

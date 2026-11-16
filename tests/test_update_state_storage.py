@@ -14,7 +14,9 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
+SCRATCH = ROOT / 'WorkSpace' / 'test-scratch'
+SCRATCH.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(ROOT))
 from mdpreview_core import update_state, update_storage
 
@@ -22,7 +24,7 @@ from mdpreview_core import update_state, update_storage
 class RetainedFiles(unittest.TestCase):
     def setUp(self):
         self.root = Path(tempfile.mkdtemp(
-            prefix=f'state-storage-{self._testMethodName}-', dir=ROOT / 'WorkSpace/tests')).resolve()
+            prefix=f'state-storage-{self._testMethodName}-', dir=SCRATCH)).resolve()
         self.path = self.root / 'state.json'
 
     def raw_file(self, path, raw):

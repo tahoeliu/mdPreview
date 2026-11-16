@@ -14,18 +14,37 @@ Distribution is GitHub Releases with an **ad-hoc code signature** (no Apple Deve
 ## Cutting a release
 
 1. Bump the version in `VERSION`, `Info.plist` (both keys) and `package.json`/`package-lock.json`; write the section `## [X.Y.Z] - date` in `CHANGELOG.md` (the release notes are extracted from it).
-2. Build and verify locally on an Apple Silicon Mac:
+2. Review what is about to be published (see [What belongs in the repository](#what-belongs-in-the-repository)): list the files added since the last release and make sure each one belongs on GitHub.
+   ```bash
+   git diff --stat --diff-filter=A "$(git describe --tags --abbrev=0)" HEAD
+   ```
+3. Build and verify locally on an Apple Silicon Mac:
    ```bash
    scripts/build_dmg.sh
    MDPREVIEW_VERIFY_APP="$PWD/WorkSpace/dist/release-$(cat VERSION)/mdPreview.app" MDPREVIEW_VERIFY_ARCH=arm64 scripts/verify-all.sh
    ```
    It runs the static and supply-chain checks, every test suite, the native acceptance scripts (headless export of all formats, native self-test, the signed-update pipeline on the real bundle), the cold-start measurement, and the performance and accessibility budgets. It never installs or publishes.
-3. Commit, then tag with exactly `v` + the contents of `VERSION` and push the tag:
+4. Commit, then tag with exactly `v` + the contents of `VERSION` and push the tag:
    ```bash
    git tag "v$(cat VERSION)" && git push origin "v$(cat VERSION)"
    ```
-4. `release.yml` builds arm64 (`macos-14`) and x86_64 (`macos-15-intel`) natively, runs the native acceptance on each, packages `mdPreview-<version>-<arch>.zip` and `.dmg`, signs `SHA256SUMS` in a separate job that holds the only write permission, re-verifies the signature against the published key, creates the GitHub release and (if configured) updates the Homebrew tap.
-5. After it finishes, install the published release on a clean user account with the one-line installer and open a document. `mdPreview.dmg` (arm64) is also attached because releases up to 1.5.0 look for that asset name.
+5. `release.yml` builds arm64 (`macos-14`) and x86_64 (`macos-15-intel`) natively, runs the native acceptance on each, packages `mdPreview-<version>-<arch>.zip` and `.dmg`, signs `SHA256SUMS` in a separate job that holds the only write permission, re-verifies the signature against the published key, creates the GitHub release and (if configured) updates the Homebrew tap.
+6. After it finishes, install the published release on a clean user account with the one-line installer and open a document. `mdPreview.dmg` (arm64) is also attached because releases up to 1.5.0 look for that asset name.
+
+## What belongs in the repository
+
+The repository is public. Before every release, check that it holds only what a user or contributor needs:
+
+| Published | Kept on the maintainer's machine only |
+|---|---|
+| App source, resources, `vendor/`, packaging | Build products, caches, logs, screenshots and other evidence (`WorkSpace/`, `outputs/`) |
+| Tests that a runner executes: `tests/test_*.py`, `tests/test_*.js`, `tests/e2e/*.spec.js`, and the helpers and fixtures they load | One-off probes, migration scripts and ad-hoc checks that nothing runs |
+| Scripts used by the build, CI, the release or the documentation | Working notes, plans, review and delivery records |
+| The website (`docs/`), README, CHANGELOG, contributor and release docs | Anything with a personal path, a real document, a token or a private key |
+
+`tests/test_repo_contents.py` enforces the mechanical part with every test run (CI, the release build and `scripts/verify-all.sh`): nothing committed under the local-only folders, no logs, backups or keys, no personal home-folder paths, and no file in `scripts/` or `tests/` that nothing runs or mentions. A helper that is published on purpose without being referenced goes into the `STANDALONE` list in that file, with the reason. The review in step 2 covers what a script cannot judge: whether a new file is useful to anyone but the person who wrote it.
+
+Removing a file from the repository does not remove it from earlier commits. If something sensitive was ever pushed, treat it as disclosed (rotate the key or token) rather than relying on deletion.
 
 ## What is and is not verified
 

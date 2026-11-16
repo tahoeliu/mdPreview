@@ -18,7 +18,7 @@ import types
 import unittest
 from unittest.mock import Mock, patch
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (ROOT / 'mdPreview.py').read_text()
 HEAD_SOURCE = subprocess.check_output(['git', 'show', 'HEAD:mdPreview.py'], cwd=ROOT, text=True)
 HEAD_JS = subprocess.check_output(['git', 'show', 'HEAD:app.js'], cwd=ROOT, text=True)

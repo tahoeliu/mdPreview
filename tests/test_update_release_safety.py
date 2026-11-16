@@ -153,7 +153,7 @@ class ReleaseSafetyTests(unittest.TestCase):
             RuntimeLease(self.destination)
 
     def test_corrupt_candidate_released_for_next_download(self):
-        spec = importlib.util.spec_from_file_location('normal_quit_fixture', ROOT / 'WorkSpace/tests/test_update_normal_quit.py')
+        spec = importlib.util.spec_from_file_location('normal_quit_fixture', ROOT / 'tests/test_update_normal_quit.py')
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         fixture = module.NormalQuitTests()

@@ -24,7 +24,7 @@ scripts/build.sh                     # build mdPreview.app into WorkSpace/dist
 .venv/bin/python scripts/verify-headless.py --app WorkSpace/dist/release-$(cat VERSION)/mdPreview.app
 ```
 
-`WorkSpace/` is git-ignored scratch space for build products, logs, caches and local evidence. **Tests, fixtures and CI live in `tests/` and `.github/` and are committed.**
+`WorkSpace/` is git-ignored scratch space for build products, logs, caches and local evidence. **Tests, fixtures and CI live in `tests/` and `.github/` and are committed.** One-off probes and checks that no runner executes stay in `WorkSpace/`; `tests/test_repo_contents.py` rejects them.
 
 ## Project layout
 

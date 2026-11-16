@@ -17,7 +17,9 @@ import uuid
 from contextlib import redirect_stdout
 from unittest import mock
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
+SCRATCH = ROOT / 'WorkSpace' / 'test-scratch'
+SCRATCH.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(ROOT))
 sys.dont_write_bytecode = True
 from scripts import install_update as helper
@@ -52,7 +54,7 @@ class FakeProcess:
 
 class NormalQuitInstallerTests(unittest.TestCase):
     def setUp(self):
-        self.root = Path(tempfile.mkdtemp(prefix='normal-quit-installer-', dir=ROOT / 'WorkSpace/tests')).resolve()
+        self.root = Path(tempfile.mkdtemp(prefix='normal-quit-installer-', dir=SCRATCH)).resolve()
         self.patch(mock.patch.dict(os.environ, {'MDPREVIEW_DATA_DIR': str(self.root)}))
         self.destination = self.make_bundle(self.root / 'mdPreview.app', '1.0.0')
         self.source = self.make_bundle(self.root / 'staged.app', '2.0.0')
