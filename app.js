@@ -770,7 +770,7 @@ var {
     document.getElementById('textarea').value = content;
     const loadEpoch = documentSession.epoch;
     const loadRevision = documentSession.revision;
-    isSource = (!path || path === 'Untitled.md');
+    isSource = false;
     document.getElementById('textarea').readOnly = true;
     document.getElementById('content').setAttribute('contenteditable', 'false');
     document.getElementById('content').setAttribute('aria-busy', 'true');
@@ -789,20 +789,10 @@ var {
     renderedDirty = !isSource && documentSession.revision > loadRevision;
     document.getElementById('content').setAttribute('aria-busy', 'false');
     if (Bridge.ready()) Bridge.callSafe('set_dirty', isDirty, documentSession.revision, documentSession.id);
-    // Opening an EXISTING document (double-click, Cmd+O, Finder, reopen) shows
-    // the rendered Preview by default. Only a brand-new blank document (path
-    // still 'Untitled.md') starts in Source mode so the user can type right in.
-    isSource = (!path || path === 'Untitled.md');
+    // Every document opens in Preview, a blank one included: the rendered page is
+    // editable, so people can write without knowing Markdown syntax.
+    isSource = false;
     updateView();
-    // A brand-new blank document gets the caret automatically placed in the
-    // source area — no click needed. The hint stays until typing begins.
-    if (isSource) {
-      const ta = document.getElementById('textarea');
-      if (ta) {
-        ta.focus();
-        ta.setSelectionRange(0, 0);
-      }
-    }
     deletedOnDisk=false;
     if(meta.hash)scrollToHash('#'+meta.hash);else restoreReading(meta.readingPosition);
     if (meta.readError) {
@@ -812,6 +802,8 @@ var {
     } else {
       document.getElementById('textarea').readOnly = false;
       document.getElementById('content').setAttribute('contenteditable', 'true');
+      // A blank document gets the caret on the page right away — no click needed.
+      if (!content.trim()) focusBlankPage();
     }
     if (draftRecovered) showDraftRecoveredBanner();
     if (meta.externalConflict) showStatus(t('The original file changed after this draft. Saving will ask how to resolve it.', '原文件在草稿之后发生变化，保存时将询问如何处理。'), true);
@@ -952,56 +944,55 @@ var {
   function showModeIndicator() {
     const el = document.getElementById('modeIndicator');
     if (!el) return;
-    el.textContent = isSource ? 'mdSource' : 'mdPreview';
+    el.textContent = isSource ? 'Source' : 'Preview';
     el.classList.add('visible');
     if (_modeIndicatorTimer) clearTimeout(_modeIndicatorTimer);
     _modeIndicatorTimer = setTimeout(() => { el.classList.remove('visible'); }, 2000);
   }
 
+  // Puts the caret at the start of an empty rendered page, inside a paragraph so the first
+  // line typed is ordinary body text.
+  function focusBlankPage() {
+    const content = document.getElementById('content');
+    if (!content || isSource || content.getAttribute('contenteditable') !== 'true') return;
+    if (!content.firstChild) content.innerHTML = '<p><br></p>';
+    content.focus();
+    const range = document.createRange();
+    range.setStart(content.firstChild.nodeType === 1 ? content.firstChild : content, 0);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
+
+  function documentIsEmpty() {
+    const textarea = document.getElementById('textarea');
+    if (isSource) return !textarea || textarea.value.trim() === '';
+    const content = document.getElementById('content');
+    return (!textarea || textarea.value.trim() === '') && !renderedDirty
+      && content.textContent.trim() === '' && !content.querySelector('img,hr,table,pre,svg');
+  }
+
   function updateEmptyState() {
     const content = document.getElementById('content');
-    const textarea = document.getElementById('textarea');
-    // The welcome hint shows only in SOURCE mode on a truly empty document
-    // (the textarea is the source of truth while in source mode). In Preview
-    // mode we never show the hint — only the normally rendered content.
-    const isEmpty = isSource && (textarea ? textarea.value.trim() === '' : false);
-    if (isEmpty) {
-      // Build a non-editable overlay that sits on top of the empty source area.
-      // The textarea itself stays empty so the cursor lands at position 0.
+    // The welcome screen shows on a truly empty document, in either mode. It sits on top of
+    // the empty page; the page itself stays empty so the caret lands at the very start.
+    if (documentIsEmpty()) {
+      document.body.classList.add('is-blank');
       let overlay = document.getElementById('welcomeOverlay');
+      if (overlay) Onboarding.refresh(overlay);
       if (!overlay) {
         overlay = document.createElement('div');
         overlay.id = 'welcomeOverlay';
         overlay.className = 'welcome-overlay';
-        const tips = t('Drop a .md file here or double-click it to open','拖拽 .md 文件到此处，或双击打开');
-        const toggleTip = '<kbd>⌘</kbd><kbd>E</kbd> '+t('Preview','预览');
-        const pasteTip = '<kbd>⌘</kbd><kbd>⇧</kbd><kbd>V</kbd> '+t('Paste as Markdown','粘贴为 Markdown');
-        const title = t('Start writing','开始书写');
-        overlay.innerHTML = '<div class="welcome-icon">&#9998;</div>' +
-          '<div class="welcome-title">' + title + '</div>' +
-          '<div class="welcome-tip">' + tips + '</div>' +
-          '<div class="welcome-tip">' + toggleTip + '</div>' +
-          '<div class="welcome-tip">' + pasteTip + '</div>';
         content.parentNode.appendChild(overlay);
-        Onboarding.decorate(overlay);
+        Onboarding.build(overlay);
         overlay.addEventListener('click', (event) => {
           if(event.target.closest('button,a'))return;
-          // Focus the editor without dismissing the hint — it stays visible
-          // until the user actually starts typing (input hides it), so a
-          // newly created document always has the caret ready in the source
-          // area with the hint still explaining what to do.
+          // Focus the page without dismissing the screen — it stays until the
+          // person actually starts typing.
           const ta = document.getElementById('textarea');
-          if (isSource && ta) {
-            ta.focus();
-          } else {
-            content.focus();
-            const range = document.createRange();
-            range.selectNodeContents(content);
-            range.collapse(true);
-            const sel = window.getSelection();
-            sel.removeAllRanges();
-            sel.addRange(range);
-          }
+          if (isSource && ta) ta.focus(); else focusBlankPage();
         });
       }
     } else {
@@ -1010,8 +1001,10 @@ var {
   }
 
   function dismissWelcomeOverlay() {
+    document.body.classList.remove('is-blank');
     const overlay = document.getElementById('welcomeOverlay');
     if (overlay) {
+      overlay.removeAttribute('id');  // a new start screen may be needed before this one has faded
       overlay.classList.add('welcome-fadeout');
       setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 200);
     }
@@ -1079,17 +1072,10 @@ var {
     const toggle = document.getElementById('tocToggle');
     if (toggle) toggle.style.display = 'none';
     setTocVisible(false);
-    // Blank documents default to Source mode (with the empty-document hint),
-    // matching the default mode of freshly opened documents.
-    isSource = true;
+    // A blank document opens in Preview like every other document.
+    isSource = false;
     updateView();
-    // Put the caret in the source area immediately; the hint disappears only
-    // once the user starts typing.
-    const ta = document.getElementById('textarea');
-    if (ta) {
-      ta.focus();
-      ta.setSelectionRange(0, 0);
-    }
+    focusBlankPage();
     if (Bridge.ready()) {
       return Bridge.call('reset_to_untitled').then(() => reloadContent());
     }

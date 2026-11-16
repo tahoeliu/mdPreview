@@ -33,7 +33,6 @@
   "File deleted or renamed. Use Save As.": "파일이 삭제되었거나 이름이 변경되었습니다. '다른 이름으로 저장'을 사용하세요.",
   "Disk file changed. Keep your changes with Save As.": "디스크의 파일이 변경되었습니다. '다른 이름으로 저장'으로 변경 사항을 보관하세요.",
   "File updated externally; automatic reload is off.": "파일이 외부에서 수정되었습니다. 자동 새로고침이 꺼져 있습니다.",
-  "Drop a .md file here or double-click it to open": ".md 파일을 여기로 끌어다 놓거나 더블 클릭하여 여세요",
   "Preview": "미리보기",
   "Paste as Markdown": "Markdown으로 붙여넣기",
   "Start writing": "글쓰기 시작",
@@ -152,7 +151,7 @@
   "You have version {version}. Would you like to download the update?": "현재 버전은 {version}입니다. 업데이트를 다운로드하시겠습니까?",
   "Download": "다운로드",
   "Later": "나중에",
-  "Updates are unavailable: this build has no release signing key.": "업데이트를 사용할 수 없습니다. 이 빌드에는 릴리스 서명 키가 없습니다.",
+  "Updates are unavailable: this build has no release signing key.": "업데이트를 사용할 수 없습니다. 이 빌드에는 릴리스 서명 공개 키가 없습니다.",
   "Network error while downloading the update.": "업데이트를 다운로드하는 중 네트워크 오류가 발생했습니다.",
   "The update download was incomplete or too large.": "업데이트 다운로드가 불완전하거나 크기가 너무 큽니다.",
   "The update could not be verified and was discarded.": "업데이트를 확인할 수 없어 폐기했습니다.",
@@ -330,7 +329,6 @@
   "onboarding.example": "예제 열기",
   "Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.": "자동 설치가 차단되었습니다. 설치 기록은 보존됩니다. 도움말 > 문제 보고에서 복구 지원을 요청하세요.",
   "This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.": "이 업데이트는 github.com/tahoeliu/mdPreview/releases 에서 수동으로 설치해야 합니다.",
-  "Updates are unavailable: this build has no release signing key.": "업데이트를 사용할 수 없습니다. 이 빌드에는 릴리스 서명 공개 키가 없습니다.",
   "Edit": "편집",
   "View": "보기",
   "Cut": "잘라내기",
@@ -389,5 +387,6 @@
   "Decrease indent": "들여쓰기 줄이기",
   "Paragraph spacing is automatic — no need for extra blank lines.": "문단 간격은 자동으로 유지됩니다. 빈 줄을 더 넣을 필요가 없습니다.",
   "Loading the rest…": "나머지를 불러오는 중…",
-  "Image could not be displayed": "이미지를 표시할 수 없습니다"
+  "Image could not be displayed": "이미지를 표시할 수 없습니다",
+  "Just type, or open something.": "바로 입력하거나 문서를 여세요."
 }

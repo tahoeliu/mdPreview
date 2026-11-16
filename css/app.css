@@ -509,3 +509,45 @@ body.has-edit-bar .update-bubble, body.has-source-bar .update-bubble { top: calc
   .update-bubble-close { color: #8e8e93; }
   .update-bubble-close:hover { color: #c7c7cc; }
 }
+
+/* A blank page shows its text cursor straight away, so it is obvious that typing works. */
+body.is-blank:not(.is-editing):not(.edit-pinned) #content { caret-color: #0062cc; caret-color: AccentColor; }
+/* ── Start screen on an empty document: title, one line, three entry tiles ── */
+.welcome-overlay { color: #6e6e73; }
+.welcome-overlay .welcome-title { font-size: 20px; font-weight: 500; color: #6e6e73; margin-bottom: 5px; }
+.welcome-hint { font-size: 13px; color: #a1a1a6; margin-bottom: 22px; }
+.welcome-actions { display: flex; justify-content: center; gap: 8px; }
+.welcome-slot { position: relative; display: flex; }
+.welcome-overlay .welcome-tile { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 7px; width: 128px; height: 76px; padding: 16px 6px 0; border: 1px solid rgba(0,0,0,.07); border-radius: 10px; background: transparent; color: #6e6e73; font: inherit; font-size: 12px; font-weight: 400; line-height: 1.25; cursor: pointer; transition: background .12s ease, border-color .12s ease, box-shadow .12s ease; }
+.welcome-overlay .welcome-tile svg { width: 20px; height: 20px; color: #8e8e93; flex: none; }
+.welcome-overlay .welcome-tile span { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.welcome-overlay .welcome-tile:hover:not(:disabled) { background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.13); color: var(--fg, #333); }
+.welcome-overlay .welcome-tile:active:not(:disabled) { background: rgba(0,0,0,.05); }
+.welcome-overlay .welcome-tile:disabled { cursor: default; color: #c7c7cc; }
+.welcome-overlay .welcome-tile:disabled svg { color: #d1d1d6; }
+.welcome-overlay button:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(0,98,204,.35); }
+.welcome-menu { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 6; width: max-content; min-width: 240px; max-width: min(420px, 80vw); padding: 5px; border: 1px solid rgba(0,0,0,.12); border-radius: 10px; background: var(--bg); box-shadow: 0 8px 28px rgba(0,0,0,.12), 0 1px 3px rgba(0,0,0,.06); text-align: left; cursor: default; }
+.welcome-overlay .welcome-menu button { display: flex; align-items: baseline; gap: 16px; width: 100%; height: 30px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; color: var(--fg, #333); font: inherit; font-size: 13px; cursor: pointer; }
+.welcome-overlay .welcome-menu button:hover, .welcome-overlay .welcome-menu button:focus-visible { background: rgba(0,0,0,.06); box-shadow: none; }
+.welcome-menu-name { flex: none; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.welcome-menu-folder { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: #a1a1a6; font-size: 12px; }
+.welcome-overlay [data-onboarding] { display: flex; justify-content: center; gap: 4px; margin-top: 16px; }
+.welcome-overlay [data-onboarding] button { height: 28px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; color: #8e8e93; font: inherit; font-size: 12px; cursor: pointer; }
+.welcome-overlay [data-onboarding] button:hover { background: rgba(0,0,0,.06); }
+@media (prefers-color-scheme: dark) {
+  .welcome-overlay .welcome-title { color: #a1a1a6; }
+  .welcome-hint { color: #6e6e73; }
+  .welcome-overlay .welcome-tile { border-color: rgba(255,255,255,.1); color: #a1a1a6; }
+  .welcome-overlay .welcome-tile svg { color: #8e8e93; }
+  .welcome-overlay .welcome-tile:hover:not(:disabled) { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.18); color: #dcdcde; }
+  .welcome-overlay .welcome-tile:active:not(:disabled) { background: rgba(255,255,255,.09); }
+  .welcome-overlay .welcome-tile:disabled { color: #555558; }
+  .welcome-overlay .welcome-tile:disabled svg { color: #48484a; }
+  .welcome-overlay button:focus-visible { box-shadow: 0 0 0 2px rgba(10,132,255,.5); }
+  .welcome-menu { border-color: rgba(255,255,255,.16); box-shadow: 0 8px 28px rgba(0,0,0,.45); }
+  .welcome-overlay .welcome-menu button { color: #dcdcde; }
+  .welcome-overlay .welcome-menu button:hover, .welcome-overlay .welcome-menu button:focus-visible { background: rgba(255,255,255,.1); }
+  .welcome-menu-folder { color: #6e6e73; }
+  .welcome-overlay [data-onboarding] button { color: #a1a1a6; }
+  .welcome-overlay [data-onboarding] button:hover { background: rgba(255,255,255,.1); }
+}

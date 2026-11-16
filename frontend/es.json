@@ -33,7 +33,6 @@
   "File deleted or renamed. Use Save As.": "Archivo eliminado o renombrado. Usa «Guardar como».",
   "Disk file changed. Keep your changes with Save As.": "El archivo del disco cambió. Conserva tus cambios con «Guardar como».",
   "File updated externally; automatic reload is off.": "Archivo modificado externamente; la recarga automática está desactivada.",
-  "Drop a .md file here or double-click it to open": "Suelta aquí un archivo .md o haz doble clic para abrirlo",
   "Preview": "Vista previa",
   "Paste as Markdown": "Pegar como Markdown",
   "Start writing": "Empieza a escribir",
@@ -152,7 +151,7 @@
   "You have version {version}. Would you like to download the update?": "Tienes la versión {version}. ¿Quieres descargar la actualización?",
   "Download": "Descargar",
   "Later": "Más tarde",
-  "Updates are unavailable: this build has no release signing key.": "Las actualizaciones no están disponibles: esta compilación no tiene clave de firma.",
+  "Updates are unavailable: this build has no release signing key.": "Actualizaciones no disponibles: esta versión no contiene una clave pública de firma.",
   "Network error while downloading the update.": "Error de red al descargar la actualización.",
   "The update download was incomplete or too large.": "La descarga de la actualización está incompleta o es demasiado grande.",
   "The update could not be verified and was discarded.": "No se pudo verificar la actualización y se descartó.",
@@ -330,7 +329,6 @@
   "onboarding.example": "Abrir ejemplo",
   "Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.": "La instalación automática está bloqueada. Se conservan los registros de instalación. Use Ayuda > Informar de un problema para solicitar asistencia de recuperación.",
   "This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.": "Esta actualización requiere una instalación manual desde github.com/tahoeliu/mdPreview/releases.",
-  "Updates are unavailable: this build has no release signing key.": "Actualizaciones no disponibles: esta versión no contiene una clave pública de firma.",
   "Edit": "Edición",
   "View": "Visualización",
   "Cut": "Cortar",
@@ -389,5 +387,6 @@
   "Decrease indent": "Reducir sangría",
   "Paragraph spacing is automatic — no need for extra blank lines.": "El espacio entre párrafos es automático: no hace falta añadir líneas en blanco.",
   "Loading the rest…": "Cargando el resto…",
-  "Image could not be displayed": "No se pudo mostrar la imagen"
+  "Image could not be displayed": "No se pudo mostrar la imagen",
+  "Just type, or open something.": "Empieza a escribir o abre un documento."
 }

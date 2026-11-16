@@ -38,7 +38,11 @@ async function createApp() {
     });
   };
   await w.ensureTurndown();
-  return {w,dom,load:async(md,path='/tmp/test.md',recovered=false,meta={})=>w.loadContent(path,md,720,recovered,false,meta),
+  return {w,dom,load:async(md,path='/tmp/test.md',recovered=false,meta={})=>{
+    const result=await w.loadContent(path,md,720,recovered,false,meta);
+    // 这些用例用 Untitled.md 表示“在源码模式下测试”；空白文档现在与其他文档一样默认预览，这里显式切过去。
+    if(path==='Untitled.md'&&!w.document.getElementById('source').classList.contains('visible'))await w.toggleView();
+    return result;},
     input(value){const ta=w.document.getElementById('textarea');ta.value=value;ta.dispatchEvent(new w.Event('input'));},
     close(){w.prepareForClose();dom.window.close();}};
 }

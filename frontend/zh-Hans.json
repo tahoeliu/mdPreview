@@ -34,7 +34,6 @@
   "File deleted or renamed. Use Save As.": "文件已删除或重命名，保存将使用另存为",
   "Disk file changed. Keep your changes with Save As.": "磁盘文件已变化；保留当前修改，请另存为",
   "File updated externally; automatic reload is off.": "文件已在外部更新，自动刷新已关闭",
-  "Drop a .md file here or double-click it to open": "拖拽 .md 文件到此处，或双击打开",
   "Preview": "预览",
   "Paste as Markdown": "粘贴为 Markdown",
   "Start writing": "开始书写",
@@ -389,5 +388,5 @@
   "onboarding.example": "打开示例文档",
   "Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.": "自动安装已阻止，安装记录已保留。请通过「帮助 > 报告问题」获取恢复协助。",
   "This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.": "此更新器需要从 github.com/tahoeliu/mdPreview/releases 手动安装。",
-  "Updates are unavailable: this build has no release signing key.": "更新不可用：此版本未内置发布签名公钥。"
+  "Just type, or open something.": "直接输入，或打开一份文档。"
 }

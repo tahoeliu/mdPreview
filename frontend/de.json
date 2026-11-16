@@ -33,7 +33,6 @@
   "File deleted or renamed. Use Save As.": "Datei gelöscht oder umbenannt. Verwende „Sichern unter“.",
   "Disk file changed. Keep your changes with Save As.": "Die Datei auf der Festplatte wurde geändert. Sichere deine Änderungen mit „Sichern unter“.",
   "File updated externally; automatic reload is off.": "Datei wurde extern geändert; automatisches Neuladen ist ausgeschaltet.",
-  "Drop a .md file here or double-click it to open": "Lege hier eine .md-Datei ab oder öffne sie per Doppelklick",
   "Preview": "Vorschau",
   "Paste as Markdown": "Als Markdown einsetzen",
   "Start writing": "Mit dem Schreiben beginnen",
@@ -152,7 +151,7 @@
   "You have version {version}. Would you like to download the update?": "Du verwendest Version {version}. Möchtest du das Update laden?",
   "Download": "Laden",
   "Later": "Später",
-  "Updates are unavailable: this build has no release signing key.": "Updates sind nicht verfügbar: Dieser Build hat keinen Signaturschlüssel.",
+  "Updates are unavailable: this build has no release signing key.": "Updates sind nicht verfügbar: Dieser Build enthält keinen öffentlichen Signaturschlüssel.",
   "Network error while downloading the update.": "Netzwerkfehler beim Laden des Updates.",
   "The update download was incomplete or too large.": "Das Laden des Updates war unvollständig oder die Datei ist zu groß.",
   "The update could not be verified and was discarded.": "Das Update konnte nicht überprüft werden und wurde verworfen.",
@@ -330,7 +329,6 @@
   "onboarding.example": "Beispiel öffnen",
   "Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.": "Die automatische Installation ist gesperrt. Installationsdaten bleiben erhalten. Wählen Sie Hilfe > Problem melden, um Unterstützung bei der Wiederherstellung zu erhalten.",
   "This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.": "Diese Aktualisierung muss manuell über github.com/tahoeliu/mdPreview/releases installiert werden.",
-  "Updates are unavailable: this build has no release signing key.": "Updates sind nicht verfügbar: Dieser Build enthält keinen öffentlichen Signaturschlüssel.",
   "Edit": "Bearbeiten",
   "View": "Darstellung",
   "Cut": "Ausschneiden",
@@ -389,5 +387,6 @@
   "Decrease indent": "Einzug verkleinern",
   "Paragraph spacing is automatic — no need for extra blank lines.": "Der Absatzabstand ergibt sich automatisch – zusätzliche Leerzeilen sind nicht nötig.",
   "Loading the rest…": "Rest wird geladen …",
-  "Image could not be displayed": "Bild konnte nicht angezeigt werden"
+  "Image could not be displayed": "Bild konnte nicht angezeigt werden",
+  "Just type, or open something.": "Einfach lostippen oder etwas öffnen."
 }

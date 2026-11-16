@@ -1804,6 +1804,28 @@ class MarkdownAPI:
         return {'first': not config.get('onboarded', False), 'version': version,
                 'updated': bool(config.get('last_seen_version') and config['last_seen_version'] != version)}
 
+    def get_recent_files(self):
+        """Names for the welcome screen. No existence probing: touching Desktop or Documents
+        just to draw a list could raise a privacy prompt."""
+        recent = []
+        for path in load_config().get('recent_files', [])[:10]:
+            if isinstance(path, str) and os.path.isabs(path):
+                folder = os.path.dirname(path)
+                home = os.path.expanduser('~')
+                if folder == home or folder.startswith(home + os.sep):
+                    folder = '~' + folder[len(home):]
+                recent.append({'name': os.path.basename(path), 'folder': folder, 'path': path})
+        return recent
+
+    def open_recent_file(self, path):
+        # Only paths this app itself recorded can be opened this way.
+        if not isinstance(path, str) or path not in load_config().get('recent_files', [])[:10]:
+            return {'success': False, 'error': 'not-recent'}
+        if not os.path.isfile(path):
+            return {'success': False, 'error': 'missing'}
+        handle_opened_file(path, _main_window_ref, _main_api_ref)
+        return {'success': True}
+
     def acknowledge_onboarding(self):
         update_config({'onboarded': True, 'last_seen_version': _get_current_version()})
         return {'success': True}

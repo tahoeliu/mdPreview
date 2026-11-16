@@ -33,7 +33,6 @@
   "File deleted or renamed. Use Save As.": "ファイルが削除または名前変更されました。「別名で保存」を使ってください。",
   "Disk file changed. Keep your changes with Save As.": "ディスク上のファイルが変更されました。変更内容は「別名で保存」で残してください。",
   "File updated externally; automatic reload is off.": "ファイルが外部で更新されました。自動再読み込みはオフです。",
-  "Drop a .md file here or double-click it to open": "ここに .md ファイルをドロップするか、ダブルクリックして開きます",
   "Preview": "プレビュー",
   "Paste as Markdown": "Markdown としてペースト",
   "Start writing": "書き始める",
@@ -152,7 +151,7 @@
   "You have version {version}. Would you like to download the update?": "現在のバージョンは {version} です。アップデートをダウンロードしますか？",
   "Download": "ダウンロード",
   "Later": "あとで",
-  "Updates are unavailable: this build has no release signing key.": "アップデートは利用できません。このビルドにはリリース署名キーがありません。",
+  "Updates are unavailable: this build has no release signing key.": "更新を利用できません。このビルドにはリリース署名の公開鍵が含まれていません。",
   "Network error while downloading the update.": "アップデートのダウンロード中にネットワークエラーが発生しました。",
   "The update download was incomplete or too large.": "アップデートのダウンロードが不完全か、サイズが大きすぎます。",
   "The update could not be verified and was discarded.": "アップデートを検証できなかったため破棄しました。",
@@ -330,7 +329,6 @@
   "onboarding.example": "サンプルを開く",
   "Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.": "自動インストールは停止されています。インストール記録は保存されています。「ヘルプ > 問題を報告」から復旧のサポートを依頼してください。",
   "This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.": "この更新には github.com/tahoeliu/mdPreview/releases からの手動インストールが必要です。",
-  "Updates are unavailable: this build has no release signing key.": "更新を利用できません。このビルドにはリリース署名の公開鍵が含まれていません。",
   "Edit": "編集",
   "View": "表示",
   "Cut": "カット",
@@ -389,5 +387,6 @@
   "Decrease indent": "インデントを減らす",
   "Paragraph spacing is automatic — no need for extra blank lines.": "段落の間隔は自動で調整されます。空行を重ねる必要はありません。",
   "Loading the rest…": "続きを読み込んでいます…",
-  "Image could not be displayed": "画像を表示できません"
+  "Image could not be displayed": "画像を表示できません",
+  "Just type, or open something.": "そのまま入力するか、書類を開いてください。"
 }

@@ -2,6 +2,13 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.10] - 2026-11-16
+
+### Improved
+- **A new document opens ready to write.** It now opens in the formatted view like every other document, with the cursor already on the page: just start typing. You do not need to know Markdown.
+- **A simpler start screen.** Three quiet shortcuts — **Open File…**, **Open Recent** and **Paste** — instead of keyboard tips. It disappears as soon as you type or paste.
+- The view label now reads **Preview** or **Source**.
+
 ## [2.0.9] - 2026-11-16
 
 ### Improved

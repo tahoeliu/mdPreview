@@ -34,7 +34,6 @@
   "File deleted or renamed. Use Save As.": "File deleted or renamed. Use Save As.",
   "Disk file changed. Keep your changes with Save As.": "Disk file changed. Keep your changes with Save As.",
   "File updated externally; automatic reload is off.": "File updated externally; automatic reload is off.",
-  "Drop a .md file here or double-click it to open": "Drop a .md file here or double-click it to open",
   "Preview": "Preview",
   "Paste as Markdown": "Paste as Markdown",
   "Start writing": "Start writing",
@@ -389,5 +388,5 @@
   "onboarding.example": "Open Example",
   "Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.": "Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.",
   "This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.": "This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.",
-  "Updates are unavailable: this build has no release signing key.": "Updates are unavailable: this build has no release signing key."
+  "Just type, or open something.": "Just type, or open something."
 }
