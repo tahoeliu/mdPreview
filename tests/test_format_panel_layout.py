@@ -311,6 +311,9 @@ class FormatPanelEndToEndTests(unittest.TestCase):
         self.assertTrue('path' in holder, holder)
         h = self.acc.setFrame_.call_args[0][0][3]
         self.assertEqual(h, 306.0, 'PDF增加八行设置且不与格式行重叠')
+        options = mv.MarkdownAPI.set_output_settings.call_args.args[0]
+        self.assertEqual(options['paper'], 'auto')
+        self.assertIn('page_numbers', options)
 
 
 if __name__ == '__main__':

@@ -624,6 +624,7 @@ var {
   let modalPreviousFocus = null;
   function setModal(title, bodyHtml, actionsHtml) {
     imageViewer.close();
+    document.getElementById('modalOverlay').dispatchEvent(new Event('modalreset'));
     if (!document.getElementById('modalOverlay').classList.contains('visible')) modalPreviousFocus = document.activeElement;
     const header = document.getElementById('modalHeader');
     const body = document.getElementById('modalBody');
@@ -637,6 +638,7 @@ var {
   }
 
   function closeModal() {
+    document.getElementById('modalOverlay').dispatchEvent(new Event('modalreset'));
     document.getElementById('modalOverlay').classList.remove('visible');
     closePromptVisible = false;
     if (modalPreviousFocus && modalPreviousFocus.isConnected) modalPreviousFocus.focus();
@@ -751,6 +753,7 @@ var {
   document,
   getComputedStyle
 });
+  let recoverableDrafts = [];
   async function loadContent(path, content, pageWidth, draftRecovered, zh, meta = {}) {
     imageViewer.close(false);
     clearTimeout(readingTimer);
@@ -760,6 +763,7 @@ var {
     lastPushedHash = content;
     mermaidSvgCache.clear();
     filePath = path;
+    recoverableDrafts = path === 'Untitled.md' && !draftRecovered ? (meta.recoverableDrafts || []) : [];
     ReadingFeatures.reset();
     appSettings={...appSettings,...(meta.settings||{})};
     if(window.formatToolbar)window.formatToolbar.setPinned(!!appSettings.format_bar,false);
@@ -813,7 +817,6 @@ var {
     // when the user first toggles to source mode.
     Onboarding.initialize();
     // 转换器仅在首次编辑、粘贴或回写时加载。
-    if (meta.recoverableDrafts && meta.recoverableDrafts.length && !draftRecovered && isSource) showRecoveryManager(meta.recoverableDrafts);
   }
 
   function showDraftRecoveredBanner() {
@@ -986,7 +989,7 @@ var {
         overlay.id = 'welcomeOverlay';
         overlay.className = 'welcome-overlay';
         content.parentNode.appendChild(overlay);
-        Onboarding.build(overlay);
+        Onboarding.build(overlay, () => showRecoveryManager(recoverableDrafts));
         overlay.addEventListener('click', (event) => {
           if(event.target.closest('button,a'))return;
           // Focus the page without dismissing the screen — it stays until the
@@ -995,6 +998,7 @@ var {
           if (isSource && ta) ta.focus(); else focusBlankPage();
         });
       }
+      overlay.querySelector('.welcome-recovery').hidden = recoverableDrafts.length === 0 || isDirty;
     } else {
       dismissWelcomeOverlay();
     }
@@ -1004,6 +1008,7 @@ var {
     document.body.classList.remove('is-blank');
     const overlay = document.getElementById('welcomeOverlay');
     if (overlay) {
+      overlay.inert = true;
       overlay.removeAttribute('id');  // a new start screen may be needed before this one has faded
       overlay.classList.add('welcome-fadeout');
       setTimeout(() => { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); }, 200);

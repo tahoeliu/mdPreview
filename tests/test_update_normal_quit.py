@@ -1157,10 +1157,24 @@ class NormalQuitTests(unittest.TestCase):
                  'store_content', 'get_initial_content', 'discard_draft', 'recover_untitled',
                  'set_dirty', 'reset_to_untitled', 'save_file', 'ack_reload_from_disk',
                  'create_window', '_forget_window', 'on_window_closing', 'update_main_window')
+        # Display names can change without changing document or quit protection.
+        # Normalize only the title lines covered by test_window_welcome.py.
+        title_lines = {
+            'set_dirty': ("else 'mdPreview'\n                    self.window.set_title(_edited_title(name, self.is_dirty) if self.file_path else name)",
+                          "else 'Untitled.md'\n                    self.window.set_title(_edited_title(name, self.is_dirty))"),
+            'reset_to_untitled': ("self.window.set_title('mdPreview')", "self.window.set_title('Untitled.md')"),
+            'create_window': ("title = os.path.basename(file_path) if file_path else 'mdPreview'",
+                              "title = os.path.basename(file_path) if file_path else 'Untitled.md'"),
+        }
         for name in names:
             with self.subTest(name=name):
-                self.assertEqual(ast.get_source_segment(SOURCE, new[name]),
-                                 ast.get_source_segment(baseline, old[name]))
+                current = ast.get_source_segment(SOURCE, new[name])
+                previous = ast.get_source_segment(baseline, old[name])
+                if name in title_lines:
+                    new_title, old_title = title_lines[name]
+                    current = current.replace(new_title, old_title, 1)
+                    previous = previous.replace(new_title, old_title, 1)
+                self.assertEqual(current, previous)
         old_advance, new_advance = copy.deepcopy(old['_advance_quit_confirmation']), copy.deepcopy(new['_advance_quit_confirmation'])
         old_advance.body[-1].orelse = old_advance.body[-1].orelse[-2:]
         new_advance.body[-1].orelse = new_advance.body[-1].orelse[1:]

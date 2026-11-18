@@ -4,9 +4,9 @@
 :lang(en) .markdown h1 { letter-spacing: -0.5px; }
 :lang(en) .markdown h2 { letter-spacing: -0.3px; }
 #tocSidebar ul { list-style: none; margin: 0; padding: 0; }
-.welcome-overlay, .welcome-overlay .welcome-title, .welcome-overlay .welcome-tip { color: #6e6e73 !important; }
+.welcome-overlay, .welcome-overlay .welcome-title { color: #6e6e73 !important; }
 @media (prefers-color-scheme: dark) {
-  .welcome-overlay, .welcome-overlay .welcome-title, .welcome-overlay .welcome-tip { color: #a1a1a6 !important; }
+  .welcome-overlay, .welcome-overlay .welcome-title { color: #a1a1a6 !important; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }

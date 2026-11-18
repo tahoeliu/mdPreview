@@ -25,9 +25,7 @@ for(const [state,prepare] of [
    const long='# 长文\n\n'+Array.from({length:12},(_,i)=>'## 第 '+(i+1)+' 节\n\n'+'这是一段很长的正文，用来让文档超过两屏。'.repeat(40)+'\n').join('\n');
    await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),long);
    await page.evaluate(()=>{document.querySelector('.scroll-wrap').scrollTop=800;});
-   await page.waitForSelector('.read-hud.on');
-   // The pill hides itself after ~2s; a slow runner can scan it mid-fade. Pin it fully visible so the real colours are what gets checked.
-   await page.addStyleTag({content:'.read-hud{transition:none !important;opacity:1 !important}'});
+   await page.waitForSelector('.read-progress.on');
    await page.evaluate(()=>openGoToHeading());await page.waitForSelector('#gotoOverlay');}],
  ['顶部格式工具条',async page=>{
    await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),DOCUMENT);

@@ -36,7 +36,6 @@
   "File updated externally; automatic reload is off.": "File updated externally; automatic reload is off.",
   "Preview": "Preview",
   "Paste as Markdown": "Paste as Markdown",
-  "Start writing": "Start writing",
   "Markdown converter is not ready. Please retry.": "Markdown converter is not ready. Please retry.",
   "Save is not ready yet": "Save is not ready yet",
   "Saved current version": "Saved current version",
@@ -296,9 +295,6 @@
   "Nothing to paste": "Nothing to paste",
   "Rendering failed": "Rendering failed",
   "Export…": "Export…",
-  "Almost done": "Almost done",
-  "{n} min left": "{n} min left",
-  "About {n} min read": "About {n} min read",
   "Copy code": "Copy code",
   "Copied": "Copied",
   "Content changed. Toggle again.": "Content changed. Toggle again.",
@@ -388,6 +384,8 @@
   "onboarding.example": "Open Example",
   "Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.": "Automatic installation is blocked. Installation records are preserved. Use Help > Report an Issue for recovery assistance.",
   "This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.": "This updater requires a manual installation from github.com/tahoeliu/mdPreview/releases.",
-  "Just type, or open something.": "Just type, or open something.",
-  "Could not make a secure connection to the update server.": "Could not make a secure connection to the update server."
+  "Could not make a secure connection to the update server.": "Could not make a secure connection to the update server.",
+  "Recent Documents": "Recent Documents",
+  "Or start typing.": "Or start typing.",
+  "Paste to Preview": "Paste to Preview"
 }

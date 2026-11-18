@@ -459,7 +459,7 @@ def _check_draft_for_file(file_path, document_id=None):
 
 def _edited_title(name, dirty):
     # Append the TextEdit-style Edited marker to a window title.
-    return (name or 'Untitled.md') + (' - ' + _t('Edited', '已编辑') if dirty else '')
+    return (name or 'mdPreview') + (' - ' + _t('Edited', '已编辑') if dirty else '')
 
 
 def _remove_draft(path, document_id=None):
@@ -1168,8 +1168,8 @@ class MarkdownAPI:
             self.is_dirty = bool(dirty)
             try:
                 if self.window:
-                    name = os.path.basename(self.file_path) if self.file_path else 'Untitled.md'
-                    self.window.set_title(_edited_title(name, self.is_dirty))
+                    name = os.path.basename(self.file_path) if self.file_path else 'mdPreview'
+                    self.window.set_title(_edited_title(name, self.is_dirty) if self.file_path else name)
                     _set_represented_file(self.window, self.file_path)
             except Exception:
                 log_exception('set dirty title failed')
@@ -1257,7 +1257,7 @@ class MarkdownAPI:
             self.file_content = ''
             self.close_confirmed = False
             if self.window:
-                self.window.set_title('Untitled.md')
+                self.window.set_title('mdPreview')
                 _set_represented_file(self.window, None)
         except Exception:
             log_exception('reset to untitled failed')
@@ -1827,7 +1827,7 @@ class MarkdownAPI:
             return {'success': False, 'error': 'not-recent'}
         if not os.path.isfile(path):
             return {'success': False, 'error': 'missing'}
-        handle_opened_file(path, _main_window_ref, _main_api_ref)
+        handle_opened_file(path, self.window, self, prefer_blank=True)
         return {'success': True}
 
     def acknowledge_onboarding(self):
@@ -1994,7 +1994,7 @@ class MarkdownAPI:
 
             opened = []
             for path in result_holder.get('paths', []):
-                handle_opened_file(path, _main_window_ref, _main_api_ref)
+                handle_opened_file(path, self.window, self, prefer_blank=True)
                 opened.append(path)
             return {'success': True, 'paths': opened}
         except Exception as e:
@@ -2378,10 +2378,6 @@ class MarkdownAPI:
         """用户选择“稍后”：置 armedForQuit，退出间隙静默安装；本会话不再打扰。"""
         return _decline_update()
 
-    def download_update_with_progress(self, version):
-        """Manual update download with progress updates shown in the page."""
-        return _manual_download_update_with_progress(version)
-
     def get_file_properties(self):
         """Return file properties for the Properties dialog"""
         if not self.file_path or not os.path.exists(self.file_path):
@@ -2499,8 +2495,6 @@ _menus_setup = False
 _view_menu_setup = False
 _file_menu_setup = False
 _app_menu_setup = False
-_update_menu_item = None
-_available_update_version = None
 _properties_panel_ref = None
 _about_window_ref = None
 _window_count = [0]  # list-based counter so it stays mutable inside ObjC callbacks
@@ -2762,18 +2756,6 @@ def _reopen_hidden_window():
 
 def api_for_window(window):
     return _window_apis.get(id(window))
-
-
-def _sync_content_before_close(window, api):
-    """Avoid synchronous JS evaluation during close.
-
-    The close event runs on the UI path. Pulling the full Markdown from JS
-    here can force a full DOM-to-Markdown Turndown conversion while the user is
-    trying to close the app, which can freeze WKWebView on larger documents. JS
-    keeps api.cached_content fresh via debounced store_content() calls instead,
-    so close/save prompts use the cached value and never block on full-page JS.
-    """
-    return
 
 
 def on_window_closing(window):
@@ -3054,7 +3036,7 @@ def create_window(file_path=None, x=None, y=None):
 
     api = MarkdownAPI(file_path)
     html_path = get_resource_path('index.html')
-    title = os.path.basename(file_path) if file_path else 'Untitled.md'
+    title = os.path.basename(file_path) if file_path else 'mdPreview'
 
     try:
         win = webview.create_window(
@@ -3169,7 +3151,7 @@ def _reuse_hidden_window_for_file(file_path):
     return False
 
 
-def handle_opened_file(file_path, main_window=None, main_api=None):
+def handle_opened_file(file_path, main_window=None, main_api=None, prefer_blank=False):
     """Handle a file opened via Apple Event or argv"""
     global _initial_file_handled
 
@@ -3183,6 +3165,11 @@ def handle_opened_file(file_path, main_window=None, main_api=None):
     file_path = os.path.abspath(file_path)
     if file_path in _opened_files:
         _focus_existing_file(file_path)
+        return
+
+    if prefer_blank and main_window and main_api and main_api.is_untitled and not main_api.is_dirty:
+        _initial_file_handled = True
+        update_main_window(main_window, main_api, file_path)
         return
 
     # Prefer reusing a hidden blank window (kept alive after last-window
@@ -3267,7 +3254,7 @@ if HAS_COCOA:
 
     def setup_all_menus():
         """Set up all custom menu items. Called once menus are ready."""
-        global _view_menu_setup, _file_menu_setup, _app_menu_setup, _update_menu_item
+        global _view_menu_setup, _file_menu_setup, _app_menu_setup
         try:
             from AppKit import NSApplication, NSMenuItem, NSMenu
             from Foundation import NSObject
@@ -3298,7 +3285,6 @@ if HAS_COCOA:
                 update_item = NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(_t("Check for Updates…", "检查更新…"), "checkForUpdates:", "")
                 update_item.setTarget_(_view_menu_handler)
                 app_menu.insertItem_atIndex_(update_item, 1)
-                _update_menu_item = update_item
                 _app_menu_setup = True
 
             # ── View menu: Increase/Decrease Width ──
@@ -3856,7 +3842,8 @@ if HAS_COCOA:
         def openRecentFile_(self, sender):
             try:
                 path = sender.representedObject()
-                handle_opened_file(str(path), _main_window_ref, _main_api_ref)
+                window = _get_target_window()
+                handle_opened_file(str(path), window, api_for_window(window), prefer_blank=True)
             except Exception:
                 log_exception('open recent file failed')
 
@@ -4002,7 +3989,7 @@ if HAS_COCOA:
 
                 try:
                     github_url = NSURL.URLWithString_('https://github.com/tahoeliu/mdPreview')
-                    mail_url = NSURL.URLWithString_('mailto:tianoncall@gmail.com')
+                    website_url = NSURL.URLWithString_('https://tahoeliu.com')
                     credit.setAllowsEditingTextAttributes_(True)
                     line_text = 'Opensourced on GitHub\n©tahoeliu'
                     attr = NSMutableAttributedString.alloc().initWithString_(line_text)
@@ -4013,7 +4000,7 @@ if HAS_COCOA:
                     gh_start = line_text.index('GitHub')
                     attr.addAttribute_value_range_('NSLink', github_url, NSMakeRange(gh_start, len('GitHub')))
                     ct_start = line_text.index('©tahoeliu')
-                    attr.addAttribute_value_range_('NSLink', mail_url, NSMakeRange(ct_start, len('©tahoeliu')))
+                    attr.addAttribute_value_range_('NSLink', website_url, NSMakeRange(ct_start, len('©tahoeliu')))
                     credit.setAttributedStringValue_(attr)
                 except Exception:
                     pass
@@ -4252,7 +4239,7 @@ def main():
 
     main_api = MarkdownAPI(file_path)
     html_path = get_resource_path('index.html')
-    title = os.path.basename(file_path) if file_path else 'Untitled.md'
+    title = os.path.basename(file_path) if file_path else 'mdPreview'
 
     _start_log('before create_window')
     placement = _placement_for_new_window(900, 680)
@@ -4611,10 +4598,6 @@ def _mark_update_checked():
     update_config({'last_update_check': time.time()})
 
 
-def _set_update_available(remote_version):
-    return _request_update(automatic=True, version=remote_version)
-
-
 def _request_update(automatic=True, version=None, retry=False):
     if version is not None and (not isinstance(version, str) or len(version) > 32
                                 or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?', version)):
@@ -4731,47 +4714,6 @@ def _run_update_job(automatic, version=None, retry=False):
 
 
 
-def _clear_update_available():
-    """Clear remembered update availability and restore the menu title."""
-    global _available_update_version
-    _available_update_version = None
-    if HAS_COCOA:
-        def _update_menu():
-            try:
-                if _update_menu_item:
-                    _update_menu_item.setTitle_(_t('Check for Updates…', '检查更新…'))
-            except Exception:
-                pass
-        AppHelper.callAfter(_update_menu)
-
-
-def _show_update_alert(remote_version):
-    """Show a modal alert offering to download the update.
-
-    If user clicks Download, starts auto-download to staging dir in a
-    background thread. When download completes, shows the update bubble.
-    Returns True if the user clicked Download, False otherwise.
-    """
-    if not HAS_COCOA:
-        return False
-    try:
-        local = _get_current_version()
-        alert = NSAlert.alloc().init()
-        alert.setMessageText_(_t('mdPreview {version} is available!', 'mdPreview {version} 已可用！').format(version=remote_version))
-        alert.setInformativeText_(_t('You have version {version}. Would you like to download the update?', '当前版本为 {version}。是否下载更新？').format(version=local))
-        alert.addButtonWithTitle_(_t('Download', '下载'))
-        alert.addButtonWithTitle_(_t('Later', '稍后'))
-        response = alert.runModal()
-        if response == 1000:  # Download
-            version_arg = json.dumps(remote_version)
-            AppHelper.callAfter(lambda: _dispatch_js("showUpdateDownloadProgress(0)"))
-            AppHelper.callAfter(lambda: _dispatch_js(f"window.pywebview.api.download_update_with_progress({version_arg})"))
-            return True
-        return False
-    except Exception:
-        return False
-
-
 def _staged_version_acceptable(staged_version, local_version):
     try:
         return version_tuple(staged_version) >= version_tuple(local_version)
@@ -4785,10 +4727,6 @@ def _download_and_extract_unlocked(version, progress_callback=None, keep_dmg=Fal
         return download(version, _get_current_version(), UPDATE_STAGING_DIR, _publisher_team_id(), progress_callback)
     except Exception as error:
         return _update_error(error)
-
-
-def _manual_download_update_with_progress(version):
-    return _request_update(automatic=False, version=version, retry=True)
 
 
 def _schedule_startup_update_check():
@@ -4811,45 +4749,6 @@ def _schedule_startup_update_check():
                 logging.error('[update] stage=scheduler code=state-unavailable')
             _update_wakeup.wait(60)
     threading.Thread(target=scheduler, daemon=True, name='update-scheduler').start()
-
-
-def _manual_check_up_to_date():
-    """Alert for manual check when already on latest version.
-
-    Also offers "Re-download Latest": reinstalls the current latest release
-    with the download progress shown in the update bubble (useful to repair
-    an installation or pick up a re-uploaded DMG).
-    """
-    if not HAS_COCOA:
-        return
-    try:
-        local = _get_current_version()
-        alert = NSAlert.alloc().init()
-        alert.setMessageText_(_t("You're up to date!", "已是最新版本！"))
-        alert.setInformativeText_(_t('mdPreview {version} is the latest version.', 'mdPreview {version} 已是最新版本。').format(version=local))
-        alert.addButtonWithTitle_(_t('Re-download Latest', '重新下载最新版'))
-        alert.addButtonWithTitle_(_t('OK', '好'))
-        response = alert.runModal()
-        if response == 1000:  # Re-download Latest
-            version_arg = json.dumps(local)
-            AppHelper.callAfter(lambda: _dispatch_js("showUpdateDownloadProgress(0)"))
-            AppHelper.callAfter(lambda: _dispatch_js(f"window.pywebview.api.download_update_with_progress({version_arg})"))
-    except Exception:
-        pass
-
-
-def _manual_check_error():
-    """Alert for manual check when the network request fails."""
-    if not HAS_COCOA:
-        return
-    try:
-        alert = NSAlert.alloc().init()
-        alert.setMessageText_(_t('Could not check for updates.', '无法检查更新。'))
-        alert.setInformativeText_(_t('Please check your internet connection and try again later.', '请检查网络连接后重试。'))
-        alert.addButtonWithTitle_('OK')
-        alert.runModal()
-    except Exception:
-        pass
 
 
 _toggle_menu_item = None

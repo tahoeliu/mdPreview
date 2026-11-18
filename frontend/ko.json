@@ -35,7 +35,6 @@
   "File updated externally; automatic reload is off.": "파일이 외부에서 수정되었습니다. 자동 새로고침이 꺼져 있습니다.",
   "Preview": "미리보기",
   "Paste as Markdown": "Markdown으로 붙여넣기",
-  "Start writing": "글쓰기 시작",
   "Markdown converter is not ready. Please retry.": "Markdown 변환기가 아직 준비되지 않았습니다. 다시 시도하세요.",
   "Save is not ready yet": "아직 저장할 수 없습니다",
   "Saved current version": "현재 버전을 저장했습니다",
@@ -246,9 +245,6 @@
   "Clipboard is empty or unreadable": "클립보드가 비어 있거나 읽을 수 없습니다",
   "Nothing to paste": "붙여넣을 내용이 없습니다",
   "Rendering failed": "렌더링에 실패했습니다",
-  "Almost done": "거의 다 읽었습니다",
-  "{n} min left": "약 {n}분 남음",
-  "About {n} min read": "읽는 데 약 {n}분",
   "Copy": "복사",
   "Copy code": "코드 복사",
   "Copied": "복사됨",
@@ -388,6 +384,8 @@
   "Paragraph spacing is automatic — no need for extra blank lines.": "문단 간격은 자동으로 유지됩니다. 빈 줄을 더 넣을 필요가 없습니다.",
   "Loading the rest…": "나머지를 불러오는 중…",
   "Image could not be displayed": "이미지를 표시할 수 없습니다",
-  "Just type, or open something.": "바로 입력하거나 문서를 여세요.",
-  "Could not make a secure connection to the update server.": "업데이트 서버에 안전하게 연결할 수 없습니다."
+  "Could not make a secure connection to the update server.": "업데이트 서버에 안전하게 연결할 수 없습니다.",
+  "Recent Documents": "최근 문서",
+  "Or start typing.": "바로 입력할 수도 있습니다.",
+  "Paste to Preview": "붙여넣어 미리 보기"
 }

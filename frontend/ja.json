@@ -35,7 +35,6 @@
   "File updated externally; automatic reload is off.": "ファイルが外部で更新されました。自動再読み込みはオフです。",
   "Preview": "プレビュー",
   "Paste as Markdown": "Markdown としてペースト",
-  "Start writing": "書き始める",
   "Markdown converter is not ready. Please retry.": "Markdown 変換機能の準備ができていません。もう一度お試しください。",
   "Save is not ready yet": "まだ保存できません",
   "Saved current version": "現在のバージョンを保存しました",
@@ -246,9 +245,6 @@
   "Clipboard is empty or unreadable": "クリップボードが空か、読み取れません",
   "Nothing to paste": "ペーストする内容がありません",
   "Rendering failed": "表示に失敗しました",
-  "Almost done": "もうすぐ読み終わります",
-  "{n} min left": "残り約 {n} 分",
-  "About {n} min read": "読了目安 約 {n} 分",
   "Copy": "コピー",
   "Copy code": "コードをコピー",
   "Copied": "コピーしました",
@@ -388,6 +384,8 @@
   "Paragraph spacing is automatic — no need for extra blank lines.": "段落の間隔は自動で調整されます。空行を重ねる必要はありません。",
   "Loading the rest…": "続きを読み込んでいます…",
   "Image could not be displayed": "画像を表示できません",
-  "Just type, or open something.": "そのまま入力するか、書類を開いてください。",
-  "Could not make a secure connection to the update server.": "アップデートサーバに安全に接続できませんでした。"
+  "Could not make a secure connection to the update server.": "アップデートサーバに安全に接続できませんでした。",
+  "Recent Documents": "最近使った書類",
+  "Or start typing.": "そのまま入力することもできます。",
+  "Paste to Preview": "貼り付けてプレビュー"
 }

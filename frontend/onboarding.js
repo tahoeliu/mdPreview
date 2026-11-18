@@ -26,38 +26,59 @@ window.Onboarding=(()=>{
    const button=document.createElement('button');button.textContent=label;button.addEventListener('click',async event=>{event.stopPropagation();try{const result=await run();if(result?.success===false)throw new Error('action-failed');await acknowledge();actions.remove();}catch(error){showStatus(t('Action failed','操作失败'),true);}});actions.append(button);
   }const row=overlay.querySelector('.welcome-actions');if(row)row.after(actions);else overlay.append(actions);
  }
- // The start screen on an empty document: a title and three entry points (open, recent, paste).
- const ICONS={open:'<path d="M3.5 7.6a2 2 0 0 1 2-2h3.7l2 2.2h7.3a2 2 0 0 1 2 2v7.6a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
-  recent:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.4V12l3.1 2"/>',
-  paste:'<rect x="6" y="5" width="12" height="15.5" rx="2"/><path d="M9.5 5v-.8a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V5M9.2 10.6h5.6M9.2 14.2h5.6"/>'};
- async function attempt(run){try{const result=await run();if(result&&result.success===false&&!result.cancelled)throw new Error('action-failed');}catch(error){showStatus(t('Action failed','操作失败'),true);}}
- function tile(kind,label,run){const button=document.createElement('button');button.type='button';button.className='welcome-tile';button.dataset.kind=kind;
-  button.innerHTML='<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+ICONS[kind]+'</svg><span></span>';
-  button.lastChild.textContent=label;button.addEventListener('click',event=>{event.stopPropagation();attempt(run);});return button;}
- function closeRecent(){const menu=document.querySelector('.welcome-menu');if(!menu)return;menu.remove();document.querySelector('.welcome-tile[data-kind="recent"]')?.setAttribute('aria-expanded','false');
-  document.removeEventListener('click',closeRecent);window.removeEventListener('keydown',recentKey,true);}
- function recentKey(event){if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();closeRecent();document.querySelector('.welcome-tile[data-kind="recent"]')?.focus();}}
- function openRecent(button,files){if(document.querySelector('.welcome-menu')){closeRecent();return;}
-  const menu=document.createElement('div');menu.className='welcome-menu';menu.setAttribute('role','menu');
-  for(const file of files){const item=document.createElement('button');item.type='button';item.setAttribute('role','menuitem');item.title=file.path;
-   const name=document.createElement('span');name.className='welcome-menu-name';name.textContent=file.name;const folder=document.createElement('span');folder.className='welcome-menu-folder';folder.textContent=file.folder||'';item.append(name,folder);
-   item.addEventListener('click',event=>{event.stopPropagation();closeRecent();attempt(()=>Bridge.call('open_recent_file',file.path));});menu.append(item);}
-  button.after(menu);button.setAttribute('aria-expanded','true');menu.firstChild.focus();
-  document.addEventListener('click',closeRecent);window.addEventListener('keydown',recentKey,true);}
- let recentFiles=[];
- async function recent(button){if(!button||!Bridge.ready()||!window.pywebview.api.get_recent_files)return;
-  let files=[];try{files=await Bridge.call('get_recent_files');}catch(error){files=[];}
-  recentFiles=Array.isArray(files)?files.filter(file=>file&&typeof file.name==='string'&&typeof file.path==='string'):[];
-  if(!button.isConnected)return;button.disabled=!recentFiles.length;button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-expanded','false');
-  if(!button.dataset.bound){button.dataset.bound='true';button.addEventListener('click',event=>{event.stopPropagation();if(recentFiles.length)openRecent(button,recentFiles);});}}
- function refresh(overlay){closeRecent();recent(overlay.querySelector('.welcome-tile[data-kind="recent"]'));}
- function build(overlay){const title=document.createElement('div');title.className='welcome-title';title.textContent=t('Start writing','开始书写');
-  const hint=document.createElement('div');hint.className='welcome-hint';hint.textContent=t('Just type, or open something.','直接输入，或打开一份文档。');
+ const ICONS={
+  open:'<path d="M3.5 7.6a2 2 0 0 1 2-2h3.7l2 2.2h7.3a2 2 0 0 1 2 2v7.6a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
+  paste:'<rect x="6" y="5" width="12" height="15.5" rx="2"/><path d="M9.5 5v-.8a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1V5M9.2 10.6h5.6M9.2 14.2h5.6"/>'
+ };
+ async function attempt(run){
+  try{const result=await run();if(result&&result.success===false&&!result.cancelled)throw new Error('action-failed');}
+  catch(error){showStatus(t('Action failed','操作失败'),true);}
+ }
+ function tile(kind,label,run){
+  const button=document.createElement('button');button.type='button';button.className='welcome-tile';button.dataset.kind=kind;
+  button.innerHTML='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+ICONS[kind]+'</svg><span></span>';
+  button.lastChild.textContent=label;
+  button.addEventListener('click',()=>void attempt(run));
+  return button;
+ }
+ const recentRequests=new WeakMap();
+ async function refresh(overlay){
+  const list=overlay.querySelector('.welcome-recents');
+  if(!Bridge.ready()||!window.pywebview.api.get_recent_files)return;
+  const request=Bridge.call('get_recent_files');
+  recentRequests.set(list,request);
+  let files;
+  try{files=await request;}catch(error){files=[];}
+  if(overlay.id!=='welcomeOverlay'||recentRequests.get(list)!==request)return;
+  const items=(Array.isArray(files)?files:[]).filter(file=>file&&typeof file.name==='string'&&typeof file.path==='string').slice(0,3);
+  const paths=items.map(file=>file.path);
+  if(JSON.stringify(paths)===list.dataset.paths)return;
+  list.dataset.paths=JSON.stringify(paths);
+  list.hidden=!items.length;
+  const heading=document.createElement('div');heading.className='welcome-recents-label';heading.textContent=t('Recent Documents','最近文档');
+  const rows=document.createElement('ul');
+  for(const file of items){
+   const row=document.createElement('li');
+   const button=document.createElement('button');button.type='button';button.title=file.path;
+   const name=document.createElement('span');name.textContent=file.name;
+   const folder=document.createElement('span');folder.className='welcome-recent-folder';folder.textContent=file.folder||'';
+   button.append(name,folder);
+   button.addEventListener('click',()=>void attempt(()=>Bridge.call('open_recent_file',file.path)));
+   row.append(button);rows.append(row);
+  }
+  list.replaceChildren(heading,rows);
+ }
+ function build(overlay,recover){
+  const title=document.createElement('div');title.className='welcome-title';title.textContent='mdPreview';
+  const hint=document.createElement('div');hint.className='welcome-hint';hint.textContent=t('Or start typing.','也可直接输入。');
   const actions=document.createElement('div');actions.className='welcome-actions';
-  const recentTile=tile('recent',t('Open Recent','打开最近'),async()=>{});recentTile.disabled=true;
-  const slot=document.createElement('div');slot.className='welcome-slot';slot.append(recentTile);
-  actions.append(tile('open',t('Open File…','打开文件…'),()=>Bridge.call('open_file_dialog')),slot,tile('paste',t('Paste','粘贴'),async()=>{await pasteClipboardAndRead();}));
-  overlay.append(title,hint,actions);decorate(overlay);recent(recentTile);}
+  actions.append(tile('open',t('Open File…','打开文件…'),()=>Bridge.call('open_file_dialog')),tile('paste',t('Paste to Preview','粘贴查看'),()=>pasteClipboardAndRead()));
+  const recents=document.createElement('section');recents.className='welcome-recents';recents.hidden=true;
+  const recovery=document.createElement('button');recovery.type='button';recovery.className='welcome-recovery';recovery.hidden=true;
+  recovery.textContent=t('Recover documents','恢复文档');recovery.addEventListener('click',recover);
+  overlay.append(title,actions,hint,recents,recovery);
+  decorate(overlay);void refresh(overlay);
+ }
  async function initialize(){if(!Bridge.ready()||!window.pywebview.api.get_onboarding)return;
   try{const state=await Bridge.call('get_onboarding');first=state.first;const overlay=document.getElementById('welcomeOverlay');if(overlay)decorate(overlay);
    if(state.updated){let button=document.getElementById('releaseNotesNotice');if(!button){button=document.createElement('button');button.id='releaseNotesNotice';button.className='release-notes-notice';button.addEventListener('click',notes);document.body.append(button);}button.textContent=t('Updated to','已更新到')+' '+state.version+' · '+t('See changes','查看新功能');clearTimeout(button._hideTimer);button.classList.remove('is-leaving');button._hideTimer=setTimeout(()=>{acknowledge().catch(()=>{});button.classList.add('is-leaving');setTimeout(()=>button.remove(),400);},10000);}

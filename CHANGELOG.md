@@ -2,6 +2,18 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.12] - 2026-11-18
+
+### Improved
+- Open a file or paste Markdown from the welcome screen, with the last three documents and recoverable drafts one click away.
+- The reading view keeps the thin progress line and removes the percentage and time estimate in the bottom corner.
+- Choose paper size and page numbering when exporting to PDF.
+
+### Fixed
+- Opening a file from an empty window reuses that window. Untitled windows display the app name until saved.
+- Opening another window no longer repeats the last update check's result.
+- Saving settings preserves custom text sizes and reading widths. Closing settings stops shortcut capture.
+
 ## [2.0.11] - 2026-11-16
 
 ### Fixed

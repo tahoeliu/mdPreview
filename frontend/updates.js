@@ -143,7 +143,15 @@ window.UpdateFeedback = {
       try {
         const result = await deps.Bridge.call('get_update_state');
         // 初始查询或旧窗口的慢回包不能覆盖期间收到的广播。
-        return id === request && at === generation ? updateFeedbackState(result) : false;
+        if (id !== request || at !== generation) return false;
+        const initialSnapshot = !authoritative;
+        const accepted = updateFeedbackState(result);
+        // A completed manual check in another window is history, not a new notification.
+        if (accepted && initialSnapshot && result.phase === 'idle' && result.automatic === false) {
+          dismissed = true;
+          renderUpdateFeedback();
+        }
+        return accepted;
       } catch (_) { return false; }
     }
     function legacy(patch) {

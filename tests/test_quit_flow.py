@@ -107,14 +107,57 @@ class QuitFlowTests(unittest.TestCase):
 @unittest.skipUnless(sys.platform == 'darwin', 'needs macOS')
 class StrandedWindowTests(unittest.TestCase):
     def test_off_screen_windows_are_moved_onto_the_screen_and_visible_ones_are_left_alone(self):
+        from Foundation import NSMakeRect
+
+        main = NSMakeRect(0, 0, 1440, 900)
+        rects = [[0, 0, 1440, 900]]
+
+        class Window:
+            def __init__(self, x, y):
+                self.rect = NSMakeRect(x, y, 900, 600)
+
+            def frame(self):
+                return self.rect
+
+            def isMiniaturized(self):
+                return False
+
+            def isVisible(self):
+                return True
+
+            def setFrameTopLeftPoint_(self, top_left):
+                self.rect = NSMakeRect(top_left.x, top_left.y - 600, 900, 600)
+
+            def orderFront_(self, sender):
+                pass
+
+        self.assert_windows_repositioned(Window, rects, main)
+
+    def test_real_windows_are_repositioned_when_a_display_is_available(self):
         from AppKit import NSApplication, NSWindow, NSMakeRect, NSScreen, NSBackingStoreBuffered
+
         NSApplication.sharedApplication()
-        rects = [[r.origin.x, r.origin.y, r.size.width, r.size.height] for r in (s.visibleFrame() for s in NSScreen.screens())]
-        main = NSScreen.mainScreen().visibleFrame()
-        def make(x, y):
-            w = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(NSMakeRect(x, y, 900, 600), 15, NSBackingStoreBuffered, False)
-            w.orderFront_(None); w.setFrameOrigin_((x, y)); return w
-        ok, lost1, lost2 = make(main.origin.x + 100, main.origin.y + 100), make(9000, -9000), make(-9000, 9000)
+        screen = NSScreen.mainScreen()
+        if screen is None:
+            self.skipTest('No macOS display is available')
+        main = screen.visibleFrame()
+        frames = [screen.visibleFrame() for screen in NSScreen.screens()]
+        rects = [[r.origin.x, r.origin.y, r.size.width, r.size.height] for r in frames]
+
+        def make_window(x, y):
+            window = NSWindow.alloc().initWithContentRect_styleMask_backing_defer_(
+                NSMakeRect(x, y, 900, 600), 15, NSBackingStoreBuffered, False)
+            window.orderFront_(None)
+            window.setFrameOrigin_((x, y))
+            self.addCleanup(window.orderOut_, None)
+            return window
+
+        self.assert_windows_repositioned(make_window, rects, main)
+
+    def assert_windows_repositioned(self, make_window, rects, main):
+        ok = make_window(main.origin.x + 100, main.origin.y + 100)
+        lost1 = make_window(9000, -9000)
+        lost2 = make_window(-9000, 9000)
         before = ok.frame().origin.x
         moved = mv._move_stranded_windows([ok, lost1, lost2], rects, main)
         self.assertEqual(moved, 2)

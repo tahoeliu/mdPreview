@@ -43,7 +43,7 @@ Double-click a `.md` file, edit it like Word, and share it as PDF, Word or a web
 
 |  |  |
 |---|---|
-| 📖 **Reading that feels calm** | Proper headings, tables, task lists, maths, diagrams and callout boxes. A side outline, folding sections, and a quiet "3 min left" indicator for long documents. |
+| 📖 **Reading that feels calm** | Proper headings, tables, task lists, maths, diagrams and callout boxes. A side outline, folding sections, and a thin progress line for long documents. |
 | ✏️ **Edit without learning Markdown** | Click into the page and a slim toolbar appears, like a word processor's. Bold, lists, links, tables. Your file stays clean Markdown underneath. |
 | 📤 **Share in the format people expect** | PDF with real page numbers, Word with real heading styles, one-file web pages, or rich text you can paste straight into Mail. |
 | 🔒 **Private and offline** | No account, no ads, no tracking. Your documents never leave your Mac. Open source under the MIT licence. |

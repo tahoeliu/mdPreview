@@ -1,4 +1,4 @@
-/* 长文阅读辅助：只读覆盖层（顶部细进度线 + 右下角剩余时间），不改动文档 DOM，不参与导出。
+/* 长文阅读辅助：只读覆盖层（顶部细进度线和位置标记），不改动文档 DOM，不参与导出。
    原则：安静、可忽略、对短文档完全不出现。 */
 window.ReadingProgress = (() => {
   const CJK = /[㐀-鿿豈-﫿぀-ヿ가-힯]/g;
@@ -21,26 +21,6 @@ window.ReadingProgress = (() => {
     return cjk / CJK_PER_MIN + words / WORDS_PER_MIN + codeChars / 2 / 900;
   }
 
-  // 每个标题到下一个同级或更高级标题之间的阅读分钟数（取整），用于大纲里的"这一节要读多久"。
-  function sectionMinutes(headings) {
-    const sizes = headings.map(h => {
-      let text = '', node = h.nextElementSibling;
-      const level = Number(h.tagName[1]);
-      while (node && !(/^H[1-6]$/.test(node.tagName) && Number(node.tagName[1]) <= level)) {
-        if (!/^H[1-6]$/.test(node.tagName)) text += node.textContent + ' ';
-        node = node.nextElementSibling;
-      }
-      const cjk = (text.match(CJK) || []).length;
-      return cjk / CJK_PER_MIN + (text.replace(CJK, ' ').match(WORD) || []).length / WORDS_PER_MIN;
-    });
-    return sizes.map(m => Math.round(m));
-  }
-
-  function label(minutes) {
-    const m = Math.max(0, Math.round(minutes));
-    return m < 1 ? null : m;
-  }
-
   function create(deps = {}) {
     const scroller = deps.scroller || document.querySelector('.scroll-wrap');
     const content = deps.content || document.getElementById('content');
@@ -50,7 +30,6 @@ window.ReadingProgress = (() => {
 
     const bar = document.createElement('div'); bar.className = 'read-progress'; bar.setAttribute('aria-hidden', 'true');
     const fill = document.createElement('div'); bar.append(fill);
-    const hud = document.createElement('div'); hud.className = 'read-hud'; hud.setAttribute('aria-hidden', 'true');
     const end = document.createElement('div'); end.className = 'read-end'; end.hidden = true;
     const svg = d => '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + '</svg>';
     end.innerHTML = '<div class="read-end-mark"><span aria-hidden="true">mdPreview</span></div><div class="read-end-actions"></div>';
@@ -63,7 +42,7 @@ window.ReadingProgress = (() => {
       const b = document.createElement('button'); b.type = 'button'; b.title = title; b.setAttribute('aria-label', title); b.innerHTML = svg(icon);
       b.addEventListener('click', run); actions.append(b);
     }
-    document.body.append(bar, hud); page.append(end);
+    document.body.append(bar); page.append(end);
 
     // Make the name exactly as wide as the row of buttons under it.
     function fitName() {
@@ -74,45 +53,24 @@ window.ReadingProgress = (() => {
       const width = name.getBoundingClientRect().width; if (!width) return;
       name.style.fontSize = (20 * target / width).toFixed(2) + 'px';
     }
-    let total = 0, measured = -1, hideTimer = 0, frame = 0;
+    let frame = 0;
 
-    function isLong() {
-      return !content.classList.contains('hidden') && content.isConnected &&
-        scroller.scrollHeight > scroller.clientHeight * MIN_SCREENS &&
-        !document.documentElement.hasAttribute('data-output');
-    }
-    function measure() {
-      const size = content.textContent.length;
-      if (size === measured) return;
-      measured = size; total = estimateMinutes(content);
-    }
-    function textFor(progress) {
-      const left = total * (1 - progress), n = label(left);
-      const pct = Math.round(progress * 100) + '%';
-      return (n === null ? t('Almost done', '快读完了') : t('{n} min left', '还剩约 {n} 分钟').replace('{n}', n)) + ' · ' + pct;
-    }
-    function update(reveal) {
+    function update() {
       frame = 0;
-      const showEnd = !content.classList.contains('hidden') && content.isConnected && !document.documentElement.hasAttribute('data-output') && content.textContent.trim().length > 0;
-      end.hidden = !showEnd;
-      if (showEnd) fitName();
-      if (!isLong()) { bar.classList.remove('on'); hud.classList.remove('on'); return; }
-      measure();
-      const range = scroller.scrollHeight - scroller.clientHeight;
-      const progress = range > 0 ? Math.min(1, Math.max(0, scroller.scrollTop / range)) : 0;
+      const preview = !content.classList.contains('hidden') && content.isConnected &&
+        !document.documentElement.hasAttribute('data-output');
+      end.hidden = !(preview && content.textContent.trim());
+      if (!end.hidden) fitName();
+      const height = scroller.clientHeight;
+      const long = preview && scroller.scrollHeight > height * MIN_SCREENS;
+      bar.classList.toggle('on', long);
+      if (!long) return;
+      const progress = Math.min(1, Math.max(0, scroller.scrollTop / (scroller.scrollHeight - height)));
       fill.style.transform = 'scaleX(' + progress.toFixed(4) + ')';
-      bar.classList.add('on');
-      if (progress >= 0.995) { hud.classList.remove('on'); return; }
-      hud.textContent = scroller.scrollTop < 8 && reveal === 'open'
-        ? t('About {n} min read', '约 {n} 分钟读完').replace('{n}', label(total) || 1)
-        : textFor(progress);
-      hud.classList.add('on');
-      clearTimeout(hideTimer);
-      hideTimer = setTimeout(() => hud.classList.remove('on'), reveal === 'open' ? 3500 : 1800);
     }
-    function schedule(reveal) { if (!frame) frame = requestAnimationFrame(() => update(reveal)); }
+    function schedule() { if (!frame) frame = requestAnimationFrame(update); }
 
-    // A thin position marker replaces the scrollbar: visible while scrolling and ~2 s after, like the progress note.
+    // A thin position marker replaces the scrollbar: visible while scrolling and ~2 s after.
     const thumb = document.createElement('div'); thumb.className = 'read-thumb'; document.body.append(thumb);
     let thumbTimer = 0;
     function showThumb() {
@@ -126,13 +84,13 @@ window.ReadingProgress = (() => {
       thumbTimer = setTimeout(() => thumb.classList.remove('on'), 1800);
     }
     scroller.addEventListener('scroll', showThumb, { passive: true });
-    scroller.addEventListener('scroll', () => schedule('scroll'), { passive: true });
-    new MutationObserver(() => { measured = -1; schedule('open'); }).observe(content, { childList: true });
-    window.addEventListener('resize', () => schedule('scroll'));
-    schedule('open');
-    return { update, measure, estimateMinutes, bar, hud, end, thumb };
+    scroller.addEventListener('scroll', schedule, { passive: true });
+    new MutationObserver(schedule).observe(content, { childList: true });
+    window.addEventListener('resize', schedule);
+    schedule();
+    return { bar, end, thumb };
   }
 
-  return { create, estimateMinutes, sectionMinutes };
+  return { create, estimateMinutes };
 })();
 document.addEventListener('DOMContentLoaded', () => { window.readingProgress = ReadingProgress.create(); });

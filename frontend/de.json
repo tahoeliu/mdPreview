@@ -35,7 +35,6 @@
   "File updated externally; automatic reload is off.": "Datei wurde extern geändert; automatisches Neuladen ist ausgeschaltet.",
   "Preview": "Vorschau",
   "Paste as Markdown": "Als Markdown einsetzen",
-  "Start writing": "Mit dem Schreiben beginnen",
   "Markdown converter is not ready. Please retry.": "Der Markdown-Konverter ist noch nicht bereit. Bitte versuche es erneut.",
   "Save is not ready yet": "Sichern ist noch nicht möglich",
   "Saved current version": "Aktuelle Version gesichert",
@@ -246,9 +245,6 @@
   "Clipboard is empty or unreadable": "Die Zwischenablage ist leer oder nicht lesbar",
   "Nothing to paste": "Nichts zum Einsetzen",
   "Rendering failed": "Darstellung fehlgeschlagen",
-  "Almost done": "Fast geschafft",
-  "{n} min left": "noch ca. {n} Min.",
-  "About {n} min read": "ca. {n} Min. Lesezeit",
   "Copy": "Kopieren",
   "Copy code": "Code kopieren",
   "Copied": "Kopiert",
@@ -388,6 +384,8 @@
   "Paragraph spacing is automatic — no need for extra blank lines.": "Der Absatzabstand ergibt sich automatisch – zusätzliche Leerzeilen sind nicht nötig.",
   "Loading the rest…": "Rest wird geladen …",
   "Image could not be displayed": "Bild konnte nicht angezeigt werden",
-  "Just type, or open something.": "Einfach lostippen oder etwas öffnen.",
-  "Could not make a secure connection to the update server.": "Es konnte keine sichere Verbindung zum Update-Server hergestellt werden."
+  "Could not make a secure connection to the update server.": "Es konnte keine sichere Verbindung zum Update-Server hergestellt werden.",
+  "Recent Documents": "Zuletzt verwendete Dokumente",
+  "Or start typing.": "Oder direkt losschreiben.",
+  "Paste to Preview": "Einfügen und ansehen"
 }

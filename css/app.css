@@ -18,10 +18,7 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--app-fg
 .page.full-width { max-width: none; padding: 30px 40px 120px; }
 .welcome-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: #aaa; pointer-events: auto; cursor: text; z-index: 5; transition: opacity 0.2s ease; }
 .welcome-overlay.welcome-fadeout { opacity: 0; pointer-events: none; }
-.welcome-overlay .welcome-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.3; }
 .welcome-overlay .welcome-title { font-size: 20px; font-weight: 500; color: #888; margin-bottom: 8px; }
-.welcome-overlay .welcome-tip { font-size: 14px; line-height: 1.6; color: #aaa; margin-top: 4px; }
-.welcome-overlay .welcome-tip kbd { font-family: -apple-system; background: rgba(0,0,0,0.035); border: 1px solid rgba(0,0,0,0.08); border-radius: 3px; padding: 0 4px; font-size: 11px; line-height: 1.35; color: inherit; margin: 0 0.5px; }
 .source { display: none; position: relative; min-height: calc(100vh - 180px); }
 .source.visible { display: block; }
 .highlight-layer, #textarea { margin: 0; padding: 0; font-family: var(--font-mono); font-size: var(--content-font-size, 16px); line-height: 1.8; white-space: pre-wrap; word-wrap: break-word; tab-size: 4; border: none; }
@@ -156,9 +153,6 @@ body:not(.has-toc) .page { margin: 0 auto; max-width: var(--page-width, 720px); 
 .toc-sidebar a.toc-active { color: #4da2ff; }
 .status { background: rgba(42,42,44,0.96); color: #ddd; border-color: #444; }
 .welcome-overlay .welcome-title { color: #aaa; }
-.welcome-overlay .welcome-tip { color: #888; }
-.welcome-overlay .welcome-icon { opacity: 0.5; }
-.welcome-overlay .welcome-tip kbd { background: rgba(255,255,255,0.055); border-color: rgba(255,255,255,0.11); color: inherit; }
 .update-bubble { background: rgba(42,42,44,0.82); color: #ddd; border-color: rgba(255,255,255,0.14); }
 .update-bubble:hover { background: rgba(52,52,54,0.92); border-color: rgba(255,255,255,0.22); }
 .update-progress { background: rgba(255,255,255,0.16); }
@@ -179,8 +173,6 @@ body:not(.has-toc) .page { margin: 0 auto; max-width: var(--page-width, 720px); 
 .read-progress { position: fixed; top: 0; left: 0; right: 0; height: 2px; z-index: 800; pointer-events: none; opacity: 0; transition: opacity .3s; }
 .read-progress.on { opacity: 1; }
 .read-progress > div { height: 100%; background: var(--link); opacity: .55; transform-origin: 0 50%; transform: scaleX(0); }
-.read-hud { position: fixed; right: 18px; bottom: 16px; z-index: 800; pointer-events: none; padding: 5px 11px; border-radius: 999px; font-size: 12px; line-height: 1.4; font-variant-numeric: tabular-nums; color: #5f5f64; background: rgba(250,250,252,.92); border: 1px solid rgba(0,0,0,.08); opacity: 0; transition: opacity .35s; }
-.read-hud.on { opacity: 1; }
 .read-end { margin: 72px 0 8px; display: flex; flex-direction: column; align-items: center; gap: 10px; color: #8e8e93; user-select: none; -webkit-user-select: none; }
 .read-end-mark { display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 11px; letter-spacing: .06em; opacity: .75; }
 .read-end-actions { display: flex; gap: 4px; }
@@ -188,10 +180,9 @@ body:not(.has-toc) .page { margin: 0 auto; max-width: var(--page-width, 720px); 
 .read-end-actions button:hover { background: rgba(128,128,128,.14); color: #3c3c43; }
 .read-end[hidden] { display: none; }
 @media (prefers-color-scheme: dark) {
-  .read-hud { color: #b4b4b9; background: rgba(40,40,42,.92); border-color: rgba(255,255,255,.1); }
   .read-end { color: #98989d; } .read-end-actions button:hover { color: #e5e5ea; }
 }
-@media (prefers-reduced-motion: reduce) { .read-progress, .read-hud { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .read-progress { transition: none; } }
 
 /* ── Go to heading (⌘J) ── */
 .goto-overlay { position: fixed; inset: 0; z-index: 1100; display: flex; justify-content: center; align-items: flex-start; padding-top: 14vh; background: rgba(0,0,0,.18); }
@@ -512,42 +503,37 @@ body.has-edit-bar .update-bubble, body.has-source-bar .update-bubble { top: calc
 
 /* A blank page shows its text cursor straight away, so it is obvious that typing works. */
 body.is-blank:not(.is-editing):not(.edit-pinned) #content { caret-color: #0062cc; caret-color: AccentColor; }
-/* ── Start screen on an empty document: title, one line, three entry tiles ── */
-.welcome-overlay { color: #6e6e73; }
-.welcome-overlay .welcome-title { font-size: 20px; font-weight: 500; color: #6e6e73; margin-bottom: 5px; }
-.welcome-hint { font-size: 13px; color: #737378; margin-bottom: 22px; }
+/* Empty document welcome screen */
+.welcome-overlay { color: #6e6e73; overflow: auto; justify-content: safe center; }
+.welcome-overlay .welcome-title { font-size: 20px; font-weight: 500; color: #6e6e73; margin-bottom: 14px; }
+.welcome-hint { font-size: 13px; color: #737378; margin-top: 12px; }
 .welcome-actions { display: flex; justify-content: center; gap: 8px; }
-.welcome-slot { position: relative; display: flex; }
 .welcome-overlay .welcome-tile { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 7px; width: 128px; height: 76px; padding: 16px 6px 0; border: 1px solid rgba(0,0,0,.07); border-radius: 10px; background: transparent; color: #6e6e73; font: inherit; font-size: 12px; font-weight: 400; line-height: 1.25; cursor: pointer; transition: background .12s ease, border-color .12s ease, box-shadow .12s ease; }
 .welcome-overlay .welcome-tile svg { width: 20px; height: 20px; color: #8e8e93; flex: none; }
 .welcome-overlay .welcome-tile span { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .welcome-overlay .welcome-tile:hover:not(:disabled) { background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.13); color: var(--fg, #333); }
 .welcome-overlay .welcome-tile:active:not(:disabled) { background: rgba(0,0,0,.05); }
-.welcome-overlay .welcome-tile:disabled { cursor: default; color: #c7c7cc; }
-.welcome-overlay .welcome-tile:disabled svg { color: #d1d1d6; }
 .welcome-overlay button:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(0,98,204,.35); }
-.welcome-menu { position: absolute; top: calc(100% + 6px); left: 50%; transform: translateX(-50%); z-index: 6; width: max-content; min-width: 240px; max-width: min(420px, 80vw); padding: 5px; border: 1px solid rgba(0,0,0,.12); border-radius: 10px; background: var(--bg); box-shadow: 0 8px 28px rgba(0,0,0,.12), 0 1px 3px rgba(0,0,0,.06); text-align: left; cursor: default; }
-.welcome-overlay .welcome-menu button { display: flex; align-items: baseline; gap: 16px; width: 100%; height: 30px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; color: var(--fg, #333); font: inherit; font-size: 13px; cursor: pointer; }
-.welcome-overlay .welcome-menu button:hover, .welcome-overlay .welcome-menu button:focus-visible { background: rgba(0,0,0,.06); box-shadow: none; }
-.welcome-menu-name { flex: none; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.welcome-menu-folder { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: #a1a1a6; font-size: 12px; }
+.welcome-recents { width: min(320px, 80%); margin-top: 16px; text-align: left; }
+.welcome-recents-label { margin: 0 8px 4px; font-size: 12px; color: var(--fg-muted); }
+.welcome-recents ul { list-style: none; margin: 0; padding: 0; }
+.welcome-overlay .welcome-recents button { display: flex; align-items: center; gap: 14px; width: 100%; padding: 6px 8px; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 13px; text-align: left; }
+.welcome-recents button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.welcome-recent-folder { margin-left: auto; color: var(--fg-muted); font-size: 12px; }
+.welcome-overlay .welcome-recovery { margin-top: 8px; border: 0; background: transparent; color: var(--link); font: inherit; font-size: 12px; }
+.welcome-overlay .welcome-recents button:hover, .welcome-overlay .welcome-recovery:hover { background: rgba(0,0,0,.05); }
 .welcome-overlay [data-onboarding] { display: flex; justify-content: center; gap: 4px; margin-top: 16px; }
 .welcome-overlay [data-onboarding] button { height: 28px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; color: #8e8e93; font: inherit; font-size: 12px; cursor: pointer; }
 .welcome-overlay [data-onboarding] button:hover { background: rgba(0,0,0,.06); }
 @media (prefers-color-scheme: dark) {
   .welcome-overlay .welcome-title { color: #a1a1a6; }
   .welcome-hint { color: #98989d; }
+  .welcome-overlay .welcome-recents button:hover, .welcome-overlay .welcome-recovery:hover { background: rgba(255,255,255,.08); }
   .welcome-overlay .welcome-tile { border-color: rgba(255,255,255,.1); color: #a1a1a6; }
   .welcome-overlay .welcome-tile svg { color: #8e8e93; }
   .welcome-overlay .welcome-tile:hover:not(:disabled) { background: rgba(255,255,255,.05); border-color: rgba(255,255,255,.18); color: #dcdcde; }
   .welcome-overlay .welcome-tile:active:not(:disabled) { background: rgba(255,255,255,.09); }
-  .welcome-overlay .welcome-tile:disabled { color: #555558; }
-  .welcome-overlay .welcome-tile:disabled svg { color: #48484a; }
   .welcome-overlay button:focus-visible { box-shadow: 0 0 0 2px rgba(10,132,255,.5); }
-  .welcome-menu { border-color: rgba(255,255,255,.16); box-shadow: 0 8px 28px rgba(0,0,0,.45); }
-  .welcome-overlay .welcome-menu button { color: #dcdcde; }
-  .welcome-overlay .welcome-menu button:hover, .welcome-overlay .welcome-menu button:focus-visible { background: rgba(255,255,255,.1); }
-  .welcome-menu-folder { color: #6e6e73; }
   .welcome-overlay [data-onboarding] button { color: #a1a1a6; }
   .welcome-overlay [data-onboarding] button:hover { background: rgba(255,255,255,.1); }
 }

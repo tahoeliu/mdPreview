@@ -373,10 +373,9 @@ test('a blank document opens in Preview, ready to type, and writes clean Markdow
   await page.evaluate(()=>{window.pywebview.api.get_recent_files=()=>[{name:'Notes.md',folder:'/tmp',path:'/tmp/Notes.md'}];window.__opened=[];window.pywebview.api.open_recent_file=p=>{window.__opened.push(p);return {success:true};};});
   await page.evaluate(()=>loadContent('Untitled.md','',720,false,false));
   await expect(page.locator('#source')).not.toHaveClass(/visible/);
-  await expect(page.locator('#welcomeOverlay .welcome-tile')).toHaveCount(3);
+  await expect(page.locator('#welcomeOverlay .welcome-tile')).toHaveCount(2);
   await expect(page.locator('#welcomeOverlay kbd')).toHaveCount(0);
-  await expect(page.locator('.welcome-tile[data-kind="recent"]')).toBeEnabled();
-  await expect(page.locator('.welcome-menu')).toHaveCount(0);
+  await expect(page.locator('.welcome-recents button')).toHaveText(['Notes.md/tmp']);
   expect(await page.evaluate(()=>document.activeElement.id)).toBe('content');
   expect(await page.evaluate(()=>window.getCurrentMarkdown())).toBe('');
   const caret=()=>page.evaluate(()=>getComputedStyle(document.getElementById('content')).caretColor);
@@ -400,13 +399,8 @@ test('a blank document opens in Preview, ready to type, and writes clean Markdow
   expect(await page.evaluate(md)).toMatch(/^# Pasted\n\nbody\n?$/);
   await page.evaluate(()=>loadContent('Untitled.md','',720,false,false));
   await expect(page.locator('#welcomeOverlay')).toHaveCount(1);
-  await page.click('.welcome-tile[data-kind="recent"]');
-  await expect(page.locator('.welcome-menu .welcome-menu-name')).toHaveText(['Notes.md']);
-  await page.keyboard.press('Escape');
-  await expect(page.locator('.welcome-menu')).toHaveCount(0);
-  await page.click('.welcome-tile[data-kind="recent"]');
-  await page.click('.welcome-menu button');
+  await page.click('.welcome-recents button');
   expect(await page.evaluate(()=>window.__opened)).toEqual(['/tmp/Notes.md']);
   await page.evaluate(()=>{window.pywebview.api.get_recent_files=()=>[];return loadContent('Untitled.md','',720,false,false);});
-  await expect(page.locator('.welcome-tile[data-kind="recent"]')).toBeDisabled();
+  await expect(page.locator('#welcomeOverlay .welcome-recents')).toBeHidden();
 });
