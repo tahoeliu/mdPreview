@@ -50,12 +50,25 @@ jobs:
           npm ci --ignore-scripts
           npx playwright install chromium webkit
 
+      - name: Static and supply-chain checks
+        run: |
+          .venv/bin/ruff check mdpreview_core scripts mdPreview.py --select F821,E9
+          node scripts/vendor.mjs --check
+          node scripts/extract-i18n.mjs --check
+          npm audit --audit-level=high
+
       - name: Tests
         run: |
-          node scripts/vendor.mjs --check
           npm test
           scripts/retry.sh 2 .venv/bin/python scripts/test-python.py
           npm run test:e2e
+
+      - name: Large-document performance and accessibility (WebKit)
+        if: matrix.arch == 'arm64'
+        run: >
+          node node_modules/@playwright/test/cli.js test
+          --config=tests/release-playwright.config.js --project=webkit
+          --grep-invert "原生冷启动"
 
       - name: Build app and disk image
         run: scripts/build_dmg.sh
