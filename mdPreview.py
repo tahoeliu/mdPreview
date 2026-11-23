@@ -4610,7 +4610,14 @@ def _request_update(automatic=True, version=None, retry=False, feedback_window=N
     if state.get('code') in ('quit-gap-version-unverified', 'quit-gap-inconclusive'):
         return {'success': False, 'error': state['code']}
     if not _update_job_lock.acquire(blocking=False):
-        return {'success': True, 'joined': True, 'state': _get_update_state().snapshot(public=True)}
+        state = _get_update_state().snapshot(public=True)
+        if not automatic and feedback_window is not None:
+            try:
+                from mdpreview_core.csp_bridge import run_body
+                run_body(feedback_window, 'showActiveUpdate(' + json.dumps(state) + ');')
+            except Exception:
+                logging.warning('[update] stage=active-feedback code=bridge-failed')
+        return {'success': True, 'joined': True, 'state': state}
     _update_cancel.clear()
     def work():
         try:

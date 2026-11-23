@@ -1,11 +1,12 @@
 name: Release
 
-# Push a tag that equals the VERSION file, e.g. `git tag v2.0.0 && git push origin v2.0.0`.
+# Push v<VERSION> or release/v<VERSION>. The branch path creates the tag after verification.
 # Each architecture is built and verified on a native runner. A separate job, which is the only
 # one with write access and the signing secret, signs SHA256SUMS and publishes the GitHub release.
 on:
   push:
     tags: ['v*']
+    branches: ['release/v*']
 
 permissions:
   contents: read
@@ -29,9 +30,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Tag must equal VERSION
+      - name: Release ref must match VERSION
         run: |
-          test "v$(cat VERSION)" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME does not match VERSION $(cat VERSION)"; exit 1; }
+          TAG="v$(cat VERSION)"
+          case "$GITHUB_REF" in
+            "refs/tags/$TAG"|"refs/heads/release/$TAG") ;;
+            *) echo "Ref $GITHUB_REF does not match release version $TAG"; exit 1 ;;
+          esac
 
       - uses: actions/setup-python@v5
         with:
@@ -162,7 +167,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* \
+          TAG="v$(cat VERSION)"
+          if [[ "$GITHUB_REF" == "refs/heads/release/$TAG" ]]; then
+            ENDPOINT="repos/$GITHUB_REPOSITORY/git/refs"
+            if TAG_SHA="$(gh api "$ENDPOINT/tags/$TAG" --jq '.object.sha')"; then
+              test "$TAG_SHA" = "$GITHUB_SHA" || { echo "Tag $TAG points to a different commit"; exit 1; }
+            else
+              gh api --method POST "$ENDPOINT" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA"
+            fi
+          fi
+          gh release create "$TAG" dist/* \
             --verify-tag \
             --title "mdPreview $(cat VERSION)" \
             --notes-file release-notes.md

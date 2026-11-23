@@ -2,6 +2,12 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.14] - 2026-11-23
+
+### Improved
+- Update download progress stays a consistent width, hides automatically, and can be reopened from Check for Updates.
+- The update-ready notice uses clearer wording and puts Update now before Later.
+
 ## [2.0.13] - 2026-11-23
 
 ### Improved

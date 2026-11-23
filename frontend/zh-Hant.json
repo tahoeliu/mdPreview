@@ -1,5 +1,6 @@
 {
   "Checking for updates…": "正在檢查更新…",
+  "New version is ready.": "新版本已就緒。",
   "Update {version} is ready.": "更新 {version} 已就緒。",
   "Update now": "立即更新",
   "Update state could not be read safely. The current app is unchanged.": "無法安全讀取更新狀態，目前的應用程式未變更。",

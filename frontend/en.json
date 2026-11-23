@@ -1,5 +1,6 @@
 {
   "Checking for updates…": "Checking for updates…",
+  "New version is ready.": "New version is ready.",
   "Update {version} is ready.": "Update {version} is ready.",
   "Update now": "Update now",
   "Update state could not be read safely. The current app is unchanged.": "Update state could not be read safely. The current app is unchanged.",

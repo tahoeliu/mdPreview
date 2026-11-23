@@ -1,5 +1,6 @@
 {
   "Checking for updates…": "更新を確認中…",
+  "New version is ready.": "新しいバージョンの準備ができました。",
   "Update {version} is ready.": "更新 {version} の準備ができました。",
   "Update now": "今すぐ更新",
   "Update state could not be read safely. The current app is unchanged.": "更新の状態を安全に読み取れませんでした。現在のアプリは変更されていません。",

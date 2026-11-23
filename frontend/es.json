@@ -1,5 +1,6 @@
 {
   "Checking for updates…": "Buscando actualizaciones…",
+  "New version is ready.": "La nueva versión está lista.",
   "Update {version} is ready.": "La actualización {version} está lista.",
   "Update now": "Actualizar ahora",
   "Update state could not be read safely. The current app is unchanged.": "No se pudo leer de forma segura el estado de la actualización. La aplicación actual no ha cambiado.",

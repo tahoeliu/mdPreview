@@ -148,10 +148,10 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     const focusBefore = doc.activeElement;
     push(readyState('2.1.0'));
     ok(bubble().classList.contains('visible'), '6a 已安排退出安装的 ready 仍显示选择');
-    ok(text() === 'Update 2.1.0 is ready.', '6b 只说版本已就绪，不附加长说明', text());
+    ok(text() === 'New version is ready.', '6b 只说新版本已就绪', text());
     const order = [...bubble().querySelectorAll('.update-actions button')].map(button => button.className);
-    ok(order.join() === 'update-later,update-approve,update-retry,update-help' && bubble().classList.contains('choosing'),
-      '6b2 稍后在前、立即更新在后；选择态不另画关闭按钮', order.join());
+    ok(order.join() === 'update-approve,update-later,update-retry,update-help' && bubble().classList.contains('choosing'),
+      '6b2 立即更新在前、稍后在后；选择态不另画关闭按钮', order.join());
     ok(!/click to install|点击安装/i.test(text()), '6c 不再提示点击气泡安装');
     ok(!approve().hidden && !later().hidden && !approve().disabled && !later().disabled && retry().hidden,
       '6d 只显示可用的立即更新和稍后按钮');
@@ -240,7 +240,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
   }
 
   console.log('\n[10] 八种语言切换保留状态、按钮语义与错误码翻译');
-  const readyKey = 'Update {version} is ready.';
+  const readyKey = 'New version is ready.';
   const networkKey = 'Network error. Check your connection.';
   const stateCases = [
     [{ phase: 'idle' }, ['Check for Updates…']],

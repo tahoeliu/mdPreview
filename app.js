@@ -1225,7 +1225,7 @@ var {
 var {
   setUpdateBubbleText, setUpdateProgress, showUpdateBubble, showUpdateDownloadProgress, 
   showUpdateDownloadFailed, showManualInstallGuide, dismissUpdateBubble, installUpdate,
-  updateFeedbackState, showManualUpdateCheckResult, refreshUpdateState, renderUpdateFeedback,
+  updateFeedbackState, showManualUpdateCheckResult, refreshUpdateState, renderUpdateFeedback, showActiveUpdate,
 } = UpdateFeedback.create({
   document,
   t: (...args) => t(...args),

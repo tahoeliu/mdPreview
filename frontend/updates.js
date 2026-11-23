@@ -9,6 +9,20 @@ window.UpdateFeedback = {
     let manualCheckResult = false, installAfterRetry = false;
     let knownVersion = null, dismissedVersion = null, presentedVersion = null;
     let consentPending = null, approvalWaiting = false;
+    let manualViewing = false, downloadTimer = null;
+
+    function scheduleDownloadHide() {
+      if (downloadTimer !== null) window.clearTimeout(downloadTimer);
+      downloadTimer = null;
+      if (current.phase !== 'downloading' || !isVisible()) return;
+      downloadTimer = window.setTimeout(() => {
+        downloadTimer = null;
+        if (current.phase === 'downloading') {
+          dismissed = true;
+          renderUpdateFeedback();
+        }
+      }, 5000);
+    }
 
     function setUpdateBubbleText(text) {
       const el = document.querySelector('#updateBubble .update-bubble-text');
@@ -55,6 +69,7 @@ window.UpdateFeedback = {
       if (dismissed) return false;
       if (current.code === 'quit-gap-settlement-pending') return false;
       if (current.phase === 'idle') return manualCheckResult;
+      if (manualViewing) return true;
       if (current.automatic === false) return true;
       if (dismissedVersion === current.version) return false;
       return readyForConsent() || (presentedVersion === current.version && !!presentedVersion && ['preparing', 'installing'].includes(current.phase));
@@ -79,7 +94,7 @@ window.UpdateFeedback = {
       el.classList.toggle('choosing', visible && (readyForConsent() || phase === 'preparing'));
       setUpdateProgress(downloading ? current.progress : 0);
       const readyText = current.version
-        ? t('Update {version} is ready.', '更新 {version} 已就绪。').replace('{version}', current.version)
+        ? t('New version is ready.', '新版本已就绪。')
         : t('Update downloaded. Waiting for a safe restart.', '更新已下载，等待安全重启。');
       const texts = {
         idle: current.detail ? t("You're up to date!", '已是最新版本！') : t('Check for Updates…', '检查更新…'),
@@ -129,6 +144,7 @@ window.UpdateFeedback = {
     }
     function updateFeedbackState(state) {
       if (!state || !phases.has(state.phase) || typeof state.automatic !== 'boolean') return false;
+      const previousPhase = current.phase;
       const newVersion = typeof state.version === 'string' && !!state.version && state.version !== knownVersion;
       if (newVersion) {
         knownVersion = state.version;
@@ -144,10 +160,16 @@ window.UpdateFeedback = {
       // armedForQuit 只是后端已挂起退出更新的状态，不是用户已关闭提示的标记。
       if (newVersion || state.phase !== 'ready' || state.error || state.code) approvalWaiting = false;
       current = { ...state };
+      if (state.phase !== previousPhase) {
+        if (downloadTimer !== null) window.clearTimeout(downloadTimer);
+        downloadTimer = null;
+        if (state.phase === 'idle') manualViewing = false;
+      }
       if (['failed', 'idle'].includes(state.phase)) installAfterRetry = false;
       authoritative = true;
       generation++;
       renderUpdateFeedback();
+      if (state.phase === 'downloading' && previousPhase !== 'downloading') scheduleDownloadHide();
       if (installAfterRetry && readyForConsent() && !retryPending) {
         installAfterRetry = false;
         void requestConsent('approve');
@@ -159,6 +181,14 @@ window.UpdateFeedback = {
       manualCheckResult = true;
       dismissed = false;
       renderUpdateFeedback();
+    }
+    function showActiveUpdate(state) {
+      if (state) updateFeedbackState(state);
+      manualViewing = true;
+      dismissed = false;
+      dismissedVersion = null;
+      renderUpdateFeedback();
+      scheduleDownloadHide();
     }
     async function refreshUpdateState() {
       if (!deps.Bridge.ready()) return false;
@@ -198,6 +228,8 @@ window.UpdateFeedback = {
       if (busy() || dismissed) return false;
       if (readyForConsent()) return requestConsent('decline');
       dismissed = true;
+      if (downloadTimer !== null) window.clearTimeout(downloadTimer);
+      downloadTimer = null;
       installAfterRetry = false;
       renderUpdateFeedback();
       return true;
@@ -281,8 +313,8 @@ window.UpdateFeedback = {
       const actions = document.createElement('div');
       actions.className = 'update-actions';
       for (const [className, handler] of [
-        ['update-later', dismissUpdateBubble],
         ['update-approve', () => requestConsent('approve')],
+        ['update-later', dismissUpdateBubble],
         ['update-retry', installUpdate],
         ['update-help', updateHelp],
       ]) {
@@ -299,6 +331,7 @@ window.UpdateFeedback = {
       setUpdateBubbleText, setUpdateProgress, showUpdateBubble, showUpdateDownloadProgress,
       showUpdateDownloadFailed, showManualInstallGuide, dismissUpdateBubble, installUpdate,
       updateFeedbackState, showManualUpdateCheckResult, refreshUpdateState, renderUpdateFeedback,
+      showActiveUpdate,
     };
   }
 };
