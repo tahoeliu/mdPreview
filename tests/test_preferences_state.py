@@ -9,6 +9,13 @@ class PreferencesTests(unittest.TestCase):
         with self.assertRaises(ValueError): validated({'font_size': True})
         self.assertEqual(validated({'unknown': 3}), {})
 
+    def test_toggle_shortcut_conflicts_with_fixed_commands(self):
+        for spec in ('cmd+alt+o', 'alt+cmd+o', 'cmd+shift+s', 'ctrl+cmd+f'):
+            with self.subTest(spec=spec), self.assertRaises(ValueError):
+                validated({'toggle_shortcut': spec})
+        self.assertEqual(settings({'settings': {'toggle_shortcut': 'cmd+alt+o'}})['toggle_shortcut'], 'cmd+e')
+        self.assertEqual(validated({'toggle_shortcut': 'cmd+shift+u'}), {'toggle_shortcut': 'cmd+shift+u'})
+
     def test_lru(self):
         values = {}
         for n in range(301):

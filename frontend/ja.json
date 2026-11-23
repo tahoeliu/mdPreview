@@ -387,5 +387,8 @@
   "Could not make a secure connection to the update server.": "アップデートサーバに安全に接続できませんでした。",
   "Recent Documents": "最近使った書類",
   "Or start typing.": "そのまま入力することもできます。",
-  "Paste to Preview": "貼り付けてプレビュー"
+  "Paste to Preview": "貼り付けてプレビュー",
+  "Download manually": "手動でダウンロード",
+  "Could not open the link. Please try again.": "リンクを開けません。もう一度お試しください。",
+  "Report an Issue": "問題を報告"
 }

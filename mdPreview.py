@@ -3909,7 +3909,7 @@ if HAS_COCOA:
             _dispatch_js('findPrev()')
 
         def checkForUpdates_(self, sender):
-            _request_update(automatic=False)
+            _request_update(automatic=False, feedback_window=_get_target_window())
 
         def showAbout_(self, sender):
             """Show a custom native About window with a plain white background."""
@@ -4196,11 +4196,13 @@ def main():
         from mdpreview_core.headless import run
         arguments = sys.argv[sys.argv.index('--headless-export') + 1:]
         os.environ['MDPREVIEW_DISABLE_UPDATES'] = '1'
-        try:
+        def prepare_webview():
             from mdpreview_core.csp_bridge import install
             install(get_resource_path)
             patch_evaluate_js()
-            code = run(arguments, MarkdownAPI, get_resource_path)
+
+        try:
+            code = run(arguments, MarkdownAPI, get_resource_path, prepare_webview=prepare_webview)
         except Exception:
             print('headless: initialization or native export failed', file=sys.stderr)
             code = 2
@@ -4598,7 +4600,7 @@ def _mark_update_checked():
     update_config({'last_update_check': time.time()})
 
 
-def _request_update(automatic=True, version=None, retry=False):
+def _request_update(automatic=True, version=None, retry=False, feedback_window=None):
     if version is not None and (not isinstance(version, str) or len(version) > 32
                                 or not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:\.[0-9]+)?', version)):
         return {'success': False, 'error': 'invalid-release-version'}
@@ -4617,7 +4619,15 @@ def _request_update(automatic=True, version=None, retry=False):
                 return
             if retry:
                 _update_change(retryCount=0, deferCount=0, nextRetryAt=None)
-            _run_update_job(automatic, version, retry=retry)
+            result = _run_update_job(automatic, version, retry=retry)
+            if result == 'up-to-date' and not automatic and feedback_window is not None:
+                # A fresh menu check may notify its own window. Snapshots and
+                # broadcasts never carry permission to repeat this result.
+                try:
+                    from mdpreview_core.csp_bridge import run_body
+                    run_body(feedback_window, 'showManualUpdateCheckResult();')
+                except Exception:
+                    logging.warning('[update] stage=manual-result code=bridge-failed')
         except Exception as error:
             try:
                 _broadcast_update(_get_update_state().failure(_update_error(error)))
@@ -4673,7 +4683,7 @@ def _run_update_job(automatic, version=None, retry=False):
                            detail=_t("You're up to date!", '已是最新版本！'), nextRetryAt=None, retryCount=0)
             update_config(remove=('pending_staging_app', 'pending_update_version', 'pending_update_dmg'))
             _mark_update_checked()
-            return
+            return 'up-to-date'
         # 已终止失败或 helper 能力不兼容时仅低频发现新版；
         # 已安全回退/取消的 retrying 状态仍按原有有界预算重新准备。
         blocked = {'helper-handshake-unavailable'}

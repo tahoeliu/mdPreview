@@ -259,6 +259,25 @@ class NormalQuitTests(unittest.TestCase):
         self.assertFalse(any(name.endswith('commit.json') for name in self.writes))
         self.assertEqual(self.calls, [])
 
+    def test_up_to_date_notice_is_delivered_only_to_the_manual_requesting_window(self):
+        self.ns['load_config'] = lambda: {}
+        self.ns['_fetch_latest_version'] = Mock(return_value='1.0.0')
+        self.ns['version_tuple'] = lambda version: tuple(map(int, version.split('.')))
+        self.ns['_is_newer'] = lambda remote, local: remote != local
+        self.ns['_mark_update_checked'] = Mock()
+        requesting_window = object()
+        with patch('mdpreview_core.csp_bridge.run_body') as dispatch:
+            self.assertTrue(self.ns['_request_update'](automatic=True)['started'])
+            self.workers.pop(0)()
+            dispatch.assert_not_called()
+
+            self.assertTrue(self.ns['_request_update'](
+                automatic=False, feedback_window=requesting_window)['started'])
+            self.workers.pop(0)()
+            dispatch.assert_called_once_with(requesting_window, 'showManualUpdateCheckResult();')
+        self.assertEqual(self.state['phase'], 'idle')
+        self.assertEqual(self.ns['_mark_update_checked'].call_count, 2)
+
     def test_background_ready_prepares_without_quit(self):
         self.ns['_pending_update_install'] = None
         self.state['pending'] = None

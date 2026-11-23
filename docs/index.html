@@ -269,7 +269,7 @@ h3 { font-size: 23px; line-height: 1.4; letter-spacing: -.02em; }
 .install { padding: 96px 0 80px; }
 .install-head { display: flex; align-items: baseline; justify-content: space-between; gap: 28px; margin-bottom: 36px; }
 .install-head p { font-size: 15px; color: var(--muted); max-width: 290px; }
-.install-grid { display: grid; grid-template-columns: 1.5fr .8fr; gap: 60px; align-items: center; }
+.install-grid { display: grid; grid-template-columns: .8fr 1.5fr; gap: 60px; align-items: center; }
 .agent-card { padding: 30px; border: 1px solid var(--line); border-radius: 12px; background: var(--blue-wash); min-width: 0; scroll-margin-top: 80px; }
 .agent-heading h3 { font-size: 24px; }
 .agent-card .intro { color: var(--muted); font-size: 14px; line-height: 1.85; margin: 12px 0 20px; }
@@ -365,10 +365,10 @@ footer a { color: var(--muted); }
   <div class="wrap">
     <div class="hero-copy">
       <div><p class="eyebrow" data-zh="mdPreview · 为 Mac 上的 .md 文件" data-en="mdPreview · A home for .md on Mac">mdPreview · 为 Mac 上的 .md 文件</p><h1><span data-zh="打开，看清。" data-en="Open. Read.">打开，看清。</span><span data-zh="改好，发出去。" data-en="Edit. Share.">改好，发出去。</span></h1></div>
-      <div><p class="lead" data-zh="AI 交来的 Markdown，双击就能好好读。像 Word 一样直接改，离线可用，无需账号。" data-en="Markdown from your AI, one double-click away. Edit like Word. Offline. No account.">AI 交来的 Markdown，双击就能好好读。像 Word 一样直接改，离线可用，无需账号。</p>
+      <div><p class="lead" data-zh="打开 Markdown 文件，或粘贴一段 AI 回答。直接在页面上改，再导出 PDF 或 Word。离线可用，无需账号。" data-en="Open a Markdown file or paste an AI answer. Edit it on the page and export to PDF or Word. Works offline, with no account.">打开 Markdown 文件，或粘贴一段 AI 回答。直接在页面上改，再导出 PDF 或 Word。离线可用，无需账号。</p>
         <div class="cta">
-          <a class="btn primary" id="ai-cta" href="#ai-install" data-zh="让 AI 帮你安装" data-en="Install with your AI">让 AI 帮你安装</a>
-          <a class="text-link" href="https://github.com/tahoeliu/mdPreview/releases/latest" data-zh="下载 Mac 版" data-en="Download for Mac">下载 Mac 版</a>
+          <a class="btn primary" href="#install" data-zh="下载 Mac 版" data-en="Download for Mac">下载 Mac 版</a>
+          <a class="text-link" id="ai-cta" href="#ai-install" data-zh="让 AI 帮你安装" data-en="Install with your AI">让 AI 帮你安装</a>
         </div>
       </div>
     </div>
@@ -493,8 +493,15 @@ flowchart TD
 
 <section class="install" id="install">
   <div class="wrap">
-    <div class="install-head"><h2 data-zh="把 mdPreview 放进 Mac。" data-en="Make room for mdPreview.">把 mdPreview 放进 Mac。</h2><p data-zh="交给 AI，或者自己下载。" data-en="Let your AI install it. Or download it yourself.">交给 AI，或者自己下载。</p></div>
+    <div class="install-head"><h2 data-zh="下载 mdPreview" data-en="Download mdPreview">下载 mdPreview</h2><p data-zh="适用于 macOS 13 或更新版本。" data-en="For macOS 13 or later.">适用于 macOS 13 或更新版本。</p></div>
     <div class="install-grid">
+      <div class="manual-install">
+        <h3 data-zh="选择安装包" data-en="Choose your installer">选择安装包</h3>
+        <p><span data-zh="Apple 芯片（M1 或更新）： " data-en="Apple silicon (M1 or later): ">Apple 芯片（M1 或更新）： </span><code>arm64.dmg</code><br><span data-zh="Intel 芯片： " data-en="Intel: ">Intel 芯片： </span><code>x86_64.dmg</code></p>
+        <a class="btn primary" href="https://github.com/tahoeliu/mdPreview/releases/latest" data-zh="前往 GitHub 下载" data-en="Download on GitHub">前往 GitHub 下载</a>
+        <p data-zh="打开下载的磁盘映像，把 mdPreview 拖进「应用程序」。" data-en="Open the downloaded disk image and drag mdPreview into Applications.">打开下载的磁盘映像，把 mdPreview 拖进「应用程序」。</p>
+        <p class="fine"><span data-zh="首次打开提醒见" data-en="For first-open warnings, see the">首次打开提醒见</span> <a href="#manual-install-faq" data-zh="安装 FAQ" data-en="installation FAQ">安装 FAQ</a><span data-zh="。" data-en=".">。</span></p>
+      </div>
       <div class="agent-card" id="ai-install">
         <span id="agent-install"></span>
         <div class="agent-heading"><h3 data-zh="让 AI 帮你安装。" data-en="Let your AI install it.">让 AI 帮你安装。</h3></div>
@@ -503,12 +510,6 @@ flowchart TD
         <div class="copy-row"><button class="btn primary" id="copy-prompt" type="button" disabled data-zh="复制安装提示词" data-en="Copy install prompt">复制安装提示词</button><span class="copy-status" id="copy-status" role="status" aria-live="polite"></span></div>
         <textarea class="manual-copy" id="prompt-fallback" hidden readonly rows="5" aria-label="手动复制提示词" data-label-zh="手动复制提示词" data-label-en="Manually copy the prompt"></textarea>
         <noscript><p class="noscript-copy">脚本未启用，可直接选中上方提示词复制。JavaScript is off; select the prompt above to copy.</p></noscript>
-      </div>
-      <div class="manual-install">
-        <h3 data-zh="自己装，也很简单。" data-en="Doing it yourself? Just as simple.">自己装，也很简单。</h3>
-        <a class="btn secondary" href="https://github.com/tahoeliu/mdPreview/releases/latest" data-zh="下载 Mac 版" data-en="Download for Mac">下载 Mac 版</a>
-        <p data-zh="从发布页下载适合这台 Mac 的安装包，打开后拖进「应用程序」。" data-en="Choose the package for your Mac on the release page, open it, and drag mdPreview into Applications.">从发布页下载适合这台 Mac 的安装包，打开后拖进「应用程序」。</p>
-        <p class="fine"><span data-zh="需要 macOS 13 或更新版本。首次打开提醒见" data-en="Requires macOS 13 or later. For first-open warnings, see the">需要 macOS 13 或更新版本。首次打开提醒见</span> <a href="#manual-install-faq" data-zh="安装 FAQ" data-en="installation FAQ">安装 FAQ</a><span data-zh="。" data-en=".">。</span></p>
       </div>
     </div>
     <p class="cli-line"><span data-zh="更习惯命令行？" data-en="Prefer the command line?">更习惯命令行？</span> <button class="cli-button" id="copy-cli" type="button" disabled data-zh="点击复制 CLI 命令。" data-en="Click to copy CLI command.">点击复制 CLI 命令。</button></p>
@@ -533,7 +534,7 @@ flowchart TD
   <div class="wrap">
     <img src="images/icon-160.webp" alt="" width="96" height="96">
     <h2 data-zh="双击一个 .md，看看它本该有的样子。" data-en="Double-click a .md. See how it was meant to look.">双击一个 .md，看看它本该有的样子。</h2>
-    <div class="cta"><a class="btn primary" id="ai-cta-2" href="#ai-install" data-zh="让 AI 帮你安装" data-en="Install with your AI">让 AI 帮你安装</a><a class="text-link" href="https://github.com/tahoeliu/mdPreview/releases/latest" data-zh="下载 Mac 版" data-en="Download for Mac">下载 Mac 版</a></div>
+    <div class="cta"><a class="btn primary" href="#install" data-zh="下载 Mac 版" data-en="Download for Mac">下载 Mac 版</a><a class="text-link" id="ai-cta-2" href="#ai-install" data-zh="让 AI 帮你安装" data-en="Install with your AI">让 AI 帮你安装</a></div>
   </div>
 </section>
 </main>
@@ -826,7 +827,14 @@ flowchart TD
     $('#ai-install').scrollIntoView({ behavior: reduce.matches ? 'auto' : 'smooth', block: 'center' });
     $('#copy-prompt').focus({ preventScroll: true });
   }));
-  $('a[href="#manual-install-faq"]').addEventListener('click', () => { $('#manual-install-faq').open = true; });
+  const manualInstallFaq = $('#manual-install-faq');
+  function openManualInstallFaq() { manualInstallFaq.open = true; }
+  function revealLinkedFaq() {
+    if (location.hash === '#manual-install-faq') openManualInstallFaq();
+  }
+  $('a[href="#manual-install-faq"]').addEventListener('click', openManualInstallFaq);
+  window.addEventListener('hashchange', revealLinkedFaq);
+  revealLinkedFaq();
 })();
 </script>
 </body>

@@ -16,7 +16,7 @@ async function violations(page){
 for(const [state,prepare] of [
  ['阅读视图',async page=>{await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),DOCUMENT);}],
  ['设置对话框',async page=>{
-   await page.evaluate(([settings,output])=>{window.pywebview={api:{get_settings:async()=>settings,get_output_settings:async()=>output,get_app_info:async()=>({version:'2.0.0'}),set_settings:async()=>({success:true,settings})}};},[SETTINGS,OUTPUT]);
+   await page.evaluate(([settings,output])=>{window.pywebview={api:{get_settings:async()=>settings,get_output_settings:async()=>output,get_shortcuts:async()=>[],get_export_css:async()=>({version:'2.0.0'}),set_settings:async()=>({success:true,settings})}};},[SETTINGS,OUTPUT]);
    await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),DOCUMENT);
    await page.evaluate(()=>openSettings());await page.waitForSelector('#modalOverlay.visible');}],
  ['查找栏',async page=>{await page.evaluate(d=>loadContent('accessibility.md',d,720,false,true),DOCUMENT);await page.evaluate(()=>openFindBar());await page.waitForSelector('#findBar.visible');}],

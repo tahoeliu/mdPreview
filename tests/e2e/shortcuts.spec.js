@@ -6,6 +6,7 @@ test.beforeEach(async({page})=>{
     window.__saved=null;
     const settings={language:'en',appearance:'system',restore_session:false,auto_update:true,format_bar:false,font_size:16,reading_font:'sans',toggle_shortcut:'cmd+e',page_width:720,remote_images:'ask',auto_reload:true};
     window.pywebview={api:{
+      get_shortcuts(){return fetch('/frontend/shortcuts.json').then(response=>response.json());},
       get_export_css(){return Promise.resolve({css:'',version:'2.0.0'});},
       get_output_settings(){return Promise.resolve({font:'normal'});},
       get_settings(){return Promise.resolve(settings);},
@@ -24,9 +25,12 @@ test('Preview/Source shortcut is the first row of Settings and can be changed',a
   await first.locator('.set-shortcut-btn').click();
   await page.keyboard.press('Meta+c');                       // already used elsewhere: refused
   await expect(page.locator('.set-shortcut-note')).toBeVisible();
+  await page.keyboard.press('Meta+Alt+o');
+  await expect(page.locator('.set-shortcut-note')).toBeVisible();
+  await expect(first.locator('.set-shortcut-btn')).toHaveClass(/listening/);
   await page.keyboard.press('Meta+Shift+u');
   await expect(first.locator('.set-shortcut-btn')).toHaveText('⇧⌘U');
-  await page.locator('#modalActions .modal-close').last().click();
+  await page.getByRole('button',{name:'Save',exact:true}).click();
   await expect.poll(()=>page.evaluate(()=>window.__saved&&window.__saved.toggle_shortcut)).toBe('cmd+shift+u');
 });
 test('the chosen shortcut switches views and the old one stops working',async({page})=>{

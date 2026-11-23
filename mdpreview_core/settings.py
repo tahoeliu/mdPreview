@@ -1,5 +1,8 @@
 """应用设置采用离线默认值，仅接受明确的类型和范围。"""
+import json
 import re
+from functools import lru_cache
+from pathlib import Path
 
 DEFAULTS = {'language': 'system', 'appearance': 'system', 'restore_session': False, 'auto_update': True, 'format_bar': False,
             'font_size': 16, 'reading_font': 'sans', 'toggle_shortcut': 'cmd+e', 'page_width': 720, 'remote_images': 'ask', 'auto_reload': True}
@@ -7,6 +10,16 @@ CHOICES = {'language': ('system', 'en', 'zh-Hans', 'zh-Hant', 'ja', 'ko', 'de', 
            'appearance': ('system', 'light', 'dark'),
            'reading_font': ('sans', 'serif'),
            'remote_images': ('ask', 'always', 'never')}
+
+@lru_cache(maxsize=1)
+def _reserved_shortcuts():
+    path = Path(__file__).resolve().parents[1] / 'frontend' / 'shortcuts.json'
+    items = json.loads(path.read_text(encoding='utf-8'))
+    names = {'command': 'cmd', 'control': 'ctrl', 'option': 'alt', 'shift': 'shift'}
+    return frozenset(
+        (frozenset(names[modifier] for modifier in item['modifiers']), item['key'])
+        for item in items if item['action'] != 'toggleView:'
+    )
 
 
 def validated(patch):
@@ -17,7 +30,12 @@ def validated(patch):
         if key not in DEFAULTS:
             continue
         if key == 'toggle_shortcut':
-            valid = isinstance(value, str) and re.fullmatch(r'(?:(?:cmd|ctrl|alt|shift)\+)+[a-z0-9]', value) is not None and ('cmd' in value or 'ctrl' in value) and len(set(value.split('+')[:-1])) == len(value.split('+')) - 1
+            valid = False
+            if isinstance(value, str) and re.fullmatch(r'(?:(?:cmd|ctrl|alt|shift)\+)+[a-z0-9]', value):
+                *modifiers, letter = value.split('+')
+                mask = frozenset(modifiers)
+                valid = (bool(mask & {'cmd', 'ctrl'}) and len(mask) == len(modifiers)
+                         and (mask, letter) not in _reserved_shortcuts())
         elif key in CHOICES:
             valid = isinstance(value, str) and value in CHOICES[key]
         elif key in ('font_size', 'page_width'):

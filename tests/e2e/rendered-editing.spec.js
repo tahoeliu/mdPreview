@@ -375,7 +375,7 @@ test('a blank document opens in Preview, ready to type, and writes clean Markdow
   await expect(page.locator('#source')).not.toHaveClass(/visible/);
   await expect(page.locator('#welcomeOverlay .welcome-tile')).toHaveCount(2);
   await expect(page.locator('#welcomeOverlay kbd')).toHaveCount(0);
-  await expect(page.locator('.welcome-recents button')).toHaveText(['Notes.md/tmp']);
+  await expect(page.locator('.welcome-recents button')).toHaveText(['Notes.md']);
   expect(await page.evaluate(()=>document.activeElement.id)).toBe('content');
   expect(await page.evaluate(()=>window.getCurrentMarkdown())).toBe('');
   const caret=()=>page.evaluate(()=>getComputedStyle(document.getElementById('content')).caretColor);

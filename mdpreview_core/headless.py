@@ -6,7 +6,15 @@ import threading
 from pathlib import Path
 
 
-def run(arguments, api_type, resource_path):
+def _has_online_display():
+    if sys.platform != 'darwin':
+        return True
+    from Quartz import CGGetOnlineDisplayList, kCGErrorSuccess
+    status, _, count = CGGetOnlineDisplayList(0, None, None)
+    return status != kCGErrorSuccess or count > 0
+
+
+def run(arguments, api_type, resource_path, *, prepare_webview=None):
     if len(arguments) != 3:
         print('headless: expected INPUT OUTPUT FORMAT', file=sys.stderr)
         return 1
@@ -23,6 +31,13 @@ def run(arguments, api_type, resource_path):
     except (OSError, UnicodeError):
         print('headless: input must be readable UTF-8', file=sys.stderr)
         return 1
+    # Importing pywebview's Cocoa backend registers an NSApplication immediately.
+    # Check this before initializing the bridge or creating the hidden window.
+    if not _has_online_display():
+        print('headless: no macOS display is available to this process. Run mdpreview export from Terminal in a logged-in desktop session.', file=sys.stderr)
+        return 2
+    if prepare_webview is not None:
+        prepare_webview()
     import webview
     from .export.settings import defaults
     result = {'code': 2}

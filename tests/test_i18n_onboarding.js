@@ -17,6 +17,20 @@ const assert=require('node:assert/strict'),fs=require('node:fs');const {createAp
  await w.Onboarding.example();assert.equal(w.getCurrentMarkdown(),'');assert.equal(d.querySelector('#modalBody article').contentEditable,'false');assert.ok(d.querySelector('#modalBody .katex'));assert.equal(acknowledged,1);
  w.pywebview.api.get_release_notes=()=>({available:false,version:'1.5.0',content:''});await w.Onboarding.notes();assert.match(d.querySelector('#modalBody').textContent,/No bundled|没有内置/);
  w.closeModal();
+ const beforeFailure=acknowledged;
+ const getExample=w.pywebview.api.get_example;
+ w.pywebview.api.get_example=()=>Promise.reject(new Error('unavailable'));
+ await w.Onboarding.initialize();
+ d.querySelector('[data-onboarding] button').click();
+ await new Promise(resolve=>setTimeout(resolve,20));
+ assert.equal(acknowledged,beforeFailure);
+ assert.equal(d.querySelector('[data-onboarding] button').disabled,false);
+ w.pywebview.api.get_example=getExample;
+ d.querySelector('[data-onboarding] button').click();
+ await new Promise(resolve=>setTimeout(resolve,30));
+ assert.equal(acknowledged,beforeFailure+1);
+ assert.equal(d.querySelector('[data-onboarding]'),null);
+ w.closeModal();
  const drafts=[{documentId:'recover-me',preview:'My unsaved text'}];
  let opened;
  w.pywebview.api.get_recent_files=()=>[1,2,3,4].map(i=>({name:'Note '+i,path:'/tmp/n'+i+'.md'}));
@@ -26,8 +40,23 @@ const assert=require('node:assert/strict'),fs=require('node:fs');const {createAp
  const welcome=d.getElementById('welcomeOverlay');
  await w.Onboarding.refresh(welcome);
  assert.equal(welcome.querySelectorAll('.welcome-recents li').length,3);
+ assert.equal(welcome.querySelector('.welcome-recents button').textContent,'Note 1');
+ assert.equal(welcome.querySelector('.welcome-recents button').title,'');
  welcome.querySelector('.welcome-recents button').click();
  assert.equal(opened,'/tmp/n1.md');
+ w.pywebview.api.get_recent_files=()=>[
+   {name:'README.md',path:'/tmp/first/README.md',folder:'/tmp/first'},
+   {name:'README.md',path:'/tmp/second/README.md',folder:'/tmp/second'},
+   {name:'Unique.md',path:'/tmp/Unique.md'},
+ ];
+ await w.Onboarding.refresh(welcome);
+ const choices=[...welcome.querySelectorAll('.welcome-recents button')];
+ assert.deepEqual(choices.map(button=>button.title),['/tmp/first','/tmp/second','']);
+ assert.equal(choices[0].querySelector('.welcome-recent-folder').textContent,'first');
+ assert.equal(choices[1].querySelector('.welcome-recent-folder').textContent,'second');
+ assert.equal(choices[2].textContent,'Unique.md');
+ choices[1].click();
+ assert.equal(opened,'/tmp/second/README.md');
  const recovery=welcome.querySelector('.welcome-recovery');assert.equal(recovery.hidden,false);
  recovery.click();d.querySelector('.recover-draft').click();
  await new Promise(resolve=>setTimeout(resolve,30));

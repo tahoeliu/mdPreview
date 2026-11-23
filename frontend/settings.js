@@ -1,7 +1,9 @@
 /* 所有设置通过校验桥接保存；默认不启动任何网络请求。 */
 window.openSettings=async function(){
   try{
-    const values=await Bridge.call('get_settings'),output=await Bridge.call('get_output_settings');
+    const [values,output,shortcuts]=await Promise.all([
+      Bridge.call('get_settings'),Bridge.call('get_output_settings'),Bridge.call('get_shortcuts'),
+    ]);
     setModal(t('Settings','设置'),'','');const body=document.getElementById('modalBody');
     const modalVersion=body.dataset.version;
     const modal=document.getElementById('modalOverlay');
@@ -13,6 +15,9 @@ window.openSettings=async function(){
       const SYMBOLS={ctrl:'⌃',alt:'⌥',shift:'⇧',cmd:'⌘'};
       const show=spec=>{const p=spec.split('+');return ['ctrl','alt','shift','cmd'].filter(x=>p.includes(x)).map(x=>SYMBOLS[x]).join('')+p[p.length-1].toUpperCase();};
       const TAKEN=new Set(['c','v','x','z','a','s','q','w','n','o','p','f','g','h','m','j','i','b','k','t','r','l','d','u',',','=','-','0','.']);
+      const reserved=new Set(shortcuts.filter(item=>item.action!=='toggleView:').map(({modifiers,key})=>
+        ['command','control','option','shift'].filter(modifier=>modifiers.includes(modifier))
+          .map(modifier=>({command:'cmd',control:'ctrl',option:'alt',shift:'shift'})[modifier]).concat(key).join('+')));
       const state={value:current};
       const row=document.createElement('div');row.className='set-row';
       const name=document.createElement('span');name.className='set-label';name.textContent=t('Switch Preview / Source','切换预览 / 源码');
@@ -31,7 +36,7 @@ window.openSettings=async function(){
         if(!key){note.textContent=t('Use a letter or number key.','请使用字母或数字键。');note.hidden=false;return;}
         if(!e.metaKey&&!e.ctrlKey){note.textContent=t('Include ⌘ or ⌃ so typing is not affected.','请同时按住 ⌘ 或 ⌃，以免影响输入。');note.hidden=false;return;}
         const spec=[e.metaKey&&'cmd',e.ctrlKey&&'ctrl',e.altKey&&'alt',e.shiftKey&&'shift',key].filter(Boolean).join('+');
-        if(TAKEN.has(key)&&spec===(e.metaKey?'cmd+':'ctrl+')+key){note.textContent=t('{key} is already used by another command.','{key} 已被其他功能使用。').replace('{key}',show(spec));note.hidden=false;return;}
+        if(reserved.has(spec)||(TAKEN.has(key)&&spec===(e.metaKey?'cmd+':'ctrl+')+key)){note.textContent=t('{key} is already used by another command.','{key} 已被其他功能使用。').replace('{key}',show(spec));note.hidden=false;return;}
         state.value=spec;note.hidden=true;stop();
       }
       button.addEventListener('click',()=>{if(listening){stop();return;}listening=true;note.hidden=true;paint();document.addEventListener('keydown',onKey,true);modal.addEventListener('modalreset',stop,{once:true});});
@@ -74,12 +79,10 @@ window.openSettings=async function(){
           if(!result.success)throw new Error('settings-failed');
           appSettings=result.settings;
         }
-        if(changedOutput){
-          const exported=await Bridge.call('set_output_settings',exportPatch);
-          if(!exported.success)throw new Error('output-settings-failed');
-        }
-        if(body.dataset.version!==modalVersion||!modal.classList.contains('visible'))return;
         if(changedSettings){
+          for(const control of controls){
+            if(Object.hasOwn(patch,control.key)&&control.section==='settings')control.value=patch[control.key];
+          }
           contentFontSize=appSettings.font_size;applyFontSize();applyReadingFont();
           if(window.applyChromeColor)setTimeout(applyChromeColor,200);
           pageWidthPct=normalizePageWidthPct(appSettings.page_width/BASE_WIDTH*100);applyPageWidth();
@@ -87,17 +90,22 @@ window.openSettings=async function(){
             isZh=appSettings.language==='system'?isZh:appSettings.language.startsWith('zh');
             await I18n.load();applyStaticUiLanguage();dismissWelcomeOverlay();
           }
+          await renderMarkdown(getCurrentMarkdown(),document.getElementById('content'));
         }
+        if(changedOutput){
+          const exported=await Bridge.call('set_output_settings',exportPatch);
+          if(!exported.success)throw new Error('output-settings-failed');
+        }
+        if(body.dataset.version!==modalVersion||!modal.classList.contains('visible'))return;
         closeModal();
         if(changedSettings){
           showStatus(t('Saved. Restart to update all menus and windows.','已保存。重启后所有菜单和窗口生效。'));
-          await renderMarkdown(getCurrentMarkdown(),document.getElementById('content'));
         }else if(changedOutput){
           showStatus(t('Saved', '已保存'));
         }
       }catch(error){showStatus(t('Could not save settings','设置保存失败'),true);}
       finally{save.disabled=false;}
-    });save.className='modal-close';const actions=document.getElementById('modalActions');actions.querySelector('.modal-close')?.classList.add('modal-button','secondary');actions.append(save);
-    controls[0]?.input.focus();
+    });save.className='modal-button';const actions=document.getElementById('modalActions');actions.querySelector('.modal-close')?.classList.add('modal-button','secondary');actions.append(save);
+    body.querySelector('.set-shortcut-btn')?.focus();
   }catch(error){showStatus(t('Could not load settings','无法加载设置'),true);}
 };

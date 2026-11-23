@@ -157,7 +157,11 @@ Press `⌘E` to flip between the formatted page and its plain-text Markdown, and
 
 ## Install
 
-### Option 1: one line in Terminal (recommended)
+### Option 1: download the disk image
+
+From the [latest release](https://github.com/tahoeliu/mdPreview/releases/latest), get **`…-arm64.dmg`** for Apple silicon (M1 and newer) or **`…-x86_64.dmg`** for Intel Macs, then drag mdPreview into Applications. If macOS shows a first-open warning, see the [installation FAQ](https://tahoeliu.github.io/mdPreview/#manual-install-faq).
+
+### Option 2: one line in Terminal
 
 Open **Terminal**, paste this and press Return:
 
@@ -165,11 +169,7 @@ Open **Terminal**, paste this and press Return:
 curl -fsSL https://raw.githubusercontent.com/tahoeliu/mdPreview/main/scripts/get.sh | bash
 ```
 
-It downloads the newest version, checks the signature and installs into Applications. macOS shows no security warning this way. [Read the script first](scripts/get.sh) if you like.
-
-### Option 2: download the disk image
-
-From the [latest release](https://github.com/tahoeliu/mdPreview/releases/latest), get **`…-arm64.dmg`** for Apple silicon (M1 and newer) or **`…-x86_64.dmg`** for Intel Macs, then drag mdPreview into Applications. The first time, open **System Settings → Privacy & Security** and click **Open Anyway**. You only do this once.
+The script downloads the latest version, verifies its signature and installs it in Applications. [View the installer source](scripts/get.sh).
 
 ### Option 3: ask your AI assistant
 
@@ -193,7 +193,7 @@ Double-click it. If another app opens, right-click the file, choose **Get Info �
 Copy the answer, then choose **File → New from Clipboard** (`⌥⌘N`). It appears rendered at once, with headings, tables and code blocks in place. You can also save the chat as a `.md` file and double-click it.
 
 ### How do I convert Markdown to PDF, Word or HTML on Mac?
-Open the file and choose **File → Export As…**, then pick PDF, Word (.docx), HTML, plain text or Markdown. No command line needed. (If you do like the command line: `mdpreview export notes.md --to pdf`.)
+Open the file and choose **File → Export As…**, then pick PDF, Word (.docx), HTML, plain text or Markdown. No command line needed. From Terminal in a logged-in macOS desktop session, you can also run `mdpreview export notes.md --to pdf`.
 
 ### Is mdPreview free?
 Yes. Free to use, free of ads and open source under the [MIT licence](LICENSE).
@@ -228,7 +228,7 @@ Use **Help → Report an Issue…** in the app, or [open an issue](https://githu
 | **What it is** | A Markdown viewer and editor for macOS |
 | **Price** | Free, MIT open-source licence |
 | **Works on** | macOS 13 or later; Apple silicon and Intel |
-| **Latest version** | [2.0.3](CHANGELOG.md) |
+| **Latest version** | [GitHub Releases](https://github.com/tahoeliu/mdPreview/releases/latest) |
 | **Exports** | PDF, Word (.docx), HTML, plain text, Markdown, PNG, rich text |
 | **Renders** | Tables, task lists, footnotes, KaTeX maths, Mermaid diagrams, GitHub alerts, syntax-highlighted code |
 | **Languages** | English, 简体中文, 繁體中文, 日本語, 한국어, Deutsch, Français, Español |

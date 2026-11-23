@@ -387,5 +387,8 @@
   "Could not make a secure connection to the update server.": "无法与更新服务器建立安全连接。",
   "Recent Documents": "最近文档",
   "Or start typing.": "也可直接输入。",
-  "Paste to Preview": "粘贴查看"
+  "Paste to Preview": "粘贴查看",
+  "Download manually": "手动下载",
+  "Could not open the link. Please try again.": "无法打开链接，请重试。",
+  "Report an Issue": "报告问题"
 }

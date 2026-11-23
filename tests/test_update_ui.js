@@ -150,7 +150,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
     ok(bubble().classList.contains('visible'), '6a 已安排退出安装的 ready 仍显示选择');
     ok(text() === 'Update 2.1.0 is ready.', '6b 只说版本已就绪，不附加长说明', text());
     const order = [...bubble().querySelectorAll('.update-actions button')].map(button => button.className);
-    ok(order.join() === 'update-later,update-approve,update-retry' && bubble().classList.contains('choosing'),
+    ok(order.join() === 'update-later,update-approve,update-retry,update-help' && bubble().classList.contains('choosing'),
       '6b2 稍后在前、立即更新在后；选择态不另画关闭按钮', order.join());
     ok(!/click to install|点击安装/i.test(text()), '6c 不再提示点击气泡安装');
     ok(!approve().hidden && !later().hidden && !approve().disabled && !later().disabled && retry().hidden,

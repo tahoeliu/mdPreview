@@ -83,6 +83,9 @@ class Harness:
 
 class HeadlessTests(unittest.TestCase):
     def setUp(self):
+        probe = mock.patch.object(headless, '_has_online_display', return_value=True)
+        self.display_probe = probe.start()
+        self.addCleanup(probe.stop)
         self.dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.dir.cleanup)
         self.dir.name = os.path.realpath(self.dir.name)  # /var 是符号链接，测试内统一用真实路径
@@ -119,6 +122,18 @@ class HeadlessTests(unittest.TestCase):
         code, err, _ = self.run_headless([str(self.source), str(self.target), 'txt'])
         self.assertEqual(code, 1)
         self.assertEqual(self.target.read_text(encoding='utf-8'), 'keep me')
+
+    def test_missing_display_is_reported_before_loading_cocoa(self):
+        self.display_probe.return_value = False
+        prepare = mock.Mock()
+        err = io.StringIO()
+        with redirect_stderr(err):
+            code = headless.run([str(self.source), str(self.target), 'txt'], FakeAPI,
+                                mock.Mock(), prepare_webview=prepare)
+        self.assertEqual(code, 2)
+        self.assertIn('logged-in desktop session', err.getvalue())
+        prepare.assert_not_called()
+        self.assertFalse(self.target.exists())
 
     def test_non_utf8_input_is_rejected(self):
         self.source.write_bytes(b'\xff\xfe\x00bad')

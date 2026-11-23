@@ -9,7 +9,8 @@ window.Onboarding=(()=>{
   await MathRenderer.renderMath(article,{eager:true});await renderMermaidDiagrams(article);
   document.querySelector('#modalActions button')?.focus();
   await acknowledge();
- }catch(error){showStatus(t('Could not open example','无法打开示例'),true);}}
+  return true;
+ }catch(error){showStatus(t('Could not open example','无法打开示例'),true);return false;}}
  async function shortcuts(){try{
   const definitions=await Bridge.call('get_shortcuts');setModal(t('Keyboard Shortcuts','快捷键一览'),'','');
   const table=document.createElement('table');const symbols={command:'⌘',option:'⌥',shift:'⇧',control:'⌃'};
@@ -22,8 +23,23 @@ window.Onboarding=(()=>{
  }catch(error){showStatus(t('Could not load release notes','无法加载更新说明'),true);}}
  function decorate(overlay){if(!first||overlay.querySelector('[data-onboarding]'))return;
   const actions=document.createElement('div');actions.dataset.onboarding='true';
-  for(const [label,run] of [[t('Open Example','打开示例文档'),example],[t('Set as default for .md','设为 .md 默认打开方式'),()=>Bridge.call('set_as_default_for_md')]]){
-   const button=document.createElement('button');button.textContent=label;button.addEventListener('click',async event=>{event.stopPropagation();try{const result=await run();if(result?.success===false)throw new Error('action-failed');await acknowledge();actions.remove();}catch(error){showStatus(t('Action failed','操作失败'),true);}});actions.append(button);
+  async function setDefault(){
+   const result=await Bridge.call('set_as_default_for_md');
+   if(!result?.success)throw new Error('action-failed');
+   await acknowledge();
+   return true;
+  }
+  for(const [label,run] of [[t('Open Example','打开示例文档'),example],[t('Set as default for .md','设为 .md 默认打开方式'),setDefault]]){
+   const button=document.createElement('button');button.textContent=label;
+   button.addEventListener('click',async event=>{
+    event.stopPropagation();
+    const buttons=[...actions.querySelectorAll('button')];
+    buttons.forEach(button=>{button.disabled=true;});
+    try{if(await run())actions.remove();}
+    catch(error){showStatus(t('Action failed','操作失败'),true);}
+    finally{buttons.forEach(button=>{button.disabled=false;});}
+   });
+   actions.append(button);
   }const row=overlay.querySelector('.welcome-actions');if(row)row.after(actions);else overlay.append(actions);
  }
  const ICONS={
@@ -59,10 +75,25 @@ window.Onboarding=(()=>{
   const rows=document.createElement('ul');
   for(const file of items){
    const row=document.createElement('li');
-   const button=document.createElement('button');button.type='button';button.title=file.path;
+   const button=document.createElement('button');button.type='button';
    const name=document.createElement('span');name.textContent=file.name;
-   const folder=document.createElement('span');folder.className='welcome-recent-folder';folder.textContent=file.folder||'';
-   button.append(name,folder);
+   button.append(name);
+   const duplicates=items.filter(other=>other!==file&&other.name===file.name);
+   if(duplicates.length){
+    const folderOf=item=>item.folder||item.path.slice(0,item.path.lastIndexOf('/'))||'/';
+    const folder=folderOf(file), parts=folder.split('/').filter(Boolean);
+    const otherFolders=duplicates.map(folderOf);
+    let label=folder;
+    for(let depth=1;depth<=parts.length;depth++){
+     const suffix=parts.slice(-depth).join('/');
+     if(!otherFolders.some(other=>other===suffix||other.endsWith('/'+suffix))){
+      label=suffix;
+      break;
+     }
+    }
+    const context=document.createElement('span');context.className='welcome-recent-folder';context.textContent=label;
+    button.title=folder;button.append(context);
+   }
    button.addEventListener('click',()=>void attempt(()=>Bridge.call('open_recent_file',file.path)));
    row.append(button);rows.append(row);
   }

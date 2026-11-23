@@ -55,10 +55,10 @@ body { font-family: var(--font-sans); background: var(--bg); color: var(--app-fg
 .update-bubble.installing { cursor: default; }
 .update-bubble-body { flex: 1 1 auto; min-width: 0; }
 .update-bubble-text { display: block; white-space: normal; overflow-wrap: anywhere; word-break: normal; line-height: 1.5; }
-.update-retry, .update-approve, .update-later { margin-top: 8px; max-width: 100%; padding: 4px 8px; border: 1px solid currentColor; border-radius: 5px; background: transparent; color: inherit; font: inherit; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
+.update-retry, .update-approve, .update-later, .update-help { margin-top: 8px; max-width: 100%; padding: 4px 8px; border: 1px solid currentColor; border-radius: 5px; background: transparent; color: inherit; font: inherit; white-space: normal; overflow-wrap: anywhere; cursor: pointer; }
 .update-approve { margin-inline-end: 8px; font-weight: 600; }
 .update-retry[hidden], .update-approve[hidden], .update-later[hidden] { display: none; }
-.update-retry:disabled, .update-approve:disabled, .update-later:disabled, .update-bubble-close:disabled { opacity: 0.6; cursor: default; }
+.update-help:disabled, .update-retry:disabled, .update-approve:disabled, .update-later:disabled, .update-bubble-close:disabled { opacity: 0.6; cursor: default; }
 .update-progress { display: none; height: 5px; margin-top: 7px; overflow: hidden; background: rgba(0,0,0,0.1); border-radius: 999px; }
 .update-bubble.downloading .update-progress { display: block; }
 .update-progress-bar { width: 0%; height: 100%; background: #007aff; border-radius: inherit; transition: width 0.18s ease; }
@@ -474,18 +474,20 @@ body.has-edit-bar .update-bubble, body.has-source-bar .update-bubble { top: calc
 /* ── Update note: one quiet line with the same surface, hairline, type and actions as the notice bar ── */
 .update-bubble { right: 16px; gap: 2px; padding: 5px 6px 5px 14px; border-radius: 10px; background: var(--bg); color: #5f5f64; border: 1px solid rgba(0,0,0,.12); box-shadow: 0 6px 20px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.04); font-size: 13px; font-weight: 400; backdrop-filter: none; -webkit-backdrop-filter: none; max-width: min(420px, calc(100vw - 32px)); }
 .update-bubble:hover { background: var(--bg); border-color: rgba(0,0,0,.12); }
+.update-bubble.downloading { width: min(300px, calc(100vw - 32px)); box-sizing: border-box; }
 .update-bubble.choosing { padding-right: 5px; }
 .update-bubble-body { display: flex; flex-wrap: wrap; align-items: center; column-gap: 10px; }
 .update-bubble-text { flex: 1 1 auto; min-width: 0; padding: 5px 0; line-height: 1.4; }
 .update-actions { flex: none; display: flex; align-items: center; gap: 2px; margin-left: auto; }
 .update-progress { flex: 0 0 100%; height: 3px; margin: 0 0 5px; background: rgba(0,0,0,.08); }
 .update-progress-bar { background: #0062cc; }
-.update-retry, .update-approve, .update-later { margin: 0; height: 28px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; font: inherit; font-weight: 400; white-space: nowrap; }
+.update-retry, .update-approve, .update-later, .update-help { margin: 0; height: 28px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; font: inherit; font-weight: 400; white-space: nowrap; }
+.update-help { color: #6e6e73; }
 .update-later { color: #6e6e73; }
 .update-approve, .update-retry { color: #0062cc; margin-inline-end: 0; }
-.update-retry:hover:not(:disabled), .update-approve:hover:not(:disabled), .update-later:hover:not(:disabled), .update-bubble-close:hover:not(:disabled) { background: rgba(0,0,0,.06); }
-.update-retry:focus-visible, .update-approve:focus-visible, .update-later:focus-visible, .update-bubble-close:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(0,98,204,.35); }
-.update-retry:disabled, .update-approve:disabled, .update-later:disabled, .update-bubble-close:disabled { opacity: .45; }
+.update-help:hover:not(:disabled), .update-retry:hover:not(:disabled), .update-approve:hover:not(:disabled), .update-later:hover:not(:disabled), .update-bubble-close:hover:not(:disabled) { background: rgba(0,0,0,.06); }
+.update-help:focus-visible, .update-retry:focus-visible, .update-approve:focus-visible, .update-later:focus-visible, .update-bubble-close:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(0,98,204,.35); }
+.update-help:disabled, .update-retry:disabled, .update-approve:disabled, .update-later:disabled, .update-bubble-close:disabled { opacity: .45; }
 .update-bubble-close { flex: 0 0 28px; align-self: center; width: 28px; height: 28px; border-radius: 6px; color: #8e8e93; font-size: 15px; }
 .update-bubble-close:hover { color: #5f5f64; }
 .update-bubble.choosing .update-bubble-close { display: none; }
@@ -493,10 +495,11 @@ body.has-edit-bar .update-bubble, body.has-source-bar .update-bubble { top: calc
   .update-bubble, .update-bubble:hover { background: var(--bg); color: #c7c7cc; border-color: rgba(255,255,255,.14); box-shadow: 0 6px 20px rgba(0,0,0,.35); }
   .update-progress { background: rgba(255,255,255,.12); }
   .update-progress-bar { background: #6cb2ff; }
-  .update-later { color: #a1a1a6; }
+  .update-help { color: #6e6e73; }
+.update-later { color: #a1a1a6; }
   .update-approve, .update-retry { color: #6cb2ff; }
-  .update-retry:hover:not(:disabled), .update-approve:hover:not(:disabled), .update-later:hover:not(:disabled), .update-bubble-close:hover:not(:disabled) { background: rgba(255,255,255,.1); }
-  .update-retry:focus-visible, .update-approve:focus-visible, .update-later:focus-visible, .update-bubble-close:focus-visible { box-shadow: 0 0 0 2px rgba(10,132,255,.5); }
+  .update-help:hover:not(:disabled), .update-retry:hover:not(:disabled), .update-approve:hover:not(:disabled), .update-later:hover:not(:disabled), .update-bubble-close:hover:not(:disabled) { background: rgba(255,255,255,.1); }
+  .update-help:focus-visible, .update-retry:focus-visible, .update-approve:focus-visible, .update-later:focus-visible, .update-bubble-close:focus-visible { box-shadow: 0 0 0 2px rgba(10,132,255,.5); }
   .update-bubble-close { color: #8e8e93; }
   .update-bubble-close:hover { color: #c7c7cc; }
 }
@@ -514,12 +517,14 @@ body.is-blank:not(.is-editing):not(.edit-pinned) #content { caret-color: #0062cc
 .welcome-overlay .welcome-tile:hover:not(:disabled) { background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.13); color: var(--fg, #333); }
 .welcome-overlay .welcome-tile:active:not(:disabled) { background: rgba(0,0,0,.05); }
 .welcome-overlay button:focus-visible { outline: none; box-shadow: 0 0 0 2px rgba(0,98,204,.35); }
-.welcome-recents { width: min(320px, 80%); margin-top: 16px; text-align: left; }
-.welcome-recents-label { margin: 0 8px 4px; font-size: 12px; color: var(--fg-muted); }
+.welcome-recents { width: min(264px, 80%); margin-top: 80px; text-align: left; }
+.welcome-recents-label { margin: 0 8px 4px; font-size: 11px; color: #86868b; }
 .welcome-recents ul { list-style: none; margin: 0; padding: 0; }
-.welcome-overlay .welcome-recents button { display: flex; align-items: center; gap: 14px; width: 100%; padding: 6px 8px; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: 13px; text-align: left; }
+.welcome-overlay .welcome-recents button { display: flex; align-items: center; width: 100%; min-height: 28px; padding: 4px 8px; border: 0; background: transparent; color: #86868b; font: inherit; font-size: 12px; text-align: left; }
 .welcome-recents button span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.welcome-recent-folder { margin-left: auto; color: var(--fg-muted); font-size: 12px; }
+.welcome-recents button span:first-child { flex-shrink: 0; max-width: 65%; }
+.welcome-recents button span:only-child { max-width: 100%; }
+.welcome-recent-folder { margin-inline-start: 6px; }
 .welcome-overlay .welcome-recovery { margin-top: 8px; border: 0; background: transparent; color: var(--link); font: inherit; font-size: 12px; }
 .welcome-overlay .welcome-recents button:hover, .welcome-overlay .welcome-recovery:hover { background: rgba(0,0,0,.05); }
 .welcome-overlay [data-onboarding] { display: flex; justify-content: center; gap: 4px; margin-top: 16px; }
@@ -528,6 +533,7 @@ body.is-blank:not(.is-editing):not(.edit-pinned) #content { caret-color: #0062cc
 @media (prefers-color-scheme: dark) {
   .welcome-overlay .welcome-title { color: #a1a1a6; }
   .welcome-hint { color: #98989d; }
+  .welcome-recents-label, .welcome-overlay .welcome-recents button { color: #a1a1a6; }
   .welcome-overlay .welcome-recents button:hover, .welcome-overlay .welcome-recovery:hover { background: rgba(255,255,255,.08); }
   .welcome-overlay .welcome-tile { border-color: rgba(255,255,255,.1); color: #a1a1a6; }
   .welcome-overlay .welcome-tile svg { color: #8e8e93; }

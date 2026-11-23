@@ -387,5 +387,8 @@
   "Could not make a secure connection to the update server.": "No se pudo establecer una conexión segura con el servidor de actualizaciones.",
   "Recent Documents": "Documentos recientes",
   "Or start typing.": "O empieza a escribir.",
-  "Paste to Preview": "Pegar para previsualizar"
+  "Paste to Preview": "Pegar para previsualizar",
+  "Download manually": "Descargar manualmente",
+  "Could not open the link. Please try again.": "No se pudo abrir el enlace. Inténtalo de nuevo.",
+  "Report an Issue": "Informar de un problema"
 }

@@ -2,6 +2,18 @@
 
 All notable changes to mdPreview. Format based on [Keep a Changelog](https://keepachangelog.com/); versions follow [Semantic Versioning](https://semver.org/).
 
+## [2.0.13] - 2026-11-23
+
+### Improved
+- Open or paste Markdown from the welcome screen, reopen one of the last three documents, or recover an unsaved draft.
+- The reader uses a thin progress line. PDF export offers paper size and page numbering.
+
+### Fixed
+- New windows do not repeat the result of the last update check. Opening a file reuses an empty window.
+- Settings apply after saving and remain open if saving fails. Custom preview shortcuts cannot conflict with existing commands.
+- Recent documents with the same name show enough of their folders to tell them apart. The welcome example can be retried if it fails to open.
+- Command-line export reports when macOS has no display available to the process and exits cleanly.
+
 ## [2.0.12] - 2026-11-18
 
 ### Improved

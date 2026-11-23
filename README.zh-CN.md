@@ -159,7 +159,11 @@
 
 ## 安装
 
-### 方法一：终端一行命令（推荐）
+### 方法一：下载磁盘映像
+
+在[最新版本页面](https://github.com/tahoeliu/mdPreview/releases/latest)下载 **`…-arm64.dmg`**（Apple 芯片，M1 及更新）或 **`…-x86_64.dmg`**（Intel 芯片），把 mdPreview 拖进「应用程序」。如果 macOS 在首次打开时弹出提醒，请查看[安装常见问题](https://tahoeliu.github.io/mdPreview/?lang=zh#manual-install-faq)。
+
+### 方法二：终端一行命令
 
 打开“终端”，粘贴下面这行并按回车：
 
@@ -167,11 +171,7 @@
 curl -fsSL https://raw.githubusercontent.com/tahoeliu/mdPreview/main/scripts/get.sh | bash
 ```
 
-脚本会下载最新版本、校验签名并安装到“应用程序”。这种方式不会弹出 macOS 安全提示。想先看看脚本？[点这里阅读](scripts/get.sh)。
-
-### 方法二：下载磁盘映像
-
-在[最新版本页面](https://github.com/tahoeliu/mdPreview/releases/latest)下载 **`…-arm64.dmg`**（Apple 芯片，M1 及更新）或 **`…-x86_64.dmg`**（Intel 芯片），把 mdPreview 拖进“应用程序”。第一次打开时，到“**系统设置 → 隐私与安全性**”点“**仍要打开**”，只需一次。
+脚本会下载最新版本、校验签名并安装到「应用程序」。[查看安装脚本源码](scripts/get.sh)。
 
 ### 方法三：让 AI 助手帮你装
 
@@ -195,7 +195,7 @@ Markdown 是一种用纯文本写排版文档的格式，常见于笔记、READM
 复制回答，选择“**文件 → 从剪贴板新建**”（`⌥⌘N`），立即排版显示，标题、表格、代码块都在原位。也可以把对话存成 `.md` 再双击打开。
 
 ### 怎样在 Mac 上把 Markdown 转成 PDF、Word 或网页？
-打开文件，选择“**文件 → 导出为…**”，再选 PDF、Word（.docx）、HTML、纯文本或 Markdown，不用命令行。（喜欢命令行的话：`mdpreview export notes.md --to pdf`。）
+打开文件，选择“**文件 → 导出为…**”，再选 PDF、Word（.docx）、HTML、纯文本或 Markdown，不用命令行。你也可以在已登录的 macOS 桌面会话中打开终端，运行 `mdpreview export notes.md --to pdf`。
 
 ### mdPreview 免费吗？
 免费，无广告，按 [MIT 许可证](LICENSE)开源。
@@ -230,7 +230,7 @@ App 里的“**帮助 → 报告问题…**”，或 [在 GitHub 提 issue](http
 | **是什么** | macOS 上的 Markdown 阅读与编辑工具 |
 | **价格** | 免费，MIT 开源许可 |
 | **系统** | macOS 13 或更高；Apple 芯片和 Intel |
-| **最新版本** | [2.0.3](CHANGELOG.md) |
+| **最新版本** | [GitHub 发布页](https://github.com/tahoeliu/mdPreview/releases/latest) |
 | **导出** | PDF、Word（.docx）、HTML、纯文本、Markdown、PNG、富文本 |
 | **渲染** | 表格、任务列表、脚注、KaTeX 公式、Mermaid 图表、GitHub 提示块、代码高亮 |
 | **界面语言** | 简体中文、繁體中文、English、日本語、한국어、Deutsch、Français、Español |

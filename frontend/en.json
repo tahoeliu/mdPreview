@@ -387,5 +387,8 @@
   "Could not make a secure connection to the update server.": "Could not make a secure connection to the update server.",
   "Recent Documents": "Recent Documents",
   "Or start typing.": "Or start typing.",
-  "Paste to Preview": "Paste to Preview"
+  "Paste to Preview": "Paste to Preview",
+  "Download manually": "Download manually",
+  "Could not open the link. Please try again.": "Could not open the link. Please try again.",
+  "Report an Issue": "Report an Issue"
 }

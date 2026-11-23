@@ -39,12 +39,16 @@ for test in tests:
     data_directory = (nullcontext(tempfile.mkdtemp(prefix='app-data-', dir=run))
                       if options.retain_artifacts else tempfile.TemporaryDirectory(prefix='app-data-', dir=run))
     with data_directory as directory:
-        result = subprocess.run(
-            [sys.executable, '-B', '-m', 'coverage', 'run', '--branch', '--parallel-mode',
-             '--source=mdpreview_core,mdPreview,scripts.install_update', str(test)],
-            cwd=root, env=dict(environment, MDPREVIEW_DATA_DIR=directory,
-                               COVERAGE_FILE=str(parallel_coverage / '.coverage')), timeout=timeout)
-        failed |= result.returncode != 0
+        try:
+            result = subprocess.run(
+                [sys.executable, '-B', '-m', 'coverage', 'run', '--branch', '--parallel-mode',
+                 '--source=mdpreview_core,mdPreview,scripts.install_update', str(test)],
+                cwd=root, env=dict(environment, MDPREVIEW_DATA_DIR=directory,
+                                   COVERAGE_FILE=str(parallel_coverage / '.coverage')), timeout=timeout)
+            failed |= result.returncode != 0
+        except subprocess.TimeoutExpired:
+            print(f'套件超时：{test.relative_to(root)}（{timeout} 秒）', file=sys.stderr, flush=True)
+            failed = True
 for args in (
     ['combine', *(['--keep'] if options.retain_artifacts else []), str(parallel_coverage)],
     ['json', '-o', str(coverage_report)],

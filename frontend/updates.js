@@ -6,6 +6,7 @@ window.UpdateFeedback = {
     let current = { phase: 'idle', automatic: true, progress: null };
     let authoritative = false, generation = 0, request = 0;
     let dismissed = false, retryPending = false, requestFailed = null;
+    let manualCheckResult = false, installAfterRetry = false;
     let knownVersion = null, dismissedVersion = null, presentedVersion = null;
     let consentPending = null, approvalWaiting = false;
 
@@ -41,7 +42,7 @@ window.UpdateFeedback = {
       return (reasons[current.error] || reasons.unknown) + status;
     }
     function canRetry() {
-      return current.automatic === false && current.phase === 'failed'
+      return current.automatic === false && ['failed', 'retrying'].includes(current.phase) && current.code !== 'quit-gap-settlement-pending'
         && !['quit-gap-inconclusive', 'quit-gap-version-unverified', 'helper-handshake-unavailable', 'release-signing-key-not-configured', 'update-requires-running-bundle'].includes(current.code);
     }
     function readyForConsent() {
@@ -52,6 +53,8 @@ window.UpdateFeedback = {
     }
     function isVisible() {
       if (dismissed) return false;
+      if (current.code === 'quit-gap-settlement-pending') return false;
+      if (current.phase === 'idle') return manualCheckResult;
       if (current.automatic === false) return true;
       if (dismissedVersion === current.version) return false;
       return readyForConsent() || (presentedVersion === current.version && !!presentedVersion && ['preparing', 'installing'].includes(current.phase));
@@ -93,6 +96,7 @@ window.UpdateFeedback = {
         retry: t('Retry request failed. Please try again.', '重试请求失败，请再试一次。'),
         approve: t('The update request failed. Please try again.', '更新请求失败，请再试一次。'),
         decline: t('Could not dismiss the update. Please try again.', '未能关闭更新提示，请再试一次。'),
+        help: t('Could not open the link. Please try again.', '无法打开链接，请重试。'),
       };
       setUpdateBubbleText(texts[phase] + (requestFailed ? ' ' + errors[requestFailed] : ''));
       const body = el.querySelector('.update-bubble-body');
@@ -102,6 +106,13 @@ window.UpdateFeedback = {
         button.hidden = !visible || !canRetry();
         button.disabled = retryPending || busy();
         button.textContent = retryPending ? t('Requesting retry…', '正在请求重试…') : t('Retry update', '重试更新');
+      }
+      const help = el.querySelector('.update-help');
+      if (help) {
+        const blocked = ['quit-gap-inconclusive', 'quit-gap-version-unverified'].includes(current.code);
+        help.hidden = !visible || current.automatic !== false || !['failed', 'retrying'].includes(current.phase);
+        help.disabled = busy() || retryPending;
+        help.textContent = blocked ? t('Report an Issue', '报告问题') : t('Download manually', '手动下载');
       }
       const approve = el.querySelector('.update-approve'), later = el.querySelector('.update-later');
       if (approve && later) {
@@ -125,6 +136,7 @@ window.UpdateFeedback = {
       }
       if (newVersion || state.phase !== current.phase || state.automatic !== current.automatic) {
         dismissed = false;
+        manualCheckResult = false;
         requestFailed = null;
       }
       if (state.automatic && state.phase === 'ready' && presentedVersion === state.version
@@ -132,10 +144,21 @@ window.UpdateFeedback = {
       // armedForQuit 只是后端已挂起退出更新的状态，不是用户已关闭提示的标记。
       if (newVersion || state.phase !== 'ready' || state.error || state.code) approvalWaiting = false;
       current = { ...state };
+      if (['failed', 'idle'].includes(state.phase)) installAfterRetry = false;
       authoritative = true;
       generation++;
       renderUpdateFeedback();
+      if (installAfterRetry && readyForConsent() && !retryPending) {
+        installAfterRetry = false;
+        void requestConsent('approve');
+      }
       return true;
+    }
+    function showManualUpdateCheckResult() {
+      if (current.phase !== 'idle' || current.automatic || !current.detail) return;
+      manualCheckResult = true;
+      dismissed = false;
+      renderUpdateFeedback();
     }
     async function refreshUpdateState() {
       if (!deps.Bridge.ready()) return false;
@@ -144,14 +167,7 @@ window.UpdateFeedback = {
         const result = await deps.Bridge.call('get_update_state');
         // 初始查询或旧窗口的慢回包不能覆盖期间收到的广播。
         if (id !== request || at !== generation) return false;
-        const initialSnapshot = !authoritative;
-        const accepted = updateFeedbackState(result);
-        // A completed manual check in another window is history, not a new notification.
-        if (accepted && initialSnapshot && result.phase === 'idle' && result.automatic === false) {
-          dismissed = true;
-          renderUpdateFeedback();
-        }
-        return accepted;
+        return updateFeedbackState(result);
       } catch (_) { return false; }
     }
     function legacy(patch) {
@@ -182,6 +198,7 @@ window.UpdateFeedback = {
       if (busy() || dismissed) return false;
       if (readyForConsent()) return requestConsent('decline');
       dismissed = true;
+      installAfterRetry = false;
       renderUpdateFeedback();
       return true;
     }
@@ -216,10 +233,23 @@ window.UpdateFeedback = {
         renderUpdateFeedback();
       }
     }
+    async function updateHelp() {
+      if (!deps.Bridge.ready() || busy() || retryPending) return;
+      const blocked = ['quit-gap-inconclusive', 'quit-gap-version-unverified'].includes(current.code);
+      try {
+        const result = await deps.Bridge.call(blocked ? 'report_issue' : 'open_external_link',
+          ...(blocked ? [] : ['https://github.com/tahoeliu/mdPreview/releases/latest']));
+        if (!result || result.success !== true) throw new Error('open-failed');
+      } catch (_) {
+        requestFailed = 'help';
+        renderUpdateFeedback();
+      }
+    }
     async function installUpdate() {
       // 兼容旧函数名；这里只能重试手动失败，绝不批准安装。
       if (!canRetry() || retryPending || busy() || !deps.Bridge.ready()) return false;
       retryPending = true;
+      installAfterRetry = true;
       requestFailed = null;
       const at = generation;
       renderUpdateFeedback();
@@ -233,9 +263,18 @@ window.UpdateFeedback = {
         await refreshUpdateState();
         return true;
       } catch (_) {
+        installAfterRetry = false;
         if (at === generation) requestFailed = 'retry';
         return false;
-      } finally { retryPending = false; renderUpdateFeedback(); }
+      } finally {
+        retryPending = false;
+        if (requestFailed) installAfterRetry = false;
+        renderUpdateFeedback();
+        if (installAfterRetry && readyForConsent()) {
+          installAfterRetry = false;
+          void requestConsent('approve');
+        }
+      }
     }
     const body = document.querySelector('#updateBubble .update-bubble-body');
     if (body) {
@@ -245,6 +284,7 @@ window.UpdateFeedback = {
         ['update-later', dismissUpdateBubble],
         ['update-approve', () => requestConsent('approve')],
         ['update-retry', installUpdate],
+        ['update-help', updateHelp],
       ]) {
         const button = document.createElement('button');
         button.type = 'button';
@@ -258,7 +298,7 @@ window.UpdateFeedback = {
     return {
       setUpdateBubbleText, setUpdateProgress, showUpdateBubble, showUpdateDownloadProgress,
       showUpdateDownloadFailed, showManualInstallGuide, dismissUpdateBubble, installUpdate,
-      updateFeedbackState, refreshUpdateState, renderUpdateFeedback,
+      updateFeedbackState, showManualUpdateCheckResult, refreshUpdateState, renderUpdateFeedback,
     };
   }
 };

@@ -25,7 +25,7 @@ async function createApp() {
   await new Promise((resolve,reject)=> { dom.window.addEventListener('load',resolve); setTimeout(()=>reject(new Error('App load timeout')),5000).unref(); });
   const w=dom.window;
   w.HTMLElement.prototype.scrollTo=function(){};
-  w.pywebview={api:{get_export_css:()=>({css:['tokens','content','print'].map(n=>fs.readFileSync(path.join(root,'css',n+'.css'),'utf8')).join('\n'),version:'1.5.0'}),get_output_settings:()=>({font:'normal'}),set_dirty:()=>Promise.resolve(true),store_content:()=>Promise.resolve({success:true}),startup_ready(){},save_file:()=>Promise.resolve({success:true})}};
+  w.pywebview={api:{get_export_css:()=>({css:['tokens','content','print'].map(n=>fs.readFileSync(path.join(root,'css',n+'.css'),'utf8')).join('\n'),version:'1.5.0'}),get_shortcuts:()=>require('../frontend/shortcuts.json'),get_output_settings:()=>({font:'normal'}),set_dirty:()=>Promise.resolve(true),store_content:()=>Promise.resolve({success:true}),startup_ready(){},save_file:()=>Promise.resolve({success:true})}};
   w.pywebview.api.get_math_export_css=(families)=>{
     const css=fs.readFileSync(path.join(root,'vendor/katex/katex.min.css'),'utf8');
     return css.replace(/@font-face\s*\{[^}]+\}/g,block=>{

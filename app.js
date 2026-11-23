@@ -1225,7 +1225,7 @@ var {
 var {
   setUpdateBubbleText, setUpdateProgress, showUpdateBubble, showUpdateDownloadProgress, 
   showUpdateDownloadFailed, showManualInstallGuide, dismissUpdateBubble, installUpdate,
-  updateFeedbackState, refreshUpdateState, renderUpdateFeedback,
+  updateFeedbackState, showManualUpdateCheckResult, refreshUpdateState, renderUpdateFeedback,
 } = UpdateFeedback.create({
   document,
   t: (...args) => t(...args),
@@ -1256,6 +1256,9 @@ var {
   document.getElementById('findClose').addEventListener('click', closeFindBar);
 
   document.addEventListener('keydown', (e) => {
+    if (!e.defaultPrevented && !e.isComposing && shortcutMatches(e, appSettings.toggle_shortcut || 'cmd+e')) {
+      e.preventDefault(); toggleView(); return;
+    }
     const cmd = e.metaKey;
     if (cmd && e.key === 's') { e.preventDefault(); e.shiftKey ? saveAsFile() : saveFile(); }
     if (cmd && e.altKey && e.key === 'o') { e.preventDefault(); toggleToc(); return; }
@@ -1268,7 +1271,6 @@ var {
     if (cmd && e.key === '-') { e.preventDefault(); e.altKey?adjustPageWidth(-10):zoomOut(); }
     // Width: ⌘. / ⌘, (moved off ⌘= / ⌘- which are now Zoom).
     if (cmd && e.key === ',') { e.preventDefault(); openSettings(); }
-    if (shortcutMatches(e, appSettings.toggle_shortcut || 'cmd+e')) { e.preventDefault(); toggleView(); return; }
     if (cmd && e.key === 'f') { e.preventDefault(); openFindBar(); }
     if (cmd && e.key === 'g') { e.preventDefault(); e.shiftKey ? findPrev() : findNext(); }
     // Paste as Markdown: normally the native Edit menu item (Cmd+Shift+V)

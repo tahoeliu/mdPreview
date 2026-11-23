@@ -387,5 +387,8 @@
   "Could not make a secure connection to the update server.": "업데이트 서버에 안전하게 연결할 수 없습니다.",
   "Recent Documents": "최근 문서",
   "Or start typing.": "바로 입력할 수도 있습니다.",
-  "Paste to Preview": "붙여넣어 미리 보기"
+  "Paste to Preview": "붙여넣어 미리 보기",
+  "Download manually": "수동 다운로드",
+  "Could not open the link. Please try again.": "링크를 열 수 없습니다. 다시 시도해 주세요.",
+  "Report an Issue": "문제 보고"
 }
