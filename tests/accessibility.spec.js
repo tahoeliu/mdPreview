@@ -46,7 +46,8 @@ for(const [state,prepare] of [
     await page.waitForFunction(()=>{
      const label=document.getElementById('modeIndicator');
      const fading=document.getAnimations().some(a=>a.playState==='running'&&Number.isFinite(a.effect?.getComputedTiming().endTime));
-     return !fading&&(!label||!label.classList.contains('visible'));
+     const hints=[document.getElementById('editHintBubble'),document.getElementById('sizeHintBubble')];
+     return !fading&&(!label||!label.classList.contains('visible'))&&hints.every(hint=>!hint||!hint.classList.contains('visible'));
     },null,{timeout:10000});
     expect(await violations(page),`${state}/${colorScheme}/${reducedMotion}`).toEqual([]);
    }
